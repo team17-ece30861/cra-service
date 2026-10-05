@@ -2,12 +2,12 @@ from ninja import NinjaAPI, Schema
 from ninja.errors import ValidationError
 
 from core import controls
-from core.errors import install_exception_handlers
-from core.validation import JSONParser, field_errors
+from cra_service.errors import install_exception_handlers
+from cra_service.validation import JSONParser, field_errors
 
 
 class ServiceAPI(NinjaAPI):
-    """NinjaAPI with problem+json errors (core.errors) and openapi.yaml's
+    """NinjaAPI with problem+json errors (cra_service.errors) and openapi.yaml's
     validation rules: schema errors are 400, never ninja's default 422."""
 
     def __init__(self, **kwargs):

@@ -23,7 +23,7 @@ from ninja import Schema
 from ninja.parser import Parser
 from pydantic import ConfigDict
 
-from core.errors import BadRequest, FieldError, field_error
+from cra_service.errors import BadRequest, FieldError, field_error
 
 ACTOR_HEADER = "X-Actor"
 ACTOR_MAX_LENGTH = 200

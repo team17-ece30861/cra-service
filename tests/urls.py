@@ -1,6 +1,6 @@
 from django.urls import path
 
-from config.urls import urlpatterns as service_urlpatterns
+from cra_service.urls import urlpatterns as service_urlpatterns
 from tests.demo_api import demo, django_crash
 
 urlpatterns = [
@@ -9,4 +9,4 @@ urlpatterns = [
     *service_urlpatterns,
 ]
 
-handler500 = "core.errors.server_error"
+handler500 = "cra_service.errors.server_error"

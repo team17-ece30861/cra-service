@@ -36,7 +36,7 @@ Cloud, and its own Neon project.
 | Component | What it does here |
 |---|---|
 | **Cloud Run** | Runs the Django container (gunicorn, 2 workers) as `team17-dev` and `team17-prod`. 1 vCPU, 512 MiB, request timeout 30 s, concurrency 80. Min 0 and max 1 instances. CPU is allocated only while a request is in flight (`--cpu-throttling`). Cloud Run terminates HTTPS. Ingress is public (`--allow-unauthenticated`) and the app itself enforces the bearer token. Each service runs as its own `ENV-runtime@` service account. |
-| **Neon** | Postgres, one Neon project per environment. `DATABASE_URL` is the **pooled** connection string with `sslmode=require`. The pooler runs in transaction mode, so Django opens a connection per request (`conn_max_age=0`) and disables server-side cursors (`config/settings.py`). Reads skip the request transaction, and `GET /health` never opens a connection. |
+| **Neon** | Postgres, one Neon project per environment. `DATABASE_URL` is the **pooled** connection string with `sslmode=require`. The pooler runs in transaction mode, so Django opens a connection per request (`conn_max_age=0`) and disables server-side cursors (`cra_service/settings.py`). Reads skip the request transaction, and `GET /health` never opens a connection. |
 | **Secret Manager** | Holds `ENV-database-url`, `ENV-django-secret-key`, and `ENV-api-token`. The deploy passes them to the service and migrate job with `--set-secrets ...:latest`. Cloud Run reads the value when an instance starts, so redeploy after rotating a secret. Nothing secret lives in the repo or in GitHub. |
 | **Artifact Registry** | Docker repository `team17`. Images are `cra-service-dev` and `cra-service-prod`, each tagged with the commit SHA. The cleanup policy in [`deploy/cleanup.json`](../deploy/cleanup.json) keeps the 2 most recent images per environment and deletes any others older than 7 days. |
 | **GitHub Actions + WIF** | The deploy job exchanges its GitHub OIDC token through Workload Identity Federation (`GCP_WIF_PROVIDER`) to act as the deployer service account (`GCP_DEPLOY_SA`). There are no service account keys. Only the deploy job gets `id-token: write`. |
@@ -55,6 +55,9 @@ GitHub repository variables (not secrets) used by the workflows:
 |---|---|---|---|
 | **Launchpad** | `team17-dev` | The team, for development and our own test runs. | Automatically on every push to `main`, after tests pass (`ci.yml`). |
 | **Orbit** | `team17-prod` | **The evaluation deployment.** Team 21 and the instructors test against it. Its URL (`https://` + `PROD_HOST`) is the one to publish in the shared pod file. | Manually only: Actions → **Launch to Orbit** → Run workflow on `main` → type `ORBIT` (`orbit.yml`). Other branches are refused. |
+
+The current URLs are in the [README](../README.md#deployments). If a hostname ever
+changes, update the repository variable and the README together.
 
 The two deployments share nothing at runtime: separate Cloud Run services, Neon
 projects, secrets, runtime service accounts, and image packages. Data written to

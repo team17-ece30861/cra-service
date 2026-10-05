@@ -9,7 +9,7 @@ from datetime import datetime
 from django.utils import timezone
 
 from core.models import FixedClock
-from core.timestamps import to_utc_second
+from cra_service.timestamps import to_utc_second
 
 _PK = 1
 

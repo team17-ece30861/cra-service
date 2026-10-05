@@ -4,7 +4,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse
 
-from core.errors import PROBLEM_CONTENT_TYPE, problem_response
+from cra_service.errors import PROBLEM_CONTENT_TYPE, problem_response
 
 MAX_BODY_BYTES = 65_536
 

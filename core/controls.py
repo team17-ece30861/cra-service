@@ -11,8 +11,8 @@ from ninja.responses import Status
 
 from core import clock
 from core.models import FixedClock
-from core.timestamps import Timestamp
-from core.validation import RequestSchema
+from cra_service.timestamps import Timestamp
+from cra_service.validation import RequestSchema
 
 router = Router(tags=["testing"])
 

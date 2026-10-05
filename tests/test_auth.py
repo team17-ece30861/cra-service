@@ -3,7 +3,7 @@ import re
 import pytest
 from django.test import Client
 
-from core.api import api
+from cra_service.api import api
 from tests.conftest import TOKEN
 from tests.problems import assert_problem
 
