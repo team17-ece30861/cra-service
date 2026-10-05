@@ -5,14 +5,20 @@ Django + Django Ninja service for the ECE 30861 pod project. The pod's shared
 
 ## Deployments
 
-| Nickname | Cloud Run service | Purpose |
-|---|---|---|
-| Launchpad | `team17-dev` | Development. Deploys automatically on every merge to `main`. |
-| Orbit | `team17-prod` | The evaluation deployment used by Team 21 and the instructors. Deploys only by manual launch. |
+| Nickname | Cloud Run service | URL | Purpose |
+|---|---|---|---|
+| Launchpad | `team17-dev` | https://team17-dev-7zneiwx4ba-uc.a.run.app | Development. Deploys automatically on every merge to `main`. |
+| Orbit | `team17-prod` | https://team17-prod-7zneiwx4ba-uc.a.run.app | The evaluation deployment used by Team 21 and the instructors. Deploys only by manual launch. |
 
 Both run in `us-central1` with min instances 0 and max instances 1. Each uses its own
 Neon Postgres project and its own secrets. The first request after a period of idle
 takes a few seconds while an instance starts.
+
+Use only these URLs. Each service accepts just its own hostname (the `DEV_HOST` and
+`PROD_HOST` repository variables), so the other URL Cloud Run shows for it
+(`…-720849560682.us-central1.run.app`) returns 400. Every endpoint except `GET /health`
+needs the API token, which is in Secret Manager:
+`gcloud secrets versions access latest --secret=prod-api-token` (or `dev-api-token`).
 
 ## Local development
 

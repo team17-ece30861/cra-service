@@ -56,6 +56,9 @@ GitHub repository variables (not secrets) used by the workflows:
 | **Launchpad** | `team17-dev` | The team, for development and our own test runs. | Automatically on every push to `main`, after tests pass (`ci.yml`). |
 | **Orbit** | `team17-prod` | **The evaluation deployment.** Team 21 and the instructors test against it. Its URL (`https://` + `PROD_HOST`) is the one to publish in the shared pod file. | Manually only: Actions → **Launch to Orbit** → Run workflow on `main` → type `ORBIT` (`orbit.yml`). Other branches are refused. |
 
+The current URLs are in the [README](../README.md#deployments). If a hostname ever
+changes, update the repository variable and the README together.
+
 The two deployments share nothing at runtime: separate Cloud Run services, Neon
 projects, secrets, runtime service accounts, and image packages. Data written to
 Launchpad never shows up on Orbit.
