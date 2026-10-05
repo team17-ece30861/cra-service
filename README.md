@@ -63,8 +63,8 @@ GitHub repository variables used by the workflows (not secrets):
 
 ## Team conventions
 
-- Get the current time only through the clock interface (coming with the test controls),
-  never `datetime.now()` directly.
+- Get the current time only through `core.clock.now()`, never `datetime.now()` or
+  `timezone.now()` directly. It honours the fixed test clock (`PUT /test/clock`).
 - Store all times in UTC.
 - Never log request bodies.
 - Deadline and state logic stay as pure Python, separate from views and models.
