@@ -56,10 +56,13 @@ Secret Manager:
 | `DATABASE_URL` | `<env>-database-url` (Neon pooled connection string) |
 | `DJANGO_SECRET_KEY` | `<env>-django-secret-key` |
 | `API_TOKEN` | `<env>-api-token` |
-| `DJANGO_DEBUG`, `ALLOWED_HOSTS` | Set by the deploy workflow |
+| `DJANGO_DEBUG`, `ALLOWED_HOSTS` | Set by the deploy workflow (`ALLOWED_HOSTS` from `DEV_HOST` or `PROD_HOST`) |
 
 GitHub repository variables used by the workflows (not secrets):
-`GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`.
+`GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`, `DEV_HOST`, `PROD_HOST`.
+
+Architecture, rollback, cost controls, and known limitations are in
+[docs/platform.md](docs/platform.md).
 
 ## Team conventions
 
