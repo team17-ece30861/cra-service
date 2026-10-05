@@ -6,8 +6,8 @@ TOKEN = "test-token"
 
 @pytest.fixture(autouse=True)
 def api_token(settings):
-    # Tests never depend on the shell's API_TOKEN (CI doesn't set one).
-    settings.API_TOKEN = TOKEN
+    # Tests never depend on the shell's API_TOKEN_* variables (CI doesn't set any).
+    settings.API_TOKENS = {"test": TOKEN}
     return TOKEN
 
 

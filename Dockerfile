@@ -19,6 +19,7 @@ RUN DATABASE_URL=sqlite:////tmp/build.db DJANGO_SECRET_KEY=build-only \
 RUN useradd --create-home app
 USER app
 
-# Cloud Run sets $PORT. Access logs record method, path, and status, never bodies.
-CMD exec gunicorn cra_service.wsgi:application \
-    --bind 0.0.0.0:$PORT --workers 2 --timeout 30 --access-logfile -
+# Cloud Run sets $PORT. Access logs (gunicorn.conf.py) record the client, method,
+# path, and status, never tokens or bodies.
+CMD exec gunicorn cra_service.wsgi:application --config gunicorn.conf.py \
+    --bind 0.0.0.0:$PORT --workers 2 --timeout 30

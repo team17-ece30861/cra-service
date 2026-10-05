@@ -8,8 +8,12 @@ from cra_service.errors import PROBLEM_CONTENT_TYPE, problem_response
 
 MAX_BODY_BYTES = 65_536
 
-# Every other request needs the bearer token (openapi.yaml `security`).
+# Every other request needs a client's bearer token (openapi.yaml `security`).
 PUBLIC_ROUTES = {("GET", "/health")}
+
+# WSGI environ key holding the matched client's name. gunicorn's access log reads
+# it as %({cra_service.client}e)s (gunicorn.conf.py).
+CLIENT_ENVIRON_KEY = "cra_service.client"
 
 # Reads never change data, so they skip the transaction (and GET /health never
 # opens a database connection, which would wake Neon).
@@ -36,9 +40,11 @@ class PlatformMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        if (request.method, request.path_info) not in PUBLIC_ROUTES and not _has_valid_token(
-            request
-        ):
+        request.client_name = _client_name(request)
+        if request.client_name:
+            # request.META is the WSGI environ that gunicorn logs from.
+            request.META[CLIENT_ENVIRON_KEY] = request.client_name
+        elif (request.method, request.path_info) not in PUBLIC_ROUTES:
             return problem_response(401, headers={"WWW-Authenticate": "Bearer"})
         if _content_length(request) > MAX_BODY_BYTES:
             return problem_response(413)
@@ -51,17 +57,19 @@ class PlatformMiddleware:
         return _as_problem(response)
 
 
-def _has_valid_token(request: HttpRequest) -> bool:
-    expected = settings.API_TOKEN
-    if not expected:
-        return False  # fail closed if the deployment has no token configured
+def _client_name(request: HttpRequest) -> str | None:
+    """The name of the client whose token the request carries, or None. With no
+    tokens configured nothing matches, so the service fails closed."""
     scheme, _, token = request.headers.get("Authorization", "").partition(" ")
     if scheme.lower() != "bearer":
-        return False
-    return hmac.compare_digest(
-        token.strip().encode("utf-8", "surrogatepass"),
-        expected.encode("utf-8", "surrogatepass"),
-    )
+        return None
+    presented = token.strip().encode("utf-8", "surrogatepass")
+    matched = None
+    # Compare against every token, so the time taken doesn't depend on which matched.
+    for name, expected in settings.API_TOKENS.items():
+        if expected and hmac.compare_digest(presented, expected.encode("utf-8", "surrogatepass")):
+            matched = matched or name
+    return matched
 
 
 def _content_length(request: HttpRequest) -> int:

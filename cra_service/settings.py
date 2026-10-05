@@ -2,11 +2,13 @@
 
 Required: DATABASE_URL, DJANGO_SECRET_KEY
 Optional: DJANGO_DEBUG (default false), ALLOWED_HOSTS (comma-separated),
-          API_TOKEN (bearer token for every route except GET /health; when unset,
-          every protected request is rejected)
+          API_TOKEN_<NAME> (one bearer token per client, for every route except
+          GET /health; when none is set, every protected request is rejected),
+          API_TOKEN (older single token, accepted as client "default")
 """
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
 
 import dj_database_url
@@ -18,6 +20,21 @@ def env_bool(name: str, default: bool = False) -> bool:
     return os.environ.get(name, str(default)).strip().lower() in {"1", "true", "yes"}
 
 
+def env_api_tokens(environ: Mapping[str, str]) -> dict[str, str]:
+    """Bearer tokens by client name: API_TOKEN_TEAM21 is client "team21". API_TOKEN
+    is client "default" so older .env files keep working; API_TOKEN_DEFAULT wins over
+    it. Values are stripped because secrets created with `echo` carry a newline, and
+    empty ones are ignored."""
+    tokens = {}
+    if token := environ.get("API_TOKEN", "").strip():
+        tokens["default"] = token
+    for key, value in sorted(environ.items()):
+        name = key.removeprefix("API_TOKEN_").lower()
+        if key.startswith("API_TOKEN_") and name and value.strip():
+            tokens[name] = value.strip()
+    return tokens
+
+
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = env_bool("DJANGO_DEBUG")
 ALLOWED_HOSTS = [
@@ -26,8 +43,7 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
-# Shared bearer token. Stripped because secrets created with `echo` carry a newline.
-API_TOKEN = os.environ.get("API_TOKEN", "").strip()
+API_TOKENS = env_api_tokens(os.environ)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
