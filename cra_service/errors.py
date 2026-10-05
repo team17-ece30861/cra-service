@@ -2,15 +2,16 @@
 
 Views raise one of the ApiError subclasses; the handlers installed on the API turn
 them into application/problem+json responses. 400 and 422 always carry a non-empty
-`errors` list of {field, message}. Don't return a 4xx body directly: core.middleware
-replaces any error response that isn't problem+json with a generic one, dropping
-its detail and errors.
+`errors` list of {field, message}. Don't return a 4xx body directly:
+cra_service.middleware replaces any error response that isn't problem+json with a
+generic one, dropping its detail and errors.
 
 When several errors apply, openapi.yaml requires the first of 401, 413, 404, 400,
-409, 422. 401 and 413 are enforced by core.middleware before routing. Views get
-the rest by checking in that order: look the resource up (404), then validate the
-X-Actor header and body (400, see core.validation), then state (409), then rules
-(422). Any error response rolls back the request's writes (core.middleware).
+409, 422. 401 and 413 are enforced by cra_service.middleware before routing. Views
+get the rest by checking in that order: look the resource up (404), then validate
+the X-Actor header and body (400, see cra_service.validation), then state (409),
+then rules (422). Any error response rolls back the request's writes
+(cra_service.middleware).
 """
 
 import json

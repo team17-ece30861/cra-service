@@ -4,7 +4,7 @@ import pydantic
 import pytest
 from ninja import Schema
 
-from core.timestamps import Timestamp, format_timestamp, parse_timestamp, to_utc_second
+from cra_service.timestamps import Timestamp, format_timestamp, parse_timestamp, to_utc_second
 
 
 def utc(*args) -> datetime:

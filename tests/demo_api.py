@@ -11,10 +11,10 @@ from ninja import Schema
 from pydantic import StringConstraints
 
 from core import clock
-from core.api import ServiceAPI
-from core.errors import Conflict, NotFound, RuleViolation, field_error
-from core.timestamps import Timestamp
-from core.validation import RequestSchema, parse_body, require_actor
+from cra_service.api import ServiceAPI
+from cra_service.errors import Conflict, NotFound, RuleViolation, field_error
+from cra_service.timestamps import Timestamp
+from cra_service.validation import RequestSchema, parse_body, require_actor
 
 demo = ServiceAPI(urls_namespace="demo", docs_url=None, openapi_url=None)
 

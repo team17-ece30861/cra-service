@@ -20,5 +20,5 @@ RUN useradd --create-home app
 USER app
 
 # Cloud Run sets $PORT. Access logs record method, path, and status, never bodies.
-CMD exec gunicorn config.wsgi:application \
+CMD exec gunicorn cra_service.wsgi:application \
     --bind 0.0.0.0:$PORT --workers 2 --timeout 30 --access-logfile -

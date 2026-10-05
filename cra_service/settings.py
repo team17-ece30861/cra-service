@@ -43,7 +43,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     # Auth (401) and body size (413) run before routing so they take precedence
     # over 404/405, and every error response leaves as application/problem+json.
-    "core.middleware.PlatformMiddleware",
+    "cra_service.middleware.PlatformMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -53,10 +53,10 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "config.urls"
+ROOT_URLCONF = "cra_service.urls"
 # Unknown paths return 404 instead of redirecting to a trailing-slash variant.
 APPEND_SLASH = False
-WSGI_APPLICATION = "config.wsgi.application"
+WSGI_APPLICATION = "cra_service.wsgi.application"
 
 TEMPLATES = [
     {
