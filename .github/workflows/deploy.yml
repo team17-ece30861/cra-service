@@ -28,6 +28,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Django accepts exactly one hostname per service. Resolve it before anything
+      # is built or deployed, so a missing variable can't ship a revision that
+      # rejects every request.
+      - name: Resolve allowed host
+        env:
+          DEV_HOST: ${{ vars.DEV_HOST }}
+          PROD_HOST: ${{ vars.PROD_HOST }}
+        run: |
+          case "$ENVIRONMENT" in
+            dev)  VAR=DEV_HOST;  HOST="$DEV_HOST" ;;
+            prod) VAR=PROD_HOST; HOST="$PROD_HOST" ;;
+            *)    echo "::error::Unknown environment: $ENVIRONMENT"; exit 1 ;;
+          esac
+          if [ -z "$HOST" ]; then
+            echo "::error::Repository variable $VAR is not set"
+            exit 1
+          fi
+          echo "ALLOWED_HOST=$HOST" >> "$GITHUB_ENV"
+
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
@@ -57,7 +76,7 @@ jobs:
             --image "$IMAGE" --region "$REGION" \
             --service-account "$RUNTIME_SA" \
             --set-secrets "DATABASE_URL=$ENVIRONMENT-database-url:latest,DJANGO_SECRET_KEY=$ENVIRONMENT-django-secret-key:latest,API_TOKEN=$ENVIRONMENT-api-token:latest" \
-            --set-env-vars "DJANGO_DEBUG=false,ALLOWED_HOSTS=.run.app" \
+            --set-env-vars "DJANGO_DEBUG=false,ALLOWED_HOSTS=$ALLOWED_HOST" \
             --cpu 1 --memory 512Mi \
             --min-instances 0 --max-instances 1 \
             --concurrency 80 --timeout 30 --cpu-throttling \
