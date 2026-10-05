@@ -2,7 +2,9 @@
 
 Views raise one of the ApiError subclasses; the handlers installed on the API turn
 them into application/problem+json responses. 400 and 422 always carry a non-empty
-`errors` list of {field, message}.
+`errors` list of {field, message}. Don't return a 4xx body directly: core.middleware
+replaces any error response that isn't problem+json with a generic one, dropping
+its detail and errors.
 
 When several errors apply, openapi.yaml requires the first of 401, 413, 404, 400,
 409, 422. 401 and 413 are enforced by core.middleware before routing. Views get
