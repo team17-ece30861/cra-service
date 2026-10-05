@@ -1,7 +1,9 @@
 """Django settings. All configuration comes from environment variables.
 
 Required: DATABASE_URL, DJANGO_SECRET_KEY
-Optional: DJANGO_DEBUG (default false), ALLOWED_HOSTS (comma-separated)
+Optional: DJANGO_DEBUG (default false), ALLOWED_HOSTS (comma-separated),
+          API_TOKEN (bearer token for every route except GET /health; when unset,
+          every protected request is rejected)
 """
 
 import os
@@ -24,6 +26,9 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
+# Shared bearer token. Stripped because secrets created with `echo` carry a newline.
+API_TOKEN = os.environ.get("API_TOKEN", "").strip()
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -36,6 +41,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Auth (401) and body size (413) run before routing so they take precedence
+    # over 404/405, and every error response leaves as application/problem+json.
+    "core.middleware.PlatformMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -46,6 +54,8 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
+# Unknown paths return 404 instead of redirecting to a trailing-slash variant.
+APPEND_SLASH = False
 WSGI_APPLICATION = "config.wsgi.application"
 
 TEMPLATES = [
