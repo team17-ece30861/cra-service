@@ -13,7 +13,7 @@ flowchart LR
 
     subgraph gcp["Google Cloud, us-central1"]
         ar["Artifact Registry<br/>cra-service-ENV:SHA"]
-        sm["Secret Manager<br/>ENV-database-url<br/>ENV-django-secret-key<br/>ENV-api-token"]
+        sm["Secret Manager<br/>ENV-database-url<br/>ENV-django-secret-key<br/>API tokens, one per client"]
         cr["Cloud Run service<br/>team17-ENV<br/>(Django + gunicorn)"]
         mig["Cloud Run job<br/>team17-ENV-migrate<br/>(manage.py migrate)"]
     end
@@ -37,7 +37,7 @@ Cloud, and its own Neon project.
 |---|---|
 | **Cloud Run** | Runs the Django container (gunicorn, 2 workers) as `team17-dev` and `team17-prod`. 1 vCPU, 512 MiB, request timeout 30 s, concurrency 80. Min 0 and max 1 instances. CPU is allocated only while a request is in flight (`--cpu-throttling`). Cloud Run terminates HTTPS. Ingress is public (`--allow-unauthenticated`) and the app itself enforces the bearer token. Each service runs as its own `ENV-runtime@` service account. |
 | **Neon** | Postgres, one Neon project per environment. `DATABASE_URL` is the **pooled** connection string with `sslmode=require`. The pooler runs in transaction mode, so Django opens a connection per request (`conn_max_age=0`) and disables server-side cursors (`cra_service/settings.py`). Reads skip the request transaction, and `GET /health` never opens a connection. |
-| **Secret Manager** | Holds `ENV-database-url`, `ENV-django-secret-key`, and `ENV-api-token`. The deploy passes them to the service and migrate job with `--set-secrets ...:latest`. Cloud Run reads the value when an instance starts, so redeploy after rotating a secret. Nothing secret lives in the repo or in GitHub. |
+| **Secret Manager** | Holds `ENV-database-url`, `ENV-django-secret-key`, and one API token secret per client (see [API tokens](#api-tokens)). The deploy passes them to the service (the migrate job gets only the first two) with `--set-secrets ...:latest`. Cloud Run reads the value when an instance starts, so redeploy after rotating a secret. Nothing secret lives in the repo or in GitHub. |
 | **Artifact Registry** | Docker repository `team17`. Images are `cra-service-dev` and `cra-service-prod`, each tagged with the commit SHA. The cleanup policy in [`deploy/cleanup.json`](../deploy/cleanup.json) keeps the 2 most recent images per environment and deletes any others older than 7 days. |
 | **GitHub Actions + WIF** | The deploy job exchanges its GitHub OIDC token through Workload Identity Federation (`GCP_WIF_PROVIDER`) to act as the deployer service account (`GCP_DEPLOY_SA`). There are no service account keys. Only the deploy job gets `id-token: write`. |
 
@@ -63,6 +63,92 @@ The two deployments share nothing at runtime: separate Cloud Run services, Neon
 projects, secrets, runtime service accounts, and image packages. Data written to
 Launchpad never shows up on Orbit.
 
+## API tokens
+
+Every request except `GET /health` needs `Authorization: Bearer <token>`. Each client
+has its own token, so one can be rotated or revoked without affecting the others, and
+the access log shows which client made each request.
+
+- The service accepts every environment variable named `API_TOKEN_<NAME>`. A request is
+  authorized if its token matches any of them. The check uses `hmac.compare_digest`
+  and compares against every token. Empty values are ignored. If no token is set, every
+  request except `GET /health` gets 401.
+- The client name is `<NAME>` in lowercase (`API_TOKEN_TEAM21` is `team21`). The
+  middleware stores it as `request.client_name`. Gunicorn's access log writes it where
+  the combined log format has the user field (`gunicorn.conf.py`), and writes `-` when no
+  token matched. Tokens and request bodies are never logged.
+
+  ```
+  169.254.1.1 - team21 [05/Oct/2026:19:27:49 +0000] "GET /test/clock HTTP/1.1" 200 31 "-" "python-requests/2.32.3"
+  ```
+
+- `API_TOKEN` still works, as client `default`, so older local `.env` files keep
+  working. `API_TOKEN_DEFAULT` takes precedence over it. Deploys don't set it.
+
+The deploy maps each variable to a Secret Manager secret, in the "Resolve allowed host
+and token secrets" step of `.github/workflows/deploy.yml`:
+
+| Deployment | Variable | Secret | Client |
+|---|---|---|---|
+| Orbit (`team17-prod`) | `API_TOKEN_TEAM17` | `prod-api-token-team17` | Team 17 |
+| | `API_TOKEN_TEAM21` | `prod-api-token-team21` | Team 21 |
+| | `API_TOKEN_STAFF` | `prod-api-token-staff` | Instructors |
+| Launchpad (`team17-dev`) | `API_TOKEN_TEAM17` | `dev-api-token` | Team 17 |
+
+To read a token: `gcloud secrets versions access latest --secret=SECRET`.
+
+### Rotating a token
+
+Rotate a client's token if it leaks or someone who had it leaves. Other clients are
+not affected. The old token stops working as soon as a new instance starts, and there's
+no overlap period. With min instances 0, that can be the next cold start, before you
+redeploy. Tell the client before you start, and finish all the steps together.
+
+```bash
+SECRET=prod-api-token-team21    # the client's secret, from the table above
+
+# 1. Add a new version. printf adds no trailing newline (the service strips one anyway).
+printf '%s' "$(openssl rand -hex 32)" | gcloud secrets versions add "$SECRET" --data-file=-
+
+# 2. Note the previous version's number, to disable in step 5.
+gcloud secrets versions list "$SECRET"
+```
+
+3. **Redeploy**, so every instance reads the new version: **Launch to Orbit** for a
+   `prod-` secret, or re-run the latest CI run on `main` for `dev-api-token`. If traffic
+   is pinned (see [Rolling back](#rolling-back)), the new revision gets no traffic. The
+   pinned revision picks up the new token only as its instances restart.
+4. **Send the client the new token** privately, never in an issue, PR, or shared
+   channel: `gcloud secrets versions access latest --secret="$SECRET"`.
+5. **Confirm it works, then disable the old version:**
+
+   ```bash
+   curl -fsS -H "Authorization: Bearer $NEW_TOKEN" "https://$HOST/test/clock"
+   gcloud secrets versions disable OLD_VERSION --secret="$SECRET"
+   ```
+
+   Disable only the old version. If a mapped secret has no version the service can
+   read, new instances fail to start.
+
+### Adding or removing a client
+
+To add a client, create its secret, let the runtime service account read it, and map
+it in `deploy.yml`:
+
+```bash
+printf '%s' "$(openssl rand -hex 32)" | gcloud secrets create prod-api-token-NAME \
+  --replication-policy=automatic --data-file=-
+gcloud secrets add-iam-policy-binding prod-api-token-NAME \
+  --member="serviceAccount:prod-runtime@$PROJECT_ID.iam.gserviceaccount.com" \
+  --role=roles/secretmanager.secretAccessor
+```
+
+Then add `API_TOKEN_NAME=prod-api-token-NAME:latest` to the environment's
+`TOKEN_SECRETS` in `deploy.yml`, merge, and deploy. Create the secret first: the
+deploy fails if a mapped secret is missing or unreadable (see
+[How deploys work](#how-deploys-work), step 6). To remove a client, delete its mapping
+and deploy. Its token stops working on that deploy.
+
 ## How deploys work
 
 Both environments go through the same steps: `test.yml`, then the reusable
@@ -70,16 +156,22 @@ Both environments go through the same steps: `test.yml`, then the reusable
 
 1. **Test.** Ruff lint and format check, `makemigrations --check`, `manage.py check`,
    and `pytest` against a Postgres 18 service container.
-2. **Resolve the allowed host.** Picks `DEV_HOST` or `PROD_HOST`. If the variable is
-   empty, the deploy stops here, before anything is built.
+2. **Resolve the allowed host and token secrets.** Picks `DEV_HOST` or `PROD_HOST`, and
+   the environment's API token secrets (see [API tokens](#api-tokens)). If the host
+   variable is empty, the deploy stops here, before anything is built.
 3. **Authenticate** to Google Cloud through Workload Identity Federation.
 4. **Build and push** the image as `cra-service-ENV:<commit SHA>`.
 5. **Migrate.** Points the Cloud Run job `team17-ENV-migrate` at the new image and runs
    `python manage.py migrate --noinput` with `--wait` (no retries, 5 minute timeout).
    If it fails, the deploy stops and the running service is untouched.
 6. **Deploy** a new revision of `team17-ENV` with the new image, secrets, and
-   `DJANGO_DEBUG=false,ALLOWED_HOSTS=<host>`. The new revision takes 100% of traffic as
-   soon as it is ready, unless traffic is pinned (see [Rolling back](#rolling-back)).
+   `DJANGO_DEBUG=false,ALLOWED_HOSTS=<host>`. `--set-secrets` replaces the service's
+   whole secret list, so a token mapping removed from `deploy.yml` stops working on this
+   deploy. If a mapped secret doesn't exist or the runtime service account can't read
+   it, this step fails (after migrations) and the running revision keeps serving. The
+   new revision takes
+   100% of traffic as soon as it is ready, unless traffic is pinned (see
+   [Rolling back](#rolling-back)).
 7. **Smoke test.** `GET /health` on the service URL, up to 10 tries 5 seconds apart. The
    URL Cloud Run reports is the same hostname as `DEV_HOST`/`PROD_HOST`, so a wrong host
    variable fails here with a 400. This step runs after traffic has moved, so if it

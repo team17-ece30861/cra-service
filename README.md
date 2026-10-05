@@ -17,8 +17,10 @@ takes a few seconds while an instance starts.
 Use only these URLs. Each service accepts just its own hostname (the `DEV_HOST` and
 `PROD_HOST` repository variables), so the other URL Cloud Run shows for it
 (`…-720849560682.us-central1.run.app`) returns 400. Every endpoint except `GET /health`
-needs the API token, which is in Secret Manager:
-`gcloud secrets versions access latest --secret=prod-api-token` (or `dev-api-token`).
+needs an API token. Each client has its own, in Secret Manager:
+`gcloud secrets versions access latest --secret=prod-api-token-team17` (Team 21 and
+the instructors have `prod-api-token-team21` and `prod-api-token-staff`; Launchpad uses
+`dev-api-token`). See [API tokens](docs/platform.md#api-tokens).
 
 ## Local development
 
@@ -61,7 +63,7 @@ Secret Manager:
 |---|---|
 | `DATABASE_URL` | `<env>-database-url` (Neon pooled connection string) |
 | `DJANGO_SECRET_KEY` | `<env>-django-secret-key` |
-| `API_TOKEN` | `<env>-api-token` |
+| `API_TOKEN_<NAME>` | One per client. Prod: `prod-api-token-team17`, `-team21`, `-staff`. Dev: `dev-api-token` as `API_TOKEN_TEAM17`. Locally, `API_TOKEN_LOCAL` (or the older `API_TOKEN`). |
 | `DJANGO_DEBUG`, `ALLOWED_HOSTS` | Set by the deploy workflow (`ALLOWED_HOSTS` from `DEV_HOST` or `PROD_HOST`) |
 
 GitHub repository variables used by the workflows (not secrets):

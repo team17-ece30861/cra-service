@@ -4,6 +4,8 @@ import pytest
 from django.test import Client
 
 from cra_service.api import api
+from cra_service.middleware import CLIENT_ENVIRON_KEY
+from cra_service.settings import env_api_tokens
 from tests.conftest import TOKEN
 from tests.problems import assert_problem
 
@@ -85,10 +87,66 @@ def test_health_ignores_a_wrong_token():
     assert response.status_code == 200
 
 
-@pytest.mark.parametrize("configured", ["", None])
-def test_no_configured_token_rejects_everything(settings, configured):
-    # Fail closed: an unset API_TOKEN must not turn "Bearer " into a valid token.
-    settings.API_TOKEN = configured
-    response = Client(headers={"Authorization": "Bearer "}).get("/test/clock")
+CLIENT_TOKENS = {"team17": "team17-token", "team21": "team21-token", "staff": "staff-token"}
+
+
+@pytest.fixture
+def client_tokens(settings):
+    settings.API_TOKENS = CLIENT_TOKENS
+
+
+@pytest.mark.parametrize("name,token", CLIENT_TOKENS.items())
+def test_each_client_token_works_and_records_the_client(client_tokens, name, token):
+    response = Client(headers={"Authorization": f"Bearer {token}"}).get("/test/clock")
+    assert response.status_code == 200
+    assert response.wsgi_request.client_name == name
+    assert response.wsgi_request.META[CLIENT_ENVIRON_KEY] == name
+
+
+@pytest.mark.parametrize("token", [TOKEN, "team17-token2", "team17-toke", "default"])
+def test_unknown_token_is_rejected(client_tokens, token):
+    response = Client(headers={"Authorization": f"Bearer {token}"}).get("/test/clock")
     assert_problem(response, 401, "Unauthorized")
-    assert Client().get("/health").status_code == 200
+    assert response.wsgi_request.client_name is None
+    assert CLIENT_ENVIRON_KEY not in response.wsgi_request.META
+
+
+def test_health_records_no_client_without_a_token(client_tokens):
+    response = Client().get("/health")
+    assert response.status_code == 200
+    assert response.wsgi_request.client_name is None
+    assert CLIENT_ENVIRON_KEY not in response.wsgi_request.META
+
+
+@pytest.mark.parametrize("configured", [{}, {"default": ""}], ids=["none", "empty"])
+@pytest.mark.parametrize("method,path", PROTECTED)
+@pytest.mark.parametrize("authorization", ["Bearer ", f"Bearer {TOKEN}"])
+def test_no_configured_token_rejects_everything(settings, configured, method, path, authorization):
+    # Fail closed: no tokens (or only empty ones) must not turn "Bearer " into a valid token.
+    settings.API_TOKENS = configured
+    response = Client(headers={"Authorization": authorization}).generic(method, path)
+    assert response.status_code == 401
+    assert Client(headers={"Authorization": authorization}).get("/health").status_code == 200
+
+
+def test_tokens_come_from_api_token_variables():
+    environ = {
+        "API_TOKEN_TEAM17": "a",
+        "API_TOKEN_TEAM21": " b\n",  # stripped: secrets created with `echo` end in a newline
+        "API_TOKEN_STAFF": "",  # empty values are ignored
+        "API_TOKEN_EMPTY": " \n",
+        "API_TOKEN_": "no name",
+        "API_TOKENS": "not a client",
+        "OTHER": "c",
+    }
+    assert env_api_tokens(environ) == {"team17": "a", "team21": "b"}
+
+
+def test_api_token_is_the_default_client():
+    assert env_api_tokens({"API_TOKEN": "x\n", "API_TOKEN_LOCAL": "y"}) == {
+        "default": "x",
+        "local": "y",
+    }
+    assert env_api_tokens({"API_TOKEN": "x", "API_TOKEN_DEFAULT": "y"}) == {"default": "y"}
+    assert env_api_tokens({"API_TOKEN": ""}) == {}
+    assert env_api_tokens({}) == {}
