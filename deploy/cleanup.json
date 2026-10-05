@@ -1,0 +1,12 @@
+[
+  {
+    "name": "keep-latest-per-environment",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {"keepCount": 2}
+  },
+  {
+    "name": "delete-old",
+    "action": {"type": "Delete"},
+    "condition": {"tagState": "ANY", "olderThan": "7d"}
+  }
+]

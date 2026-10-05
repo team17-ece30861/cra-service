@@ -1,0 +1,15 @@
+# Local Postgres matching Neon's major version. Start with: docker compose up -d
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: team17
+      POSTGRES_PASSWORD: team17
+      POSTGRES_DB: team17
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  pgdata:

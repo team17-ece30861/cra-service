@@ -1,1 +1,70 @@
-# cra-service
+# Team 17 CRA Reporting Service
+
+Django + Django Ninja service for the ECE 30861 pod project. The pod's shared
+`openapi.yaml` is the API contract; the auto-generated `/docs` page is only a convenience.
+
+## Deployments
+
+| Nickname | Cloud Run service | Purpose |
+|---|---|---|
+| Launchpad | `team17-dev` | Development. Deploys automatically on every merge to `main`. |
+| Orbit | `team17-prod` | The evaluation deployment used by Team 21 and the instructors. Deploys only by manual launch. |
+
+Both run in `us-central1` with min instances 0 and max instances 1. Each uses its own
+Neon Postgres project and its own secrets. The first request after a period of idle
+takes a few seconds while an instance starts.
+
+## Local development
+
+Requires Python 3.12 and Docker.
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+docker compose up -d                 # local Postgres 18
+cp .env.example .env
+set -a; source .env; set +a
+python manage.py migrate
+python manage.py runserver           # http://localhost:8000/health
+```
+
+## Tests and lint
+
+```bash
+pytest -q
+ruff check . && ruff format --check .
+```
+
+CI runs these on every push and pull request against a Postgres 18 service container.
+
+## Deploying
+
+- **Launchpad:** merge to `main`. CI tests, builds the image, runs migrations as a Cloud
+  Run job, deploys `team17-dev`, and smoke-tests `/health`.
+- **Orbit:** Actions tab → **Launch to Orbit** → Run workflow on `main` → type `ORBIT`.
+  The same test, migrate, deploy, and smoke-test steps run against `team17-prod`.
+
+Migrations never run at container startup.
+
+## Configuration
+
+All settings come from environment variables. On Cloud Run, secrets are injected from
+Secret Manager:
+
+| Variable | Source |
+|---|---|
+| `DATABASE_URL` | `<env>-database-url` (Neon pooled connection string) |
+| `DJANGO_SECRET_KEY` | `<env>-django-secret-key` |
+| `API_TOKEN` | `<env>-api-token` |
+| `DJANGO_DEBUG`, `ALLOWED_HOSTS` | Set by the deploy workflow |
+
+GitHub repository variables used by the workflows (not secrets):
+`GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`.
+
+## Team conventions
+
+- Get the current time only through the clock interface (coming with the test controls),
+  never `datetime.now()` directly.
+- Store all times in UTC.
+- Never log request bodies.
+- Deadline and state logic stay as pure Python, separate from views and models.

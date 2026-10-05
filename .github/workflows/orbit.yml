@@ -1,0 +1,41 @@
+name: Launch to Orbit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type ORBIT to deploy main to the graded prod service"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  go-for-launch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation and branch
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "ORBIT" ]; then
+            echo "Scrub: confirmation text didn't match."
+            exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Scrub: only main can launch to Orbit."
+            exit 1
+          fi
+
+  test:
+    needs: go-for-launch
+    uses: ./.github/workflows/test.yml
+
+  deploy-orbit:
+    needs: test
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prod
