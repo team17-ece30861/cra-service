@@ -21,12 +21,14 @@ recalculation required by REQ-06/AC-07; that full criterion also needs API valid
 and audit behavior. AC-05 covers non-reportable closure, not deadline calculation.
 No weekend, holiday, or daylight-saving adjustment applies.
 
-The API/data caller checks ticket state, validates that awareness and fix times
-are not in the future against `core.clock.now()`, and passes parsed timestamps.
-Map the returned values to each obligation's `due_at` and recalculate when either
-input changes. The function reads no clock or database and mutates no ticket.
-It does not validate triage, determine obligation statuses, or serialize HTTP
-responses. Those are separate integration steps.
+The integrated caller in `core/tickets.py` checks ticket state and passes parsed
+timestamps. Triage rejects future awareness against `core.clock.now()`; updates
+reject future awareness and fix availability. Intake follows the common create
+schema without adding the update-only future-fix rule. Responses map the returned
+values to each obligation's `due_at` and recalculate when either input changes.
+The function reads no clock or database and mutates no ticket. It does not validate
+triage, determine obligation statuses, or serialize HTTP responses; the API layer
+handles those responsibilities.
 
 ## Initial obligation statuses
 
@@ -68,8 +70,10 @@ instead of generating expected deadlines from the calculation under test.
 exact due-time versus one-second-late boundary, clock movement backward, UTC
 offsets, and truncation. Together these support AC-03, the non-applicability part
 of AC-05, AC-14 normalization, and the unsubmitted boundary part of AC-06.
-They are domain tests; full HTTP acceptance, persistence, and audit verification
-remain pending API integration.
+These are domain tests. The integration on this branch adds HTTP acceptance,
+persistence, audit, and rollback checks in `tests/test_phase3_api.py` and the
+portable cases in `acceptance/cases.py`. See [Phase 3 validation](phase3.md) for
+the requirement mapping, recorded results, and deployment work still pending.
 
 ## Contract documentation gap
 

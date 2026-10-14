@@ -6,6 +6,11 @@ request schemas, audit records, and response generation. It is a proposed increm
 until reviewed, merged, and released. The existing README deployment URLs do not
 prove that this branch is deployed.
 
+Review the complete increment in
+[PR #7](https://github.com/team17-ece30861/cra-service/pull/7). Detailed helper
+interfaces are in [domain logic](domain.md) and [triage rules](triage.md);
+the existing platform is documented in [platform notes](platform.md).
+
 ## Delivered behavior on this branch
 
 - REQ-01: create a ticket with a unique opaque ID, state `received`, and receipt
@@ -133,6 +138,28 @@ cannot truncate the audit table while deferred foreign-key triggers are pending
 inside an outer Django test transaction. Switching the test class to real request
 transaction boundaries corrected that failure. This is a concrete GenAI correction
 example for the Phase 3 report; SQLite-only validation did not expose it.
+
+## Recorded validation
+
+These results document completed runs, not a deployed-service release. Both were
+performed on 2026-10-14; the different revisions are recorded deliberately.
+
+| Run | Revision and environment | Result | Evidence |
+| --- | --- | --- | --- |
+| GitHub CI | `6c8d8a7f1b871352ac1980b0897ce5e8a00ed7ac`; Linux, Python 3.12, PostgreSQL 18 | 513 tests passed; lint/format, migration consistency, and Django checks passed. | [Successful CI run](https://github.com/team17-ece30861/cra-service/actions/runs/38585892219) |
+| External HTTP acceptance | `ce653938d0f5d0b61788d0ad3aa09d916ca50378`; isolated local SQLite service at `http://127.0.0.1:8001` | 54 passed, 0 failed, 1 skipped. | Local report `.venv/phase3-http-report.json`; 14:45:28-14:45:40 UTC. |
+
+The skipped HTTP case is the HTTPS-enforcement probe, which does not apply to a
+loopback HTTP server. The raw local report is ignored by Git; its summary is
+recorded here, but it is not evidence of a Cloud Run release. The CI run includes
+the PostgreSQL concurrent-triage test, which cannot be validated with SQLite.
+CI skipped deployment because this was a pull-request run rather than a merge
+to `main`.
+
+After the local HTTP run, `db2fc8f` corrected the PostgreSQL test-transaction setup
+described above. `6c8d8a7` corrected the problem-details field for final-deadline
+overflow caused by fix availability and added its regression test. The successful
+CI result covers both corrections; no later external HTTP run is claimed here.
 
 ## Running the external suite
 

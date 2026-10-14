@@ -16,9 +16,12 @@ The result is an immutable `TriageResult` containing `state`, `resolution`, and
    `reason` is required and must satisfy the `LongText` schema. Unknown fields
    and invalid timestamp strings return 400 at this boundary.
 4. Call `triage_ticket`, supplying `now=core.clock.now()` and parsed timestamps.
-5. Apply the returned changes and append exactly one `triaged` audit entry in
-   the same successful transaction, retaining the actor and request reason.
-6. Build the response with the appropriate derived deadlines and obligations.
+5. Apply the returned changes in memory and build the response with derived
+   deadlines and obligations, rejecting out-of-range deadlines before saving.
+6. Save the ticket and append exactly one `triaged` audit entry in the same
+   successful transaction, retaining the actor and request reason.
+
+`core/tickets.py` implements this sequence on the integration branch.
 
 Missing awareness for an actively-exploited decision raises the existing
 `BadRequest` (400). Triage outside `received` raises `Conflict` (409). Future
@@ -27,28 +30,30 @@ An awareness time equal to now is accepted, as is one earlier than receipt.
 Times are normalized to UTC and fractional seconds truncated before comparison.
 
 Active exploitation returns `reportable`, a null resolution, and the normalized
-awareness time. Pass this awareness time to the deadline helper from PR #5 when
-integrating that work. `not_actively_exploited` and `invalid` return `closed` with
+awareness time. The API passes this awareness time to the deadline helper from
+PR #5. `not_actively_exploited` and `invalid` return `closed` with
 the corresponding resolution and no reporting awareness time. The caller must
 return `not_applicable` obligations for those closed tickets.
 
 ## Acceptance coverage
 
 - AC-04: unit tests cover absent awareness (400), future awareness (422), and
-  repeat triage (409), including error precedence. Missing reason (400) remains
-  the responsibility of the request schema and its API tests.
+  repeat triage (409), including error precedence. The integrated request schema
+  and API tests additionally cover missing reason (400) and unchanged stored data.
 - AC-05: both non-reportable decisions close with the matching resolution and
-  reject further triage. Rejecting updates, read access after closure, and
-  `not_applicable` response obligations still require API integration tests.
+  reject further triage. Integrated acceptance tests also cover rejected updates,
+  read access after closure, and `not_applicable` response obligations.
 - AC-03/AC-14: tests cover acceptance of awareness before triage, UTC-offset
-  normalization, and truncation. Full Model D deadline/status verification
-  remains part of the integrated service tests.
+  normalization, and truncation. Integrated service tests verify exact Model D
+  E1-E5 deadlines and the initial obligation statuses.
 
 The current contract allows an optional `aware_at` on any triage request but
 does not say whether a non-reportable decision should retain such an input.
 The result describes reporting awareness only, which is absent for those
-decisions. The API layer should resolve handling of the extra input with the
-pod before asserting a response or audit behavior for that case.
+decisions. The integrated API uses that absent reporting awareness; confirm this
+interpretation with the pod before claiming shared agreement on the extra input.
 
-These tests require no database. This PR supplies domain logic; it does not
-implement or deploy the ticket endpoint.
+The original domain tests require no database and PR #6 supplies only domain
+logic. The combined integration PR #7 implements the ticket endpoint, persistence,
+and audit behavior. See [Phase 3 validation](phase3.md) for coverage and recorded
+test results. Review, merge, deployment, and cross-team validation remain pending.
