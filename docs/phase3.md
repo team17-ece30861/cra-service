@@ -11,6 +11,9 @@ Review the complete increment in
 interfaces are in [domain logic](domain.md) and [triage rules](triage.md);
 the existing platform is documented in [platform notes](platform.md).
 
+For Ann's API/data review and AI-assisted onboarding, start with the
+[API + Data handoff](ann-handoff.md).
+
 ## Delivered behavior on this branch
 
 - REQ-01: create a ticket with a unique opaque ID, state `received`, and receipt

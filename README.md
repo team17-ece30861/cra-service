@@ -49,6 +49,13 @@ Phase 3 ticket integration, acceptance coverage, and portable tests against a se
 base URL are described in [Phase 3 validation](docs/phase3.md). External runs require
 a coordinated reset window and an access token supplied through the environment.
 
+## API/data handoff
+
+Ann's starting point is [API + Data handoff](docs/ann-handoff.md): the integration
+branch, implemented files, review checklist, domain boundary, later-phase gaps,
+and a starter prompt for her coding assistant. Review the existing Phase 3 layer
+before adding another implementation.
+
 ## Deploying
 
 - **Launchpad:** merge to `main`. CI tests, builds the image, runs migrations as a Cloud
