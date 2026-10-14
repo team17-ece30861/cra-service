@@ -127,6 +127,13 @@ recalculation, out-of-range deadline rejection, and PostgreSQL row locking.
 Expected dates come from Phase 2 Model D; status boundaries come from Model B.
 Schema checks use the common OpenAPI file, not Ninja's generated documentation.
 
+The integration class uses transaction tests so each request commits independently,
+as it does in the service. Linux CI caught an initial test-setup error: PostgreSQL
+cannot truncate the audit table while deferred foreign-key triggers are pending
+inside an outer Django test transaction. Switching the test class to real request
+transaction boundaries corrected that failure. This is a concrete GenAI correction
+example for the Phase 3 report; SQLite-only validation did not expose it.
+
 ## Running the external suite
 
 The ordinary `pytest -q` runs local regression tests, including the same acceptance

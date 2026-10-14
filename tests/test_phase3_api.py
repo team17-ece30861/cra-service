@@ -41,7 +41,8 @@ def service():
     return Service(DjangoTransport())
 
 
-@pytest.mark.django_db
+# PostgreSQL reset needs committed requests, matching deployed HTTP transactions.
+@pytest.mark.django_db(transaction=True)
 class TestLocalPhase3(Phase3Checks):
     def test_audit_has_one_entry_per_success_and_no_reporter(self, service):
         ticket = service.create()
