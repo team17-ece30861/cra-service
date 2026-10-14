@@ -45,6 +45,10 @@ ruff check . && ruff format --check .
 
 CI runs these on every push and pull request against a Postgres 18 service container.
 
+Phase 3 ticket integration, acceptance coverage, and portable tests against a selected
+base URL are described in [Phase 3 validation](docs/phase3.md). External runs require
+a coordinated reset window and an access token supplied through the environment.
+
 ## Deploying
 
 - **Launchpad:** merge to `main`. CI tests, builds the image, runs migrations as a Cloud
