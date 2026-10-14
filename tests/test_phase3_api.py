@@ -152,6 +152,23 @@ class TestLocalPhase3(Phase3Checks):
         assert service.get(ticket["id"]) == before
         assert AuditEntry.objects.count() == 1
 
+    def test_out_of_range_fix_deadline_names_the_fix_field(self, service):
+        service.fix_clock("9999-12-31T23:59:59Z")
+        ticket = service.create(fix={"available_at": "9999-12-31T23:59:59Z"})
+        before = service.get(ticket["id"])
+        problem = service.triage(
+            ticket["id"],
+            {
+                "decision": "actively_exploited",
+                "aware_at": "2026-10-05T09:00:00Z",
+                "reason": "Boundary input",
+            },
+            422,
+        )
+        assert problem["errors"][0]["field"] == "fix.available_at"
+        assert service.get(ticket["id"]) == before
+        assert AuditEntry.objects.count() == 1
+
     @pytest.mark.django_db(transaction=True)
     def test_concurrent_triage_has_one_success_and_one_audit_entry(self, service):
         if connection.vendor != "postgresql":

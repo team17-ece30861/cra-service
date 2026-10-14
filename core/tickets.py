@@ -59,11 +59,15 @@ def _render(ticket: Ticket, now, *, detail: bool = False) -> dict:
     )
     due_times = {"early_warning": None, "notification": None, "final_report": None}
     if applicable:
+        deadline_field = "aware_at"
         try:
-            deadlines = calculate_deadlines(ticket.aware_at, _fix_time(ticket.data))
+            fix_time = _fix_time(ticket.data)
+            if fix_time is not None and fix_time > ticket.aware_at:
+                deadline_field = "fix.available_at"
+            deadlines = calculate_deadlines(ticket.aware_at, fix_time)
         except (OverflowError, ValueError):
             raise RuleViolation(
-                [field_error("aware_at", "reporting deadlines are out of range")]
+                [field_error(deadline_field, "reporting deadlines are out of range")]
             ) from None
         due_times = {
             "early_warning": deadlines.early_warning_due,
