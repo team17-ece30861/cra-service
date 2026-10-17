@@ -53,9 +53,9 @@ same spec. We test their deployment and they test ours.
 | PRs #5 (deadlines) and #6 (triage) | Contained in PR #7. Close them once #7 merges. |
 | Portable acceptance harness, Phase 3 cases (AC-01 to 05, 14, 15, 17) | In PR #7, passed locally over HTTP. Not yet run against a deployment. |
 | Phase 4 reporting workflow | Not started |
-| Phase 3 due date | Not recorded here yet (fill in) |
-| Phase 4 due date | Not recorded here yet (fill in) |
-| Phase 5 due date | Not recorded here yet (fill in) |
+| Phase 3 due date | **2026-10-18.** PR #7 is still a draft and nothing ticket-related is deployed, so 3.1 to 3.6 are the critical path. |
+| Phase 4 due date | Not announced yet |
+| Phase 5 due date | Not announced yet |
 
 ## Phase 3: deployed service with intake, triage, and deadlines
 
@@ -71,7 +71,7 @@ deployments.
 | 3.4 | Mark PR #7 ready, merge. Launchpad deploys automatically. Close #5 and #6. | Quincy | Blocked on 3.1, 3.2 |
 | 3.5 | Run `acceptance/` against Launchpad. Fix anything that fails. | Richard | Blocked on 3.4 |
 | 3.6 | Launch to Orbit (Actions → Launch to Orbit). Re-run `acceptance/` against Orbit, including the plain-HTTP probe (AC-15). Record the image SHA. | Quincy runs the launch, Richard runs the suite | Blocked on 3.5 |
-| 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | Confirm whether done |
+| 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | In progress: Quincy is creating the repo that holds the shared pod file |
 | 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Book reset windows so suites don't overlap. Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Blocked on 3.6 |
 | 3.9 | Freeze the `phase-3` operations in `openapi.yaml` with Team 21 (bump `info.version`, note the agreed date). | Ann | To do |
 | 3.10 | Start the shared test file with Team 21: Model D inputs and hand-calculated outputs, each checked by the other team. `tests/fixtures/phase3_model_d.json` is a starting point. | Richard | To do |
