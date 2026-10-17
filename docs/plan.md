@@ -1,0 +1,197 @@
+# Project plan (Phases 3 to 5)
+
+The working plan for Team 17's CRA reporting service: who owns what, what's done, and
+what's next. It's written for teammates and their coding agents (Claude Code and Codex).
+Last updated 2026-10-17.
+
+**Agents: read this first.** Then read [`CLAUDE.md`](../CLAUDE.md) (repository rules; they
+apply to every agent, not just Claude), [spec.md](spec.md) (the agreed behavior),
+and [`openapi.yaml`](../openapi.yaml) (the contract). Pick a task from your owner's
+section below, and update its status row in the same PR that finishes it.
+
+## Sources of truth
+
+| Question | Where to look |
+|---|---|
+| What must the API accept and return? | [`openapi.yaml`](../openapi.yaml). Ninja's `/docs` is not the contract. |
+| What are the rules, models, deadlines, and acceptance criteria? | [spec.md](spec.md), copied from the Phase 2 report |
+| Repository rules (clock, UTC, errors, X-Actor, logging, branches) | [`CLAUDE.md`](../CLAUDE.md) |
+| Hosting, deploys, rollback, cost, platform interpretations | [platform.md](platform.md), [`README.md`](../README.md) |
+| Phase 3 integration details, domain helpers, triage rules | `docs/phase3.md`, `docs/domain.md`, `docs/triage.md`, `docs/ann-handoff.md` (on PR #7's branch until it merges) |
+
+## Team and ownership
+
+| Area | Owner | Owns |
+|---|---|---|
+| Platform and Hosting | Quincy (Claude Code) | Cloud Run, deploy pipeline, CI, secrets, budget caps. Config, database, migrations. Auth, X-Actor, problem+json errors, logging. `/test/reset`, `/test/clock`. Deployed URLs, the shared pod file entry, the class registry entry. Merge and release coordination. |
+| API and Data | Ann (Codex) | Ticket, triage, report, and audit endpoints: validation, status codes, and responses that match `openapi.yaml`. Models and migrations for tickets, submissions, and audit entries. Schemathesis contract tests. Keeping `openapi.yaml` in sync with Team 21. |
+| Domain Logic and Testing | Richard (Codex) | Deadlines, statuses, triage, draft, submission, and closure rules as pure functions in `core/domain/`. Unit tests driven by Models C and D. The black-box harness in `acceptance/` (takes a base URL and token) and its run instructions. The shared test file with Team 21. |
+
+Team 21 (Aashik, Andrew, Ryan, Conrad) builds an independent implementation of the
+same spec. We test their deployment and they test ours.
+
+### Boundaries between areas
+
+- `core/domain/` stays pure: plain values in, plain values or `BadRequest`/`Conflict`/
+  `RuleViolation` out. No database, no clock, no Django models. Routes pass in
+  `core.clock.now()`.
+- Routes and models (Ann) load data, call the domain helpers, persist, write the audit
+  entry, and build responses. Business rules don't get re-implemented inside routes.
+- Platform code (`cra_service/`, `core/clock.py`, `core/controls.py`, middleware,
+  workflows) changes only through a PR Quincy reviews. Never edit
+  `.github/workflows/deploy.yml` or `orbit.yml` unless the task says so.
+- Changing someone else's area is fine when it unblocks you. Say so in the PR description
+  and ask that owner to review.
+
+## Where we are (2026-10-17)
+
+| Item | Status |
+|---|---|
+| Platform layer: auth, errors, timestamps, clock, reset, logging, CI, deploys (PRs #1 to #4) | Done, merged, live on Launchpad and Orbit |
+| Phase 3 ticket API: intake, get, list (unfiltered), update, triage, audit read, deadlines, unsubmitted statuses | Built in **PR #7 (draft, not merged, not deployed)** |
+| PRs #5 (deadlines) and #6 (triage) | Contained in PR #7. Close them once #7 merges. |
+| Portable acceptance harness, Phase 3 cases (AC-01 to 05, 14, 15, 17) | In PR #7, passed locally over HTTP. Not yet run against a deployment. |
+| Phase 4 reporting workflow | Not started |
+| Phase 3 due date | Not recorded here yet (fill in) |
+| Phase 4 due date | Not recorded here yet (fill in) |
+| Phase 5 due date | Not recorded here yet (fill in) |
+
+## Phase 3: deployed service with intake, triage, and deadlines
+
+Goal (Q6.1): a deployed HTTPS service covering REQ-01 to 04, 12 to 14, and 16, passing
+AC-01 to 05, 14, 15, and 17 plus OpenAPI response checks, run against **both** teams'
+deployments.
+
+| # | Task | Owner | Status |
+|---|---|---|---|
+| 3.1 | Review PR #7's API and data layer against `openapi.yaml` (see `docs/ann-handoff.md`). Fix verified gaps with focused commits on that branch, not a parallel API. | Ann | To do |
+| 3.2 | Platform review of PR #7: clock use, transactions and rollback, logging, error precedence, migration safety on Neon. | Quincy | To do |
+| 3.3 | Settle open question Q1 (below) with the pod before 3.4, or document our behavior in `docs/phase3.md`. | Richard, with pod | To do |
+| 3.4 | Mark PR #7 ready, merge. Launchpad deploys automatically. Close #5 and #6. | Quincy | Blocked on 3.1, 3.2 |
+| 3.5 | Run `acceptance/` against Launchpad. Fix anything that fails. | Richard | Blocked on 3.4 |
+| 3.6 | Launch to Orbit (Actions → Launch to Orbit). Re-run `acceptance/` against Orbit, including the plain-HTTP probe (AC-15). Record the image SHA. | Quincy runs the launch, Richard runs the suite | Blocked on 3.5 |
+| 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | Confirm whether done |
+| 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Book reset windows so suites don't overlap. Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Blocked on 3.6 |
+| 3.9 | Freeze the `phase-3` operations in `openapi.yaml` with Team 21 (bump `info.version`, note the agreed date). | Ann | To do |
+| 3.10 | Start the shared test file with Team 21: Model D inputs and hand-calculated outputs, each checked by the other team. `tests/fixtures/phase3_model_d.json` is a starting point. | Richard | To do |
+| 3.11 | Phase 3 report (see [Report work](#report-work)). | Everyone | To do |
+
+**Done when** both deployments pass the shared Phase 3 suite and the report records the
+runs.
+
+## Phase 4: the full reporting workflow
+
+Goal (Q6.2): updates, report status, all four drafts, submission recording, closure,
+listing filters, audit log, reporter confidentiality (REQ-05 to 11, REQ-15). Validated by
+AC-06 to 13 and AC-16, plus the first full cross-team run. A scripted incident (submit,
+triage, three submissions, close) passes against Team 21's deployment.
+
+Domain work comes first so the API can wire it in. Agree on function signatures in the
+first PR description before building on them.
+
+### Domain Logic and Testing (Richard)
+
+| # | Task | Covers | Status |
+|---|---|---|---|
+| 4.D1 | `core/domain/drafts.py`: for a report type, ticket fields, ticket ID, and `aware_at`, return the draft `content` and `missing_fields` exactly as Model C says. Never include reporter fields. Unit tests that fill fields one at a time and check all four drafts at each step. | REQ-07, 15; AC-08 | To do |
+| 4.D2 | Extend statuses for submitted reports: `submitted` if `submitted_at` ≤ `due_at`, otherwise `submitted_late`. Include the E6 boundary and a clock moved backward. | REQ-05; AC-06 | To do |
+| 4.D3 | Submission rule: 409 if the ticket isn't `reportable`, the previous report isn't submitted, or this one is already submitted; 422 if required fields are missing or `submitted_at` isn't between `aware_at` and now. 409 is checked before 422. | REQ-08; AC-09 | To do |
+| 4.D4 | Close rule: 409 unless `reportable` with all three reports submitted. | REQ-09; AC-10 | To do |
+| 4.D5 | Listing helpers: `next_due_at` (earliest due time among unsubmitted, applicable reports; null if none) and the sort key (nulls last, tie-break per Q2). | REQ-10; AC-11 | To do |
+| 4.T1 | Acceptance cases for AC-06 to 12 and AC-16 in `acceptance/cases.py`, running both locally and over HTTP. | | To do |
+| 4.T2 | Add Phase 4 cases to the shared test file with Team 21, cross-checked. | | To do |
+| 4.T3 | Harness README: running needs `CRA_BASE_URL`, `CRA_API_TOKEN`, and `--allow-reset` (the explicit reset permission). Explain the reset-window etiquette. | | To do |
+| 4.T4 | First full cross-team run, both directions. Resolve disagreements in the spec, not by quietly changing tests. | | Blocked on 4.A1 to 4.A5 |
+
+### API and Data (Ann)
+
+| # | Task | Covers | Status |
+|---|---|---|---|
+| 4.A1 | Submission model and migration: one row per ticket and report type with `submitted_at`, `reference`, the locked `content` snapshot, and the actor. Reset must clear it (anything in the `core` app is cleared automatically). | REQ-08, 18 | To do |
+| 4.A2 | `GET /tickets/{id}/reports/{type}`: unknown type → 404. Before submission, build the draft live (4.D1). After submission, return the locked snapshot. | REQ-07, 08, 15; AC-08, 09 | Blocked on 4.D1 |
+| 4.A3 | `POST /tickets/{id}/reports/{type}/submission`: `user_advisory` and unknown types → 404. Use 4.D3, store the snapshot, add one `report_submitted` audit entry, return the locked report as a `Draft`. | REQ-05, 08; AC-06, 09 | Blocked on 4.D3 |
+| 4.A4 | `POST /tickets/{id}/close`: use 4.D4, set `closed`/`resolved`, add one `closed` audit entry. | REQ-09; AC-10 | Blocked on 4.D4 |
+| 4.A5 | Ticket responses use submissions for `obligations.*.status`, `submitted_at`, `reference`, and `next_due_at`. `GET /tickets` supports `state` and `obligation_status` filters (bad values → 400) and the 4.D5 ordering. | REQ-05, 10; AC-06, 11 | Blocked on 4.D2, 4.D5 |
+| 4.A6 | Schemathesis against `openapi.yaml`: at least 500 generated malformed requests, no 5xx, every error is problem+json, data unchanged afterward. Runs in CI against the local service and from `acceptance/` against a deployment. | REQ-12; AC-13 | To do |
+| 4.A7 | Reporter confidentiality sweep: a unique reporter string appears only in `GET /tickets/{id}`. Check lists, drafts, audit entries, error bodies, and logs. | REQ-15; AC-16 | To do |
+| 4.A8 | Keep `openapi.yaml` in sync with Team 21: record every agreed change in the PR and in the file's `info.description`; freeze `phase-4` operations when both teams agree. | | Ongoing |
+
+### Platform (Quincy)
+
+| # | Task | Status |
+|---|---|---|
+| 4.P1 | Review Phase 4 PRs for platform rules: clock, one transaction per request, rollback on failure, no request bodies in logs, error precedence. | Ongoing |
+| 4.P2 | Release each merged increment to Orbit before cross-team runs, and record the image SHA used. | Ongoing |
+| 4.P3 | Share the "Open interpretations" table in [platform.md](platform.md#known-limitations) with Team 21 so both services agree on edge cases (reset keeps the clock, 405 precedence, 413 on bodyless routes, and so on). | To do |
+
+## Phase 5: performance, persistence, intake, final version
+
+Goal (Q6.3): REQ-17 and REQ-18, each team's own intake channel, a stable final version.
+AC-18 automated, AC-19 by recorded demo, and the full suite (AC-01 to 18) in CI and
+against Team 21 before each deadline.
+
+| # | Task | Owner | Status |
+|---|---|---|---|
+| 5.1 | AC-18 performance on Orbit: load 1,000 tickets, then 200 mixed requests one at a time, p95 ≤ 1 s. Orbit scales to zero and Neon suspends when idle, so warm both with a few requests before measuring and report cold-start numbers separately. If p95 still fails, check query counts on `GET /tickets` first, then consider a temporary minimum instance for the evaluation window. | Quincy (hosting), Richard (load script) | To do |
+| 5.2 | AC-19 restart demo: create a ticket with a recorded report, force a new revision (redeploy, or `gcloud run services update` with a harmless env change), read the ticket, report, and audit log back unchanged. Screen-record it. | Quincy | To do |
+| 5.3 | Our own intake channel (team's choice, outside the shared spec). If behind, cut it to "clients call `POST /tickets` directly" (Q6.4). | Unassigned. Decide at the end of Phase 4. | To do |
+| 5.4 | Full suite (AC-01 to 18) runs in CI on every change, and against Team 21 before each deadline. | Richard | To do |
+| 5.5 | Short operations guide: deploy, roll back, rotate tokens, lift the spend cap, read logs. Mostly a trim of [platform.md](platform.md). | Quincy | To do |
+| 5.6 | Final spec version agreed with Team 21; final cross-team results recorded. | Ann (spec), Richard (results) | To do |
+
+### If we fall behind
+
+From Q6.4, cut in this order: (1) intake becomes direct API calls, (2) replace the
+REQ-17 target with a measured baseline, (3) drop listing filters and ordering (REQ-10).
+REQ-01 to 09 and REQ-11 are never cut.
+
+## Open questions for the pod
+
+Raise each with Team 21 before building on an answer, and record the decision here and,
+if it changes the contract, in `openapi.yaml`.
+
+| # | Question | Our current behavior or proposal | Blocks |
+|---|---|---|---|
+| Q1 | A `not_actively_exploited` or `invalid` triage that also sends `aware_at`: accept and ignore it, store it, or reject it with 400? | PR #7 accepts it and returns `aware_at: null`. | 3.3 |
+| Q2 | Listing tie-break when `next_due_at` is equal or null. | Propose `received_at` ascending, then `id`. | 4.D5 |
+| Q3 | Drafts for a ticket that never became reportable (`received`, or closed as not reportable): 409? And for a ticket closed as `resolved`, do drafts still read (closed tickets stay readable)? | Propose 409 only for never-reportable tickets; resolved tickets return their locked reports. | 4.A2 |
+| Q4 | After a report is submitted, can a later change to `aware_at` or `fix.available_at` move its `due_at`, and so flip `submitted` to `submitted_late`? | Undecided. Status is computed, not stored, so this needs an explicit rule. | 4.D2, 4.A5 |
+| Q5 | Must `submitted_at` be no earlier than the previous report's `submitted_at`? | Spec only requires between `aware_at` and now. | 4.D3 |
+| Q6 | A PATCH that changes nothing: still one `updated` audit entry? | Affects AC-12 counts. Propose yes, with an empty `changes` list. | 4.T1 |
+
+## Report work
+
+Each phase report reuses the shared Sections 1 to 6 and updates our own Sections 7 to 9.
+
+- **Q7 and Q8 are out of date.** The Phase 2 report says FastAPI, SQLite, and
+  SQLAlchemy. We built Django + Django Ninja on Cloud Run with Neon Postgres. Rewrite
+  Q7.1 (architecture), Q7.2 (decisions), Q7.3 (operations: see [platform.md](platform.md)),
+  and Q8.1 (capability decisions, with references) to match.
+- **GenAI evidence (Q8.2).** Keep concrete examples of AI output we caught and fixed.
+  One is already recorded in `docs/phase3.md`: a test setup that passed on SQLite but
+  failed on PostgreSQL in CI (truncating the audit table with deferred foreign-key
+  triggers pending).
+- **Risks (Q9).** Update the two Phase 2 risks with what we learned (the deadline
+  interpretation held for Model D; cross-team compatibility evidence comes from 3.8 and
+  4.T4).
+- Record for every cross-team run: date, both image SHAs or versions, pass/fail counts,
+  and each mismatch's classification.
+
+## Working rules for agents
+
+These add to [`CLAUDE.md`](../CLAUDE.md); they don't replace it.
+
+1. Start from up-to-date `main` (or the branch named in the task) on a new branch. One
+   task per PR, and reference its task number (for example, "4.D1") in the PR title.
+   Never push to `main`.
+2. Before opening a PR, run `pytest -q`, `ruff check . && ruff format --check .`, and
+   `python manage.py makemigrations --check --dry-run` against local Postgres
+   (`docker compose up -d`). CI uses Linux, Python 3.12, and Postgres 18; SQLite passing
+   isn't enough.
+3. Expected values in tests come from [spec.md](spec.md) (Models C and D, the AC table)
+   or hand calculation, never from running the code under test.
+4. Never point `acceptance/` at Orbit or Team 21 without a booked window. It resets the
+   whole deployment. Never paste tokens into a prompt, a commit, or a PR.
+5. If the spec is ambiguous, don't pick an answer silently. Add it to
+   [Open questions](#open-questions-for-the-pod) and tell the owner.
+6. When you finish a task, update its status here in the same PR.

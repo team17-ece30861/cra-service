@@ -2,6 +2,7 @@
 
 Django 5.2 + Django Ninja on Cloud Run, Postgres on Neon.
 The contract is `openapi.yaml`. Match it exactly; Ninja's /docs page is not the source of truth.
+Read `docs/plan.md` (owners, status, tasks) and `docs/spec.md` (requirements, models, ACs) before starting a task.
 
 ## Commands
 - Local DB: `docker compose up -d`, then `set -a; source .env; set +a`
