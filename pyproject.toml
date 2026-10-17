@@ -1,6 +1,7 @@
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "cra_service.settings"
 python_files = ["test_*.py"]
+testpaths = ["tests"]
 filterwarnings = ["ignore:No directory at:UserWarning"]
 
 [tool.ruff]
