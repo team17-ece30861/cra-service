@@ -12,6 +12,7 @@ entry that says so.
 
 | Date | Decided by | Decision | Why |
 |---|---|---|---|
+| 2026-10-17 | Team 17 | Agent workflow adopted ([AGENTS.md](../AGENTS.md)): agents restate the problem first, agree on behavior before code, and stop at unsettled forks. A human teammate approves every code, test, migration, workflow, or contract PR. Agents may merge docs-only PRs. Every PR uses the template. No development branch: PRs go into `main`, which deploys Launchpad; Orbit is released by hand. | We want to use AI as much as possible while people keep control of decisions and of what ships. Launchpad already serves as the development environment, so a separate branch would only add a merge step. |
 | 2026-10-17 | Team 17 | PR #7 is the Phase 3 integration path. PRs #5 and #6 are contained in it and close when it merges. Ann reviews and takes ownership of its API and data layer rather than rebuilding it. | Richard built a minimal API layer so Phase 3 could be integrated and tested while Ann's work was pending. One branch avoids duplicate APIs. |
 | 2026-10-17 | Team 17 | `docs/plan.md` is the task board and `docs/spec.md` is the in-repo copy of the Phase 2 spec. Every agent reads them before starting a task (PR #8). | Teammates use different agents (Claude Code, Codex), and none of them can read the Phase 2 PDF. |
 | 2026-10-05 | Team 17 | Each client gets its own API token (Team 17, Team 21, staff), and logs record which client called. | A token can be revoked for one client without affecting the others, and logs show who ran what. |
