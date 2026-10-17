@@ -226,9 +226,11 @@ def update_ticket(request, id: str):
             data[key] = {**data[key], **value}
         else:
             data[key] = value
-    fix_time = _fix_time(data)
-    if fix_time is not None and fix_time > now:
-        errors.append(field_error("fix.available_at", "must not be later than now"))
+    # Only a fix time this request sends is checked. A stored one may be later than now
+    # (accepted at intake, or the test clock moved back) and must not block other edits.
+    if payload.fix is not None and "available_at" in payload.fix.model_fields_set:
+        if payload.fix.available_at > now:
+            errors.append(field_error("fix.available_at", "must not be later than now"))
     if errors:
         raise RuleViolation(errors)
     ticket.data = data
