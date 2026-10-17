@@ -66,7 +66,7 @@ deployments.
 | # | Task | Owner | Status |
 |---|---|---|---|
 | 3.1 | Review PR #7's API and data layer against `openapi.yaml` (see `docs/ann-handoff.md`). Fix verified gaps with focused commits on that branch, not a parallel API. | Ann | To do |
-| 3.1a | Fix the bug found in review (2026-10-17): every PATCH re-checks the *stored* `fix.available_at` against now, so if it's in the future (accepted at create, or the test clock moved back) even a title-only PATCH returns 422. Only check a fix time the request sends. Add PATCH tests for AC-07 cases while there. | Ann or Richard (Quincy to assign) | To do |
+| 3.1a | Fix the bug found in review (2026-10-17): every PATCH re-checks the *stored* `fix.available_at` against now, so if it's in the future (accepted at create, or the test clock moved back) even a title-only PATCH returns 422. Only check a fix time the request sends. Add PATCH tests for AC-07 cases while there. | Quincy's agent | PR #11 into PR #7's branch; CI green; waiting for a human merge |
 | 3.2 | Platform review of PR #7: clock use, transactions and rollback, logging, error precedence, migration safety on Neon. | Quincy | To do |
 | 3.3 | Settle open question Q1 (below) with the pod before 3.4, or document our behavior in `docs/phase3.md`. | Richard, with pod | To do |
 | 3.4 | Mark PR #7 ready, merge. Launchpad deploys automatically. Close #5 and #6. | Quincy | Blocked on 3.1, 3.2 |
@@ -160,6 +160,7 @@ contract changes.
 | Q3 | Drafts for a ticket that never became reportable (`received`, or closed as not reportable): 409? And for a ticket closed as `resolved`, do drafts still read (closed tickets stay readable)? | Propose 409 only for never-reportable tickets; resolved tickets return their locked reports. | 4.A2 |
 | Q4 | After a report is submitted, can a later change to `aware_at` or `fix.available_at` move its `due_at`, and so flip `submitted` to `submitted_late`? | Undecided. Status is computed, not stored, so this needs an explicit rule. | 4.D2, 4.A5 |
 | Q5 | Must `submitted_at` be no earlier than the previous report's `submitted_at`? | Spec only requires between `aware_at` and now. | 4.D3 |
+| Q7 | `POST /tickets` with `fix.available_at` later than now: accept it, or reject it? The field list says "not later than now", but the contract lists no 422 for submit. | Accepted (201). PATCH no longer re-checks a stored fix time (3.1a). Propose adding 422 to submit. | Phase 4 |
 | Q6 | A PATCH that changes nothing: still one `updated` audit entry? | Affects AC-12 counts. Propose yes, with an empty `changes` list. | 4.T1 |
 
 ## Report work
