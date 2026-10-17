@@ -3,6 +3,9 @@
 Django + Django Ninja service for the ECE 30861 pod project. The pod's shared
 `openapi.yaml` is the API contract; the auto-generated `/docs` page is only a convenience.
 
+The team's plan, owners, and task status are in [docs/plan.md](docs/plan.md). The agreed
+Phase 2 requirements, models, and acceptance criteria are in [docs/spec.md](docs/spec.md).
+
 ## Deployments
 
 | Nickname | Cloud Run service | URL | Purpose |
