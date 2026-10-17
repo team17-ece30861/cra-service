@@ -17,6 +17,7 @@ section below, and update its status row in the same PR that finishes it.
 | What are the rules, models, deadlines, and acceptance criteria? | [spec.md](spec.md), copied from the Phase 2 report |
 | Repository rules (clock, UTC, errors, X-Actor, logging, branches) | [`CLAUDE.md`](../CLAUDE.md) |
 | Hosting, deploys, rollback, cost, platform interpretations | [platform.md](platform.md), [`README.md`](../README.md) |
+| Why something was decided, and what's already settled | [decisions.md](decisions.md) |
 | Phase 3 integration details, domain helpers, triage rules | `docs/phase3.md`, `docs/domain.md`, `docs/triage.md`, `docs/ann-handoff.md` (on PR #7's branch until it merges) |
 
 ## Team and ownership
@@ -147,8 +148,9 @@ REQ-01 to 09 and REQ-11 are never cut.
 
 ## Open questions for the pod
 
-Raise each with Team 21 before building on an answer, and record the decision here and,
-if it changes the contract, in `openapi.yaml`.
+Raise each with Team 21 before building on an answer. When one is settled, log it in
+[decisions.md](decisions.md), remove it from this table, and update `openapi.yaml` if the
+contract changes.
 
 | # | Question | Our current behavior or proposal | Blocks |
 |---|---|---|---|
@@ -195,3 +197,5 @@ These add to [`CLAUDE.md`](../CLAUDE.md); they don't replace it.
 5. If the spec is ambiguous, don't pick an answer silently. Add it to
    [Open questions](#open-questions-for-the-pod) and tell the owner.
 6. When you finish a task, update its status here in the same PR.
+7. If your PR settles a question or changes scope, the contract, or ownership, add an
+   entry to [decisions.md](decisions.md) in the same PR.
