@@ -136,6 +136,54 @@ class TestLocalPhase3(Phase3Checks):
             "now": "2026-10-05T09:00:00Z"
         }
 
+    def _patch(self, service, id, body, status):
+        return service.expect(
+            "PATCH", "/tickets/" + id, status, template="/tickets/{id}", body=body
+        )
+
+    def test_unrelated_update_ignores_stored_future_fix_time(self, service):
+        # POST /tickets has no fix-time rule in the contract, so a future fix can be stored.
+        ticket = service.create(fix={"available_at": "2030-01-01T00:00:00Z"})
+        result = self._patch(service, ticket["id"], {"title": "Renamed"}, 200)
+        assert result["title"] == "Renamed"
+        result = self._patch(service, ticket["id"], {"fix": {"description": "Patch"}}, 200)
+        assert result["fix"]["available_at"] == "2030-01-01T00:00:00Z"
+        assert AuditEntry.objects.count() == 3
+
+    def test_unrelated_update_after_clock_moves_back(self, service):
+        ticket = service.create(fix={"available_at": "2026-10-05T09:00:00Z"})
+        service.fix_clock("2026-10-01T00:00:00Z")
+        assert self._patch(service, ticket["id"], {"title": "Renamed"}, 200)["title"] == "Renamed"
+
+    def test_sent_future_fix_time_is_rejected_without_changes(self, service):
+        ticket = service.create()
+        before = service.get(ticket["id"])
+        problem = self._patch(
+            service,
+            ticket["id"],
+            {"title": "Must not persist", "fix": {"available_at": "2026-10-05T09:00:01Z"}},
+            422,
+        )
+        assert [error["field"] for error in problem["errors"]] == ["fix.available_at"]
+        assert service.get(ticket["id"]) == before
+        assert AuditEntry.objects.count() == 1
+
+    def test_clearing_fix_skips_the_fix_time_check(self, service):
+        ticket = service.create(fix={"available_at": "2030-01-01T00:00:00Z"})
+        assert self._patch(service, ticket["id"], {"fix": None}, 200)["fix"] is None
+
+    def test_awareness_change_needs_reason_and_reportable_state(self, service):
+        # AC-07: no reason is 422; a received ticket is 409.
+        ticket = service.create()
+        self._patch(service, ticket["id"], {"aware_at": "2026-10-05T08:00:00Z"}, 409)
+        service.triage(
+            ticket["id"],
+            {"decision": "actively_exploited", "aware_at": "2026-10-05T09:00:00Z", "reason": "x"},
+        )
+        problem = self._patch(service, ticket["id"], {"aware_at": "2026-10-05T08:00:00Z"}, 422)
+        assert [error["field"] for error in problem["errors"]] == ["change_reason"]
+        assert AuditEntry.objects.count() == 2
+
     def test_out_of_range_deadline_is_rejected_without_partial_write(self, service):
         service.fix_clock("9999-12-31T23:59:59Z")
         ticket = service.create()
