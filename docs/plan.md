@@ -66,6 +66,7 @@ deployments.
 | # | Task | Owner | Status |
 |---|---|---|---|
 | 3.1 | Review PR #7's API and data layer against `openapi.yaml` (see `docs/ann-handoff.md`). Fix verified gaps with focused commits on that branch, not a parallel API. | Ann | To do |
+| 3.1a | Fix the bug found in review (2026-10-17): every PATCH re-checks the *stored* `fix.available_at` against now, so if it's in the future (accepted at create, or the test clock moved back) even a title-only PATCH returns 422. Only check a fix time the request sends. Add PATCH tests for AC-07 cases while there. | Ann or Richard (Quincy to assign) | To do |
 | 3.2 | Platform review of PR #7: clock use, transactions and rollback, logging, error precedence, migration safety on Neon. | Quincy | To do |
 | 3.3 | Settle open question Q1 (below) with the pod before 3.4, or document our behavior in `docs/phase3.md`. | Richard, with pod | To do |
 | 3.4 | Mark PR #7 ready, merge. Launchpad deploys automatically. Close #5 and #6. | Quincy | Blocked on 3.1, 3.2 |
@@ -181,7 +182,9 @@ Each phase report reuses the shared Sections 1 to 6 and updates our own Sections
 
 ## Working rules for agents
 
-These add to [`CLAUDE.md`](../CLAUDE.md); they don't replace it.
+How agents work with the team (restating the problem first, guide versus delegate, human
+approval, the PR template) is in [`AGENTS.md`](../AGENTS.md). These rules add to that and to
+[`CLAUDE.md`](../CLAUDE.md).
 
 1. Start from up-to-date `main` (or the branch named in the task) on a new branch. One
    task per PR, and reference its task number (for example, "4.D1") in the PR title.
