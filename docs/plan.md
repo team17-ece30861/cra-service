@@ -70,7 +70,7 @@ deployments.
 | 3.2 | Platform review of PR #7: clock use, transactions and rollback, logging, error precedence, migration safety on Neon. | Quincy | Done 2026-10-17 (with Claude): one bug found, fixed as 3.1a |
 | 3.3 | Settle open question Q1 (below) with the pod before 3.4, or document our behavior in `docs/phase3.md`. | Richard, with pod | To do |
 | 3.4 | Mark PR #7 ready, merge. Launchpad deploys automatically. Close #5 and #6. | Quincy | Done 2026-10-17: merged as `6548e49`; Launchpad runs it; #5 and #6 auto-closed as merged |
-| 3.5 | Run `acceptance/` against Launchpad. Fix anything that fails. | Richard | Ready to run |
+| 3.5 | Run `acceptance/` against Launchpad. Fix anything that fails. | Quincy's agent | Done 2026-10-17: 55/55 passed on Launchpad (`00bda4a`). See `docs/phase3.md`. |
 | 3.6 | Launch to Orbit (Actions → Launch to Orbit). Re-run `acceptance/` against Orbit, including the plain-HTTP probe (AC-15). Record the image SHA. | Quincy runs the launch, Richard runs the suite | Blocked on 3.5 |
 | 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | In progress: Quincy is creating the repo that holds the shared pod file |
 | 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Book reset windows so suites don't overlap. Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Blocked on 3.6 |

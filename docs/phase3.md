@@ -151,6 +151,7 @@ performed on 2026-10-14; the different revisions are recorded deliberately.
 | --- | --- | --- | --- |
 | GitHub CI | `6c8d8a7f1b871352ac1980b0897ce5e8a00ed7ac`; Linux, Python 3.12, PostgreSQL 18 | 513 tests passed; lint/format, migration consistency, and Django checks passed. | [Successful CI run](https://github.com/team17-ece30861/cra-service/actions/runs/38585892219) |
 | External HTTP acceptance | `ce653938d0f5d0b61788d0ad3aa09d916ca50378`; isolated local SQLite service at `http://127.0.0.1:8001` | 54 passed, 0 failed, 1 skipped. | Local report `.venv/phase3-http-report.json`; 14:45:28-14:45:40 UTC. |
+| Deployed acceptance: Launchpad | `00bda4a` (same code as merge `6548e49`; only docs differ) on Cloud Run `team17-dev`, Neon Postgres, `https://team17-dev-7zneiwx4ba-uc.a.run.app` | 55 passed, 0 failed, 0 skipped, including the plain-HTTP probe (HTTP returns 302 to HTTPS). Median test 1.07 s, slowest 3.7 s. | Run by Quincy's agent with the dev token, 2026-10-17 22:04:18-22:05:33 UTC. Report kept locally, not committed. |
 
 The skipped HTTP case is the HTTPS-enforcement probe, which does not apply to a
 loopback HTTP server. The raw local report is ignored by Git; its summary is
