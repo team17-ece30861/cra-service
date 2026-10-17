@@ -49,9 +49,9 @@ same spec. We test their deployment and they test ours.
 | Item | Status |
 |---|---|
 | Platform layer: auth, errors, timestamps, clock, reset, logging, CI, deploys (PRs #1 to #4) | Done, merged, live on Launchpad and Orbit |
-| Phase 3 ticket API: intake, get, list (unfiltered), update, triage, audit read, deadlines, unsubmitted statuses | Built in **PR #7 (draft, not merged, not deployed)** |
-| PRs #5 (deadlines) and #6 (triage) | Contained in PR #7. Close them once #7 merges. |
-| Portable acceptance harness, Phase 3 cases (AC-01 to 05, 14, 15, 17) | In PR #7, passed locally over HTTP. Not yet run against a deployment. |
+| Phase 3 ticket API: intake, get, list (unfiltered), update, triage, audit read, deadlines, unsubmitted statuses | Merged (PR #7) and live on Launchpad. Not yet on Orbit. |
+| PRs #5 (deadlines) and #6 (triage) | Merged as part of PR #7 |
+| Portable acceptance harness, Phase 3 cases (AC-01 to 05, 14, 15, 17) | On `main`. Passed over HTTP against a local server (54 passed, 1 skipped). Not yet run against a deployment. |
 | Phase 4 reporting workflow | Not started |
 | Phase 3 due date | **2026-10-18.** PR #7 is still a draft and nothing ticket-related is deployed, so 3.1 to 3.6 are the critical path. |
 | Phase 4 due date | Not announced yet |
@@ -65,12 +65,12 @@ deployments.
 
 | # | Task | Owner | Status |
 |---|---|---|---|
-| 3.1 | Review PR #7's API and data layer against `openapi.yaml` (see `docs/ann-handoff.md`). Fix verified gaps with focused commits on that branch, not a parallel API. | Ann | To do |
+| 3.1 | Review PR #7's API and data layer against `openapi.yaml` (see `docs/ann-handoff.md`). Fix verified gaps with focused commits on that branch, not a parallel API. | Ann | Moved after the merge (Quincy's call, 2026-10-17): review the merged code on `main`, and send fixes as PRs |
 | 3.1a | Fix the bug found in review (2026-10-17): every PATCH re-checks the *stored* `fix.available_at` against now, so if it's in the future (accepted at create, or the test clock moved back) even a title-only PATCH returns 422. Only check a fix time the request sends. Add PATCH tests for AC-07 cases while there. | Quincy's agent | Done: PR #11 merged into PR #7's branch (Quincy approved) |
-| 3.2 | Platform review of PR #7: clock use, transactions and rollback, logging, error precedence, migration safety on Neon. | Quincy | To do |
+| 3.2 | Platform review of PR #7: clock use, transactions and rollback, logging, error precedence, migration safety on Neon. | Quincy | Done 2026-10-17 (with Claude): one bug found, fixed as 3.1a |
 | 3.3 | Settle open question Q1 (below) with the pod before 3.4, or document our behavior in `docs/phase3.md`. | Richard, with pod | To do |
-| 3.4 | Mark PR #7 ready, merge. Launchpad deploys automatically. Close #5 and #6. | Quincy | Blocked on 3.1, 3.2 |
-| 3.5 | Run `acceptance/` against Launchpad. Fix anything that fails. | Richard | Blocked on 3.4 |
+| 3.4 | Mark PR #7 ready, merge. Launchpad deploys automatically. Close #5 and #6. | Quincy | Done 2026-10-17: merged as `6548e49`; Launchpad runs it; #5 and #6 auto-closed as merged |
+| 3.5 | Run `acceptance/` against Launchpad. Fix anything that fails. | Richard | Ready to run |
 | 3.6 | Launch to Orbit (Actions → Launch to Orbit). Re-run `acceptance/` against Orbit, including the plain-HTTP probe (AC-15). Record the image SHA. | Quincy runs the launch, Richard runs the suite | Blocked on 3.5 |
 | 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | In progress: Quincy is creating the repo that holds the shared pod file |
 | 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Book reset windows so suites don't overlap. Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Blocked on 3.6 |
