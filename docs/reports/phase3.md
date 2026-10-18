@@ -128,3 +128,11 @@ Every push and pull request runs our full CI pipeline in GitHub Actions, and not
 CI run: https://github.com/team17-ece30861/cra-service/actions/runs/39096210486
 
 **Notes:** `cra-service` was made public on 2026-10-18, so graders can open the CI link. The repository history was scanned on 2026-10-18 before any visibility change: no secrets in any commit, branch, or CI log. Repository settings (Quincy, 2026-10-18): Actions limited to our organization, GitHub's own actions, and google-github-actions/auth and setup-gcloud; fork pull request workflows need approval; `main` requires a pull request.
+
+## Q4.4 Static checks
+
+Our CI runs static checks on every push and pull request: ruff for linting and formatting, a check that no database migrations are missing, and Django's system checks; contract validation runs in the same pipeline, where every response in the acceptance tests is checked against the shared OpenAPI contract by a validator that has its own tests, and GitHub's Dependabot alerts flag known-vulnerable dependencies. A failing check blocks both merging and deployment, because our main branch only accepts pull requests whose CI tests pass, and both the automatic development deployment and the manual evaluation release run only after the full suite passes. These checks are new this phase (Phase 2 only planned them); we do not yet use a type checker or pre-commit hooks, and secret scanning with push protection was enabled when the repository became public.
+
+CI run: https://github.com/team17-ece30861/cra-service/actions/runs/39097458488
+
+**Evidence (2026-10-18, via the GitHub API):** ruleset `main` is active, with rules for deletion, non-fast-forward, pull request, and the required status check `test / test`. Dependabot alerts are on and Dependabot security updates are off. Secret scanning and push protection are on, with 0 alerts on the full history. There's no pre-commit config, type checker, or dependabot.yml.
