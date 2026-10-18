@@ -19,10 +19,10 @@ passing on each; results are in `docs/phase3.md`. It also added PATCH regression
    and make sure Team 21 runs theirs against Orbit. Classify every mismatch as our bug,
    their bug, or a gap in the spec. Blocked until Team 21 adds their base URL to
    `pod-k-shared` and sends a token (Quincy relays it privately).
-2. **Task 3.10: the shared test file.** Put the Model D inputs and hand-calculated outputs
-   in `team17-ece30861/pod-k-shared` as a PR. Changes to the shared test file need approval
-   from someone on Team 21. `tests/fixtures/phase3_model_d.json` is a starting point; add
-   E6 to E8 from `docs/spec.md`.
+2. **Task 3.10: the shared test file.** Quincy's agent finished it on 2026-10-18:
+   `pod-k-shared` PR #8 adds `tests/model-d.json` (E1 to E8 as runnable steps) and
+   `tests/run.py`. It's waiting on Team 21's check. Follow up with them, and fill in
+   `checked_by` once they approve. Phase 4 cases go in the same format.
 3. **Task 4.T3: harness README.** Running needs `CRA_BASE_URL`, `CRA_API_TOKEN`, and
    `--allow-reset`.
 4. **Phase 4 domain work (4.D1 to 4.D5):** drafts per Model C, submitted statuses,
