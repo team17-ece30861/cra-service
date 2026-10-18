@@ -28,6 +28,12 @@ Phase 3 implementation. Two Phase 3 tasks are Ann's alone.
        accept, store, or reject? Today we accept it and drop it.
      - **Q7:** should `POST /tickets` reject a future `fix.available_at`? The contract
        lists no 422 for submit. Today we accept it.
+     - **Q8:** the CRA starts the final-report clock when a corrective *or mitigating*
+       measure is available [Art. 14(2)(c)]. Proposal: define `fix.available_at` as the
+       first such measure (a wording change only). See `docs/reports/risk1-cra-review.md`.
+     - **Q9:** the CRA requires early-warning Member States only "where applicable", but
+       Model C requires `member_states` and `affected_versions` to record one. Keep it
+       strict, or allow "unknown"?
 2. **Task 3.1: review the merged code Ann now owns.** It's on `main`. Send fixes as small
    PRs to `main`, not a parallel API.
 
