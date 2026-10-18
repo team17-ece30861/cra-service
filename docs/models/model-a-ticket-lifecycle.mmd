@@ -1,0 +1,19 @@
+flowchart TB
+  start((" ")) -->|"submit ticket<br/>(receipt time = now)"| received
+  received(["<b>received</b><br/>can update: ticket details"])
+  received -->|"triage: actively exploited<br/>+ awareness time + reason"| reportable
+  received -->|"triage: not actively exploited<br/>or invalid + reason"| closedNA
+  reportable(["<b>reportable</b><br/>can update: details, awareness time, fix time<br/>Phase 4: record report submissions"])
+  closedNA(["<b>closed</b><br/>resolution: not_actively_exploited or invalid<br/>read only"])
+  reportable -.->|"close, once all three<br/>reports are submitted (Phase 4)"| closedR(["<b>closed</b><br/>resolution: resolved<br/>read only"])
+  subgraph legend["Legend"]
+    direction LR
+    l1["solid: delivered in Phase 3"] ~~~ l2["dotted: specified, arrives in Phase 4"]
+  end
+  closedR ~~~ legend
+  classDef state fill:#eef3fb,stroke:#3b5b8c,color:#111
+  classDef planned fill:#ffffff,stroke:#3b5b8c,stroke-dasharray:4 3,color:#111
+  classDef note fill:#ffffff,stroke:#999,color:#333
+  class received,reportable,closedNA state
+  class closedR planned
+  class l1,l2 note

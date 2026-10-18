@@ -1,0 +1,27 @@
+flowchart TB
+  client["<b>Client</b><br/>Team 21, course staff, our tests"]
+  subgraph run["Google Cloud Run service (Django + Django Ninja on gunicorn)"]
+    direction TB
+    mw["<b>Platform middleware</b><br/>bearer token (401), 64 KB limit (413),<br/>one transaction per write, rolled back on error"]
+    subgraph api["Django Ninja API"]
+      direction LR
+      health["<b>GET /health</b><br/>public"]
+      tickets["<b>Ticket routes</b><br/>schemas, X-Actor check,<br/>audit entries, responses"]
+      controls["<b>Test controls</b><br/>reset, clock"]
+    end
+    domain["<b>Domain rules</b> (pure)<br/>triage, deadlines, statuses"]
+    clock["<b>Service clock</b><br/>real or fixed test time"]
+  end
+  db[("<b>Neon Postgres</b><br/>Ticket, AuditEntry,<br/>FixedClock tables")]
+  client -->|"HTTPS request"| mw
+  mw -->|"no token needed"| health
+  mw -->|"token checked"| tickets
+  mw -->|"token checked"| controls
+  tickets -->|"inputs + current time"| domain
+  domain -->|"result or 400/409/422"| tickets
+  tickets -->|"current time"| clock
+  controls -->|"fix or release time"| clock
+  tickets -->|"read, lock, write"| db
+  controls -->|"clear tickets, audit entries"| db
+  clock -->|"fixed time"| db
+  mw -.->|"JSON or problem+json response"| client

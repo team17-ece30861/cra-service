@@ -58,6 +58,9 @@ Team 21 (`team17/TESTING.md` in `pod-k-shared`).
 
 ## Models
 
+The state-machine and architecture diagrams as delivered, with notes on what changed since
+Phase 2, are in [models/](models/README.md).
+
 ### Data
 
 `Ticket` stores the state, resolution, receipt and awareness times, and the validated client
