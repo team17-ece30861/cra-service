@@ -50,6 +50,14 @@ Read these before starting any task:
   - secrets, tokens, or `.env` files
   - anything outside this repository
   - anything that posts to GitHub or another outside system: comments, issues, PRs, merges
+- **Check behavior by hand locally, then on Launchpad.** When you verify behavior manually
+  (curl, scripts, a walkthrough), run it against a local server and then against Launchpad
+  once the change has deployed. Launchpad runs the real stack (Google's front end, gunicorn,
+  Neon), and it can behave differently from `runserver`: on 2026-10-18 a `GET` with a body
+  and chunked uploads both behaved differently there. Ask the person before running against
+  Launchpad (it may reset data), read the dev token from Secret Manager without printing it,
+  and finish with `POST /test/reset` and `DELETE /test/clock`. Report the two runs
+  separately: "works locally" and "works on Launchpad" are different claims.
 - **Don't change settings to make your job easier.** No disabling CI checks, lint rules, or
   tests, and no skipping a failing test to get green. Tell the person what's in the way.
 
