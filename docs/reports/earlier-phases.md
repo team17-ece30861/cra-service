@@ -75,7 +75,9 @@ deployed stack (`pod-k-shared` PR #6).
    final report's contents might not match the CRA.** Planned investigation: *during
    Phase 3, Team 17 reviews the relevant CRA provisions against Models C and D and writes
    up whether the interpretation is unambiguous.* Fallback: list our assumptions.
-   **Status: not done yet**, as far as the repo shows.
+   **Status: first pass done 2026-10-18** in [`risk1-cra-review.md`](risk1-cra-review.md).
+   Deadlines and contents match Art. 14(2). Two shared-spec questions went to Team 21 (plan
+   Q8 and Q9).
 2. **Cross-team compatibility.** Planned check: the pod runs the shared suite against both
    deployments at the end of Phase 3, then fully in Phase 4. **Status: our suite passes
    against us; Team 21's runs are pending.**

@@ -162,6 +162,8 @@ contract changes.
 | Q4 | After a report is submitted, can a later change to `aware_at` or `fix.available_at` move its `due_at`, and so flip `submitted` to `submitted_late`? | Undecided. Status is computed, not stored, so this needs an explicit rule. | 4.D2, 4.A5 |
 | Q5 | Must `submitted_at` be no earlier than the previous report's `submitted_at`? | Spec only requires between `aware_at` and now. | 4.D3 |
 | Q7 | `POST /tickets` with `fix.available_at` later than now: accept it, or reject it? The field list says "not later than now", but the contract lists no 422 for submit. | Accepted (201). PATCH no longer re-checks a stored fix time (3.1a). Propose adding 422 to submit. | Phase 4 |
+| Q8 | Art. 14(2)(c) starts the final-report clock when a corrective **or mitigating** measure is available. We start it only at `fix.available_at` (a fix), so a workaround released first leaves our deadline too late. Redefine `fix.available_at` as the first corrective or mitigating measure? | Proposed: yes, as a wording change to `docs/spec.md` and `openapi.yaml` only. See `docs/reports/risk1-cra-review.md`, Finding 1. | Phase 4 (raise with Team 21 now) |
+| Q9 | Art. 14(2)(a) needs Member States only "where applicable" and no product versions, but Model C requires `member_states` and `product.affected_versions` before an early warning can be recorded. Keep it strict, or allow recording with those fields marked unknown? | Undecided. See `docs/reports/risk1-cra-review.md`, Finding 2. | 4.D3 |
 | Q6 | A PATCH that changes nothing: still one `updated` audit entry? | Affects AC-12 counts. Propose yes, with an empty `changes` list. | 4.T1 |
 
 ## Report work
