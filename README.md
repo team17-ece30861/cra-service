@@ -48,9 +48,9 @@ ruff check . && ruff format --check .
 
 CI runs these on every push and pull request against a Postgres 18 service container.
 
-Phase 3 ticket integration, acceptance coverage, and portable tests against a selected
-base URL are described in [Phase 3 validation](docs/phase3.md). External runs require
-a coordinated reset window and an access token supplied through the environment.
+What the system does as delivered (models, interfaces, functionality, validation, and
+known limitations) is in [docs/phase3.md](docs/phase3.md). The black-box acceptance test
+runner and its instructions are in [acceptance/](acceptance/README.md).
 
 ## Handoffs
 
