@@ -19,10 +19,11 @@ README.
 
 ## Next up
 
-1. **Task 3.7:** send Team 21 their token (`prod-api-token-team21` in Secret Manager)
-   privately. Find out what the "class registry entry" is (likely on the course site) and
-   add it. After sending the token, mark "Token sent" Done in Team 17's column of the
-   `pod-k-shared` status chart.
+1. **Task 3.7:** find out what the "class registry entry" is (likely on the course site)
+   and add it. Team 21's token was sent through OneDrive on 2026-10-18 (marked Done in
+   the `pod-k-shared` status chart). Delete the OneDrive file once Team 21 confirms they
+   saved it. The staff token (`prod-api-token-staff`) goes to the course staff the same
+   way when they review.
 2. Decide whether to invite the rest of Team 21 (Aashik, Andrew, Conrad) to `pod-k-shared`,
    or leave that to Ryan.
 3. **Task 3.11:** the Phase 3 report. Q7 and Q8 still describe FastAPI and SQLite; the
@@ -34,7 +35,8 @@ README.
 - **Ann:** the contract freeze with Team 21 (3.9, deadline-critical) and Ann's review of the
   merged code (3.1). Ann's handoff is in `ann.md`.
 - **Richard:** cross-team runs (3.8) and the shared test file (3.10).
-- **Team 21:** their base URL in `pod-k-shared`, a token for us, and accepting the invite.
+- **Team 21:** confirming they saved the token, their base URL in `pod-k-shared`, a token
+  for us, and accepting the invite.
 
 ## Notes for the next session
 
