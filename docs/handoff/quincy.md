@@ -40,6 +40,10 @@ README.
 
 ## Notes for the next session
 
+- Class registry (Google Sheet) values are ready, in chat on 2026-10-18: system URL, tester
+  link (`pod-k-shared/team17/tester`), spec link, and access notes. The registry entry's
+  date goes into report Q2.2.
+
 - Claude Code's safety check merges a code PR only after Quincy names it in their own message
   ("merge #7"). Docs-only PRs can be merged by the agent.
 - Team 17 never runs suites against Orbit; use Launchpad.
