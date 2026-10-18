@@ -295,12 +295,12 @@ Before you rely on a rollback, check the following.
   |---|---|
   | Does reset release a fixed clock? | No. Reset deletes tickets, reports, and audit entries only. |
   | Where does 405 fit in the error precedence? | After 401. With a valid token, a wrong method returns 405 even for an unknown ticket ID (`PUT /tickets/{unknown}/audit` → 405, not 404). |
-  | Does 413 apply to routes without a request body? | Yes, to every request, including `/close`, `/test/reset`, and `GET /health`. |
+  | Does 413 apply to routes without a request body? | Yes, in Django, to every request, including `/close`, `/test/reset`, and `GET /health`. When deployed, a `GET` with any body never reaches Django: Google's front end rejects it (HTTP/2: stream reset; HTTP/1.1: Google's HTML 400). Checked on Launchpad 2026-10-18. |
   | Which requests are public? | Only `GET /health`, read literally. `HEAD /health`, `/docs`, `/openapi.json`, and `/admin/` all need the token, so `HEAD`-based uptime checks get 401. |
   | Path parameter that fails validation? | 404, matching "unknown types return 404". |
   | Whitespace-only `X-Actor`? | Treated as empty (400). The value is stripped. |
   | Timestamp edge cases? | Lowercase `t`/`z` and `-00:00` are accepted. A space separator, the leap second `:60`, and values that overflow when converted to UTC return 400. Fractional seconds are truncated, never rounded. |
   | How is `errors[].field` written? | A dotted path with `[n]` for list items (`product.affected_versions[1]`). Whole-body and JSON errors use `body`, the header uses `X-Actor`, and query errors use the parameter name. |
   | Body sent to a route that defines none? | Ignored, not rejected. |
-  | Chunked body with no `Content-Length`? | Not supported. It is treated as absent (400 `required`), not checked against the 413 limit. |
+  | Chunked body with no `Content-Length`? | Deployed: accepted. A chunked HTTP/1.1 body and a streamed HTTP/2 body both returned 201 on Launchpad (2026-10-18). Talking to Django directly (local `runserver`), it's treated as absent (400 `required`) and not checked against the 413 limit. |
   | Which server URL? | The `servers` entries in `openapi.yaml` are placeholders. The real Orbit URL is `https://` + `PROD_HOST`, and it belongs in the shared pod file. |
