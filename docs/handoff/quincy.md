@@ -8,7 +8,8 @@ Phase 3 is due **2026-10-18**. The Phase 3 code is merged (PR #7, `6548e49`) and
 both deployments: Launchpad and Orbit (`262fedf`, launched by Quincy at 00:45 UTC). The
 acceptance suite passed 55/55 on each. Orbit was then reset and returned to real time
 (00:55 UTC). The shared pod repo `team17-ece30861/pod-k-shared` exists (private) with our
-base URL and the pod rules in its README.
+base URL, the pod rules, and a status chart (operations and milestones by team) in its
+README.
 
 ## In progress
 
@@ -20,7 +21,8 @@ base URL and the pod rules in its README.
 
 1. **Task 3.7:** send Team 21 their token (`prod-api-token-team21` in Secret Manager)
    privately. Find out what the "class registry entry" is (likely on the course site) and
-   add it.
+   add it. After sending the token, mark "Token sent" Done in Team 17's column of the
+   `pod-k-shared` status chart.
 2. Decide whether to invite the rest of Team 21 (Aashik, Andrew, Conrad) to `pod-k-shared`,
    or leave that to Ryan.
 3. **Task 3.11:** the Phase 3 report. Q7 and Q8 still describe FastAPI and SQLite; the
