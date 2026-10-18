@@ -22,7 +22,7 @@ Phase 3 implementation. Two Phase 3 tasks are Ann's alone.
      `info.description`. Open a PR; a human approves it.
    - The shared copy of the contract will move to `team17-ece30861/pod-k-shared`. Changes
      there need approval from someone on Team 21.
-   - In the same conversation with Team 21, raise these two open questions from
+   - In the same conversation with Team 21, raise these four open questions from
      `docs/plan.md`, and log the answers in `docs/decisions.md`:
      - **Q1:** a triage of `invalid` or `not_actively_exploited` that includes `aware_at`:
        accept, store, or reject? Today we accept it and drop it.
