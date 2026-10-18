@@ -75,7 +75,7 @@ deployments.
 | 3.6 | Launch to Orbit (Actions → Launch to Orbit). Re-run `acceptance/` against Orbit, including the plain-HTTP probe (AC-15). Record the image SHA. | Quincy runs the launch, Richard runs the suite | Done 2026-10-18: Orbit runs `262fedf`; 55/55 passed. See `docs/phase3.md`. |
 | 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | Partly done 2026-10-18: `pod-k-shared` created with our URL; Team 21's token sent via OneDrive. Class registry entry still to do. |
 | 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Team 17 runs suites only against Launchpad and Team 21's deployment, never Orbit (`pod-k-shared` README). Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Blocked on 3.6 |
-| 3.9 | Freeze the `phase-3` operations in `openapi.yaml` with Team 21 (bump `info.version`, note the agreed date). | Ann | To do |
+| 3.9 | Freeze the `phase-3` operations in `openapi.yaml` with Team 21 (bump `info.version`, note the agreed date). | Ann | To do. The contract and pod spec are now published in `pod-k-shared` (PR #10); freeze that copy, then mirror it here. |
 | 3.10 | Start the shared test file with Team 21: Model D inputs and hand-calculated outputs, each checked by the other team. `tests/fixtures/phase3_model_d.json` is a starting point. | Richard (finished by Quincy's agent) | E1 to E8 plus a runner proposed in `pod-k-shared` PR #8 (2026-10-18). Waiting on Team 21's check and approval. |
 | 3.11 | Phase 3 report (see [Report work](#report-work)). | Everyone | To do |
 

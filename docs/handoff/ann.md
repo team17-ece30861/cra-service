@@ -17,11 +17,15 @@ Phase 3 implementation. Two Phase 3 tasks are Ann's alone.
 ## Next up
 
 1. **Task 3.9: freeze the Phase 3 contract with Team 21.** This one's deadline-critical.
-   - Agree with Team 21 that the operations tagged `phase-3` in `openapi.yaml` won't
-     change. Then bump `info.version` from `0.1.0-draft` and record the agreed date in
-     `info.description`. Open a PR; a human approves it.
-   - The shared copy of the contract will move to `team17-ece30861/pod-k-shared`. Changes
-     there need approval from someone on Team 21.
+   - **The shared contract now lives in `pod-k-shared`** (public): `openapi.yaml` and the
+     pod spec `spec.md` at the top level, published by Quincy's agent on 2026-10-18 as the
+     unchanged `0.1.0-draft` (pod-k-shared PR #10). That copy is the one both teams freeze.
+   - Agree with Team 21 that the operations tagged `phase-3` won't change. Then, in
+     `pod-k-shared`, bump `info.version` from `0.1.0-draft` and record the agreed date in
+     `info.description`, as a PR that someone on Team 21 approves.
+   - Then make the same change to `openapi.yaml` in this repo (a PR a human approves), so
+     both copies stay identical. Also refresh the tester's copy in
+     `pod-k-shared/team17/tester/openapi.yaml`.
    - In the same conversation with Team 21, raise these four open questions from
      `docs/plan.md`, and log the answers in `docs/decisions.md`:
      - **Q1:** a triage of `invalid` or `not_actively_exploited` that includes `aware_at`:

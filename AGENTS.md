@@ -124,6 +124,10 @@ If those drift from Orbit, Team 21 files our intended behavior as bugs.
   of `docs/phase3.md`, with links rewritten so they don't point into this repo). Refresh both
   in the same pod PR whenever they change. Check that the tester copy still runs from its own
   folder, and never copy anything that names a secret.
+- **The shared contract and spec** are also published at the top of `pod-k-shared`
+  (`openapi.yaml`, `spec.md`). That copy is the one the pod agrees on: change it there first,
+  by PR approved by Team 21, then mirror the change in this repo's `openapi.yaml` or
+  `docs/spec.md` and in `team17/tester/openapi.yaml`. The three copies must stay identical.
 
 ## Branches and releases
 
