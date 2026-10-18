@@ -26,3 +26,9 @@ REQ-16 - Test controls │ Status: complete │ Demonstrated by: AC-17
 REQ-18 - Persistence │ Status: complete │ Demonstrated by: a ticket and its audit log read back unchanged after a new deployment replaced the running service (October 18, 2026); the recorded demonstration in AC-19 is planned for Phase 5
 
 **To revisit before submitting:** if Team 21 runs their suite against us first, update the last sentence of the narrative.
+
+## Q1.2 Comparison with the Phase 2 plan
+
+We delivered the Phase 3 capability planned in Phase 2, Section 6.1: a deployed HTTPS service with authentication, test controls, ticket submission, triage, and deadline calculation (REQ-01 to REQ-04, REQ-12 to REQ-14, REQ-16), together with the planned automated validation (AC-01 to AC-05, AC-14, AC-15, and AC-17, with every response checked against the shared OpenAPI schemas), our base URL in the shared pod repository, and a team CI pipeline. Three planned items are not yet finished: the shared OpenAPI file is still a draft rather than frozen for the Phase 3 operations, the shared test file covering all eight Model D examples has been submitted to the pod's shared repository but not yet cross-checked by Team 21, and the pod has not yet run the shared suite against both deployments, since so far only our own suites have passed against our service. We also delivered part of the Phase 4 scope early: ticket updates with immediate deadline recalculation (REQ-06), per-ticket audit log entries, an ordered ticket list, and reporter confidentiality for the operations built so far. There were no instructor-required scope changes, and the pod has not changed or reduced the shared scope.
+
+**To revisit before submitting:** update sentence 2 if the contract is frozen (Ann, 3.9), Team 21 approves the shared test file (pod-k-shared #8), or the cross-team runs happen (3.8).
