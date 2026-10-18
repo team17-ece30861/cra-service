@@ -63,3 +63,24 @@ Excerpt from the evaluation deployment's logs (October 17, 2026, 8:51 PM Eastern
 ```
 
 **Evidence checked 2026-10-17 (Eastern):** Cloud Monitoring has 0 alert policies and 0 uptime checks; the 46 4xx were grouped by minute and user agent (43 from the acceptance run at 00:51–00:52 UTC, 3 browser 401s at 03:32 UTC). Choices with Quincy: the reset endpoint isn't named; the alerting gap is reported, with the fix planned for Phase 4.
+
+## Q3.1 Operation status
+
+GET /health │ Requirement(s): none │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (none defined)
+POST /tickets │ Requirement(s): REQ-01, REQ-12, REQ-13, REQ-14 │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (400, 401, 413)
+GET /tickets │ Requirement(s): REQ-10, REQ-15 │ Implemented: partial │ Success responses conform: no; the list is ordered nearest deadline first without reporter details, but the state and obligation_status filters are ignored │ Error responses conform: no; 401 conforms, but invalid filter values return 200 instead of 400
+GET /tickets/{id} │ Requirement(s): REQ-04, REQ-05 │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (401, 404)
+PATCH /tickets/{id} │ Requirement(s): REQ-04, REQ-06 │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (400, 401, 404, 409, 413, 422)
+POST /tickets/{id}/triage │ Requirement(s): REQ-02, REQ-03 │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (400, 401, 404, 409, 422)
+GET /tickets/{id}/reports/{type} │ Requirement(s): REQ-07, REQ-15 │ Implemented: no (Phase 4) │ Success responses conform: no; returns 404 for every type │ Error responses conform: partial; 401 conforms, 409 not implemented
+POST /tickets/{id}/reports/{type}/submission │ Requirement(s): REQ-05, REQ-08 │ Implemented: no (Phase 4) │ Success responses conform: no; returns 404 │ Error responses conform: partial; 401 conforms, 400/409/422 not implemented
+POST /tickets/{id}/close │ Requirement(s): REQ-09 │ Implemented: no (Phase 4) │ Success responses conform: no; returns 404 │ Error responses conform: partial; 401 conforms, 400/409 not implemented
+GET /tickets/{id}/audit │ Requirement(s): REQ-11 │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (401, 404, 405)
+POST /test/reset │ Requirement(s): REQ-16 │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (401)
+GET /test/clock │ Requirement(s): REQ-16 │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (401)
+PUT /test/clock │ Requirement(s): REQ-16 │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (400, 401)
+DELETE /test/clock │ Requirement(s): REQ-16 │ Implemented: yes │ Success responses conform: yes │ Error responses conform: yes (401)
+
+Integration: The new ticket operations are a router added to our existing Django Ninja API, backed by two new database tables (tickets and their audit entries) and pure domain functions for triage, deadlines, and statuses, while the platform layer built earlier is unchanged. A request passes through the platform middleware first (token check, body-size limit, and a database transaction), then the ticket route looks up and locks the ticket (404), checks the X-Actor header and the request body (400), and calls the domain rules with the service clock (409 for state conflicts, 422 for rule violations). On success the route saves the ticket and exactly one audit entry in the same transaction and builds the response from stored fields plus deadlines and statuses derived at read time; any error returns problem+json and rolls the transaction back, so a failed request changes nothing.
+
+**Evidence:** conformance for implemented operations comes from the acceptance suite, which validates every response against `openapi.yaml` (55/55 on the evaluation deployment), plus local integration tests and the manual AC-07 run. The unbuilt operations and list filters were probed on a local server on 2026-10-17 (404 problem+json; 401 without a token; invalid filters return 200). `/test/reset` is listed because the question asks for every contract operation (Quincy's call). Phases 4 and 5 ask for this table again; plan task 4.T5 makes the runner print it.
