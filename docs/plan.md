@@ -18,7 +18,8 @@ section below, and update its status row in the same PR that finishes it.
 | Repository rules (clock, UTC, errors, X-Actor, logging, branches) | [`CLAUDE.md`](../CLAUDE.md) |
 | Hosting, deploys, rollback, cost, platform interpretations | [platform.md](platform.md), [`README.md`](../README.md) |
 | Why something was decided, and what's already settled | [decisions.md](decisions.md) |
-| Phase 3 integration details, domain helpers, triage rules | `docs/phase3.md`, `docs/domain.md`, `docs/triage.md`, `docs/ann-handoff.md` (on PR #7's branch until it merges) |
+| Phase 3 integration details, domain helpers, triage rules | `docs/phase3.md`, `docs/domain.md`, `docs/triage.md` |
+| What each teammate is in the middle of and waiting on | `docs/handoff/` (one file per person) |
 
 ## Team and ownership
 
@@ -65,7 +66,7 @@ deployments.
 
 | # | Task | Owner | Status |
 |---|---|---|---|
-| 3.1 | Review PR #7's API and data layer against `openapi.yaml` (see `docs/ann-handoff.md`). Fix verified gaps with focused commits on that branch, not a parallel API. | Ann | Moved after the merge (Quincy's call, 2026-10-17): review the merged code on `main`, and send fixes as PRs |
+| 3.1 | Review PR #7's API and data layer against `openapi.yaml` (see `docs/handoff/ann.md`). Fix verified gaps with focused commits on that branch, not a parallel API. | Ann | Moved after the merge (Quincy's call, 2026-10-17): review the merged code on `main`, and send fixes as PRs |
 | 3.1a | Fix the bug found in review (2026-10-17): every PATCH re-checks the *stored* `fix.available_at` against now, so if it's in the future (accepted at create, or the test clock moved back) even a title-only PATCH returns 422. Only check a fix time the request sends. Add PATCH tests for AC-07 cases while there. | Quincy's agent | Done: PR #11 merged into PR #7's branch (Quincy approved) |
 | 3.2 | Platform review of PR #7: clock use, transactions and rollback, logging, error precedence, migration safety on Neon. | Quincy | Done 2026-10-17 (with Claude): one bug found, fixed as 3.1a |
 | 3.3 | Settle open question Q1 (below) with the pod before 3.4, or document our behavior in `docs/phase3.md`. | Richard, with pod | To do |
@@ -73,7 +74,7 @@ deployments.
 | 3.5 | Run `acceptance/` against Launchpad. Fix anything that fails. | Quincy's agent | Done 2026-10-17: 55/55 passed on Launchpad (`00bda4a`). See `docs/phase3.md`. |
 | 3.6 | Launch to Orbit (Actions → Launch to Orbit). Re-run `acceptance/` against Orbit, including the plain-HTTP probe (AC-15). Record the image SHA. | Quincy runs the launch, Richard runs the suite | Done 2026-10-18: Orbit runs `262fedf`; 55/55 passed. See `docs/phase3.md`. |
 | 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | In progress: Quincy is creating the repo that holds the shared pod file |
-| 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Book reset windows so suites don't overlap. Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Blocked on 3.6 |
+| 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Team 17 runs suites only against Launchpad and Team 21's deployment, never Orbit (`pod-k-shared` README). Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Blocked on 3.6 |
 | 3.9 | Freeze the `phase-3` operations in `openapi.yaml` with Team 21 (bump `info.version`, note the agreed date). | Ann | To do |
 | 3.10 | Start the shared test file with Team 21: Model D inputs and hand-calculated outputs, each checked by the other team. `tests/fixtures/phase3_model_d.json` is a starting point. | Richard | To do |
 | 3.11 | Phase 3 report (see [Report work](#report-work)). | Everyone | To do |
