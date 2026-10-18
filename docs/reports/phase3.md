@@ -137,6 +137,14 @@ CI run: https://github.com/team17-ece30861/cra-service/actions/runs/39097458488
 
 **Evidence (2026-10-18, via the GitHub API):** ruleset `main` is active, with rules for deletion, non-fast-forward, pull request, and the required status check `test / test`. Dependabot alerts are on and Dependabot security updates are off. Secret scanning and push protection are on, with 0 alerts on the full history. There's no pre-commit config, type checker, or dependabot.yml.
 
+## Q4.5 Test results against the deployed system
+
+Run date/time: October 17, 2026, 8:51–8:52 PM Eastern (00:51–00:52 UTC on October 18) │ Version tested: 262fedf │ Tests run: 55 │ Passed: 55 │ Failed: 0 │ Skipped: 0
+
+Failures: none. The full acceptance suite ran over HTTPS against our evaluation deployment and passed every test, including the plain-HTTP check that only runs against a deployment; every response was also validated against the shared OpenAPI contract.
+
+**Notes:** the evaluation deployment still runs `262fedf`; every later commit is docs only. The report is a Gradescope form, so "the version on the cover page" likely means a header question; if it asks for a version, use `262fedf`.
+
 ## Q5.1 Model updates
 
 Model A: Ticket lifecycle (state machine) │ Changed: yes │ What changed and why: Redrawn to show what was delivered: submitting a ticket, both triage outcomes, and updates are implemented, while recording report submissions and closing a reportable ticket as resolved are specified but arrive in Phase 4, so they appear dotted; updates are now listed inside each state instead of drawn as self-loops. │ Location: https://github.com/team17-ece30861/cra-service/blob/main/docs/models/model-a-ticket-lifecycle.png
