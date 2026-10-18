@@ -98,10 +98,32 @@ where you left off.
   message the teammate directly.
 - Commit the handoff update in the same PR as the work, or as its own docs-only PR.
 
+## Keeping the shared repo accurate
+
+Team 21 and the course staff learn what Orbit does from
+[`team17-ece30861/pod-k-shared`](https://github.com/team17-ece30861/pod-k-shared): the
+status chart in its README and [`team17/TESTING.md`](https://github.com/team17-ece30861/pod-k-shared/blob/main/team17/TESTING.md).
+If those drift from Orbit, Team 21 files our intended behavior as bugs.
+
+- **What needs an update:** any PR here that changes what Orbit does. That means a new or
+  removed operation; a changed status code, error, or response field; an answer to an open
+  pod question (Q1, Q7, and so on); or a change to anything in `TESTING.md`'s gray-areas
+  tables, first-run example, or spin-up times.
+- **What to update:** Team 17's column in the status chart, and `team17/TESTING.md`.
+  Follow `pod-k-shared`'s own `AGENTS.md`: edit only Team 17's entries, and contract or
+  shared-test-file changes need Team 21's approval.
+- **When:** the pod docs describe what Orbit is *running*, and Orbit only changes when
+  Quincy launches it. So:
+  1. Once the code PR merges, draft the `pod-k-shared` PR and leave it open.
+  2. After Launchpad deploys, check the new behavior there (see the Launchpad rule above)
+     and note the result in the pod PR.
+  3. Merge the pod PR right after Quincy launches Orbit.
+
 ## Branches and releases
 
 - Branch from `main`, open a PR into `main`. There is no development branch.
 - Merging to `main` deploys **Launchpad** (`team17-dev`) automatically. That is our
   development environment.
 - **Orbit** (`team17-prod`, the one Team 21 and the instructors test) only changes when
-  Quincy launches it from `main` by hand. That launch is the release step.
+  Quincy launches it from `main` by hand. That launch is the release step. Right after a
+  launch, merge any pending `pod-k-shared` update PRs.
