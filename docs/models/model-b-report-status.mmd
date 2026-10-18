@@ -1,0 +1,25 @@
+flowchart TB
+  start((" ")) -->|"ticket received"| NA(["<b>not_applicable</b>"])
+  NA -->|"triaged reportable<br/>(early warning, notification)"| P(["<b>pending</b><br/>not submitted, due time ahead"])
+  NA -->|"triaged reportable<br/>(final report)"| AF(["<b>awaiting_fix</b><br/>final report, no fix time yet"])
+  AF -->|"fix recorded,<br/>due time ahead"| P
+  AF -->|"fix recorded,<br/>due time passed"| O(["<b>overdue</b><br/>not submitted, past due time"])
+  P -.-> S(["<b>submitted</b> (Phase 4)<br/>submitted at or before due time"])
+  P -->|"due time passes"| O
+  O -->|"due time moves later *"| P
+  O -.-> SL(["<b>submitted_late</b> (Phase 4)<br/>submitted after due time"])
+  O -.-> S
+  subgraph legend["Legend"]
+    direction TB
+    l1["solid: delivered in Phase 3<br/>dotted: specified, arrives in Phase 4;<br/>a dotted arrow means a submission is recorded"]
+    l2["Status is never stored; it is recalculated on every read<br/>from the stored times and the current (or fixed test) time."]
+    l3["* awareness or fix time changed, or the test clock set back"]
+  end
+  S ~~~ legend
+  SL ~~~ legend
+  classDef state fill:#eef3fb,stroke:#3b5b8c,color:#111
+  classDef planned fill:#ffffff,stroke:#3b5b8c,stroke-dasharray:4 3,color:#111
+  classDef note fill:#ffffff,stroke:#999,color:#333
+  class NA,AF,P,O state
+  class S,SL planned
+  class l1,l2,l3 note
