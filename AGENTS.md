@@ -119,7 +119,7 @@ If those drift from Orbit, Team 21 files our intended behavior as bugs.
      and note the result in the pod PR.
   3. Merge the pod PR right after Quincy launches Orbit.
 - **Published copies.** `pod-k-shared` is public and holds copies of two things from this
-  private repo, for the course staff and Team 21: `team17/tester/` (a copy of `acceptance/`,
+  repo, for the course staff and Team 21: `team17/tester/` (a copy of `acceptance/`,
   plus `openapi.yaml` and `tests/fixtures/phase3_model_d.json`) and `team17/SYSTEM.md` (a copy
   of `docs/phase3.md`, with links rewritten so they don't point into this repo). Refresh both
   in the same pod PR whenever they change. Check that the tester copy still runs from its own
