@@ -172,3 +172,21 @@ We verified each updated model against the code rather than generating it: every
 Issue: Triage (POST /tickets/{id}/triage, REQ-03) — the contract does not say what happens when a not_actively_exploited or invalid decision includes an awareness time; we accept the request and ignore the time, but rejecting it with 400 or storing it are equally consistent with the contract. Related gaps we found: the contract lists no 422 for submitting a ticket with a future fix time, and a review against the regulation suggests the final-report clock should start at a corrective or mitigating measure (CRA Art. 14(2)(c)) rather than only a fix, and that the early warning's required fields are stricter than Art. 14(2)(a) requires. │ Effect: These cases are where two independent implementations are most likely to diverge, so a cross-team test of them could fail on either service without either team having a bug; so far they show up only in our own design and testing, because cross-team runs have not happened yet. │ Pod decision or plan: No pod decision yet. Our current behavior in each case is documented in our public testing guide, and these questions will be discussed with Team 21 as cross-team testing continues.
 
 **To revisit before submitting:** if the cross-team runs happen first, update "cross-team runs have not happened yet", and add any mismatch they find.
+
+## Q7.1 What changed and what remains incomplete
+
+Changed since Phase 2:
+- The system went from design to a deployed service on Google Cloud Run with a Neon PostgreSQL database, with per-client bearer tokens, the X-Actor check, a 64 KB request limit, and contract-format errors in the agreed precedence order (REQ-12, REQ-14; AC-02, AC-15).
+- Ticket intake, triage as reportable or not reportable, and exact Article 14 deadlines with live statuses for unsubmitted reports are delivered and pass on the deployed service (REQ-01 to REQ-05; AC-01, AC-03 to AC-05, AC-14, and the AC-06 boundary case).
+- Several Phase 4 items arrived early: ticket updates with deadline recalculation, per-ticket audit entries, an ordered ticket list, and reporter details limited to the single-ticket view (REQ-06, REQ-10, REQ-11, REQ-15; AC-07, and parts of AC-12 and AC-16).
+- Test controls (data reset and a fixed clock shared across all workers) support repeatable cross-team testing, and stored data survives a redeployment (REQ-16, REQ-18; AC-17).
+- Testing infrastructure now exists: an acceptance suite that validates every response against the OpenAPI contract, CI that blocks merging and deployment on any failure, and a public pod repository with the specification, our testing guide, our tester, and a shared Model D test file.
+
+Remaining incomplete:
+- Report drafts with missing-field checks, including the user advisory (REQ-07; AC-08).
+- Recording report submissions with locked content, and the submitted and submitted_late statuses that depend on it (REQ-05, REQ-08; AC-06, AC-09).
+- Closing a reportable ticket as resolved, and filtering the ticket list by state and report status (REQ-09, REQ-10; AC-10, AC-11).
+- The full audit-log lifecycle, reporter confidentiality in drafts and error bodies, and testing with 500 or more generated malformed requests (REQ-11, REQ-12, REQ-15; AC-12, AC-13, AC-16).
+- The performance target with 1,000 tickets and the recorded restart demonstration (REQ-17, REQ-18; AC-18, AC-19), plus the Phase 3 pod items still open: freezing the contract, Team 21's check of the shared test file, and the two-way cross-team runs.
+
+**To revisit before submitting:** trim the last "Remaining" bullet for any Phase 3 pod item that gets done (contract freeze, test-file approval, cross-team runs).
