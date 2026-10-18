@@ -49,7 +49,7 @@ same spec. We test their deployment and they test ours.
 | Item | Status |
 |---|---|
 | Platform layer: auth, errors, timestamps, clock, reset, logging, CI, deploys (PRs #1 to #4) | Done, merged, live on Launchpad and Orbit |
-| Phase 3 ticket API: intake, get, list (unfiltered), update, triage, audit read, deadlines, unsubmitted statuses | Merged (PR #7) and live on Launchpad. Not yet on Orbit. |
+| Phase 3 ticket API: intake, get, list (unfiltered), update, triage, audit read, deadlines, unsubmitted statuses | Merged (PR #7), live on Launchpad and Orbit, and the acceptance suite passes 55/55 on both |
 | PRs #5 (deadlines) and #6 (triage) | Merged as part of PR #7 |
 | Portable acceptance harness, Phase 3 cases (AC-01 to 05, 14, 15, 17) | On `main`. Passed over HTTP against a local server (54 passed, 1 skipped). Not yet run against a deployment. |
 | Phase 4 reporting workflow | Not started |
@@ -71,7 +71,7 @@ deployments.
 | 3.3 | Settle open question Q1 (below) with the pod before 3.4, or document our behavior in `docs/phase3.md`. | Richard, with pod | To do |
 | 3.4 | Mark PR #7 ready, merge. Launchpad deploys automatically. Close #5 and #6. | Quincy | Done 2026-10-17: merged as `6548e49`; Launchpad runs it; #5 and #6 auto-closed as merged |
 | 3.5 | Run `acceptance/` against Launchpad. Fix anything that fails. | Quincy's agent | Done 2026-10-17: 55/55 passed on Launchpad (`00bda4a`). See `docs/phase3.md`. |
-| 3.6 | Launch to Orbit (Actions → Launch to Orbit). Re-run `acceptance/` against Orbit, including the plain-HTTP probe (AC-15). Record the image SHA. | Quincy runs the launch, Richard runs the suite | Blocked on 3.5 |
+| 3.6 | Launch to Orbit (Actions → Launch to Orbit). Re-run `acceptance/` against Orbit, including the plain-HTTP probe (AC-15). Record the image SHA. | Quincy runs the launch, Richard runs the suite | Done 2026-10-18: Orbit runs `262fedf`; 55/55 passed. See `docs/phase3.md`. |
 | 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | In progress: Quincy is creating the repo that holds the shared pod file |
 | 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Book reset windows so suites don't overlap. Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Blocked on 3.6 |
 | 3.9 | Freeze the `phase-3` operations in `openapi.yaml` with Team 21 (bump `info.version`, note the agreed date). | Ann | To do |
