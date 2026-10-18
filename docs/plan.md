@@ -126,6 +126,7 @@ first PR description before building on them.
 | 4.P1 | Review Phase 4 PRs for platform rules: clock, one transaction per request, rollback on failure, no request bodies in logs, error precedence. | Ongoing |
 | 4.P2 | Release each merged increment to Orbit before cross-team runs, and record the image SHA used. | Ongoing |
 | 4.P3 | Share the "Open interpretations" table in [platform.md](platform.md#known-limitations) with Team 21 so both services agree on edge cases (reset keeps the clock, 405 precedence, 413 on bodyless routes, and so on). | To do |
+| 4.P4 | Automated alerting, promised in Phase 2 (Q7.3) but missing: a Cloud Monitoring alert on 5xx responses (from the request logs) for both deployments. Weigh an uptime check against cost and its effect on spin-up times. | Quincy | To do |
 
 ## Phase 5: performance, persistence, intake, final version
 

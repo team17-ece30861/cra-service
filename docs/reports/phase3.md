@@ -45,3 +45,21 @@ Registry entry: Cross-team testing endpoint registry (Endpoint_Registry Google S
 Team documentation: https://github.com/team17-ece30861/pod-k-shared/blob/main/team17/SYSTEM.md │ Updated on: October 17, 2026
 
 **Notes:** dates in this report use US Eastern time, the team's local date. Logs, test runs, and `docs/phase3.md` record UTC, which was already October 18 for the evening runs. The registry row holds the system URL, the tester (`pod-k-shared/team17/tester`), the spec (`pod-k-shared/spec.md`), and access notes, including that course staff get their token from Quincy.
+
+## Q2.3 Operational experience supported by observability evidence
+
+Our Phase 2 plan held up in practice: the service runs on Google Cloud Run with a persistent Neon PostgreSQL database and separate development and evaluation deployments, and tickets and their audit entries survive restarts and redeploys, changing only through the API or the pod's test reset control, which clears all tickets and audit entries so cross-team tests start from a known state. Secrets live in Google Secret Manager and are injected as environment variables at deploy time, with one API token per client (our team, Team 21, and the course staff) so each can be replaced independently, while GitHub Actions deploys through Workload Identity Federation without stored keys and database migrations run as a separate job before each release. To detect failures, the access log records every request with the name of the client whose token matched (never the token itself), the application logs each rejected request and a stack trace without request data for any server error, and Cloud Run's request log records each request's status code and latency; request bodies are never logged. In practice, failures have been caught by CI on every change, the health check after each deployment, our acceptance runs, and reviewing these logs, but unlike our plan we have not yet set up automated alerts beyond a budget alert, and we plan to add an alert on server errors in Phase 4. Over the last day, the evaluation deployment logged 0 server errors and 46 client errors, 43 from our acceptance suite's deliberately invalid requests and 3 from a browser opening the service without a token.
+
+Excerpt from the evaluation deployment's logs (October 17, 2026, 8:51 PM Eastern; times shown in UTC):
+
+```
+# Access log: the client is identified by name, never by token
+169.254.169.126 - team17 [18/Oct/2026:00:51:33 +0000] "POST /tickets HTTP/1.1" 201 885 "-" "Python-urllib/3.12"
+169.254.169.126 - team17 [18/Oct/2026:00:51:34 +0000] "GET /tickets/b30921b2-e21e-447e-82dc-25d97ae32958 HTTP/1.1" 200 968 "-" "Python-urllib/3.12"
+# Application warning for a rejected request (path only, no request body)
+2026-10-18T00:51:35Z  Bad Request: /tickets
+# Cloud Run request log: method, status, latency
+2026-10-18T00:51:33Z  POST  201  0.310 s  /tickets
+```
+
+**Evidence checked 2026-10-17 (Eastern):** Cloud Monitoring has 0 alert policies and 0 uptime checks; the 46 4xx were grouped by minute and user agent (43 from the acceptance run at 00:51–00:52 UTC, 3 browser 401s at 03:32 UTC). Choices with Quincy: the reset endpoint isn't named; the alerting gap is reported, with the fix planned for Phase 4.
