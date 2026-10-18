@@ -11,8 +11,8 @@ Review the complete increment in
 interfaces are in [domain logic](domain.md) and [triage rules](triage.md);
 the existing platform is documented in [platform notes](platform.md).
 
-For Ann's API/data review and AI-assisted onboarding, start with the
-[API + Data handoff](ann-handoff.md).
+For Ann's API/data review, start with Ann's handoff file:
+[handoff/ann.md](handoff/ann.md).
 
 ## Delivered behavior on this branch
 

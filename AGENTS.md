@@ -12,6 +12,9 @@ Read these before starting any task:
 2. [`docs/plan.md`](docs/plan.md): who owns what, current status, the task list.
 3. [`docs/spec.md`](docs/spec.md) and [`openapi.yaml`](openapi.yaml): the agreed behavior
    and the API contract. [`docs/decisions.md`](docs/decisions.md): what's already settled.
+4. [`docs/handoff/`](docs/handoff/): one file per teammate (`quincy.md`, `ann.md`,
+   `richard.md`). Read all three, so you know what the others are in the middle of and
+   what they're waiting on.
 
 ## Before building anything
 
@@ -71,6 +74,21 @@ Read these before starting any task:
 - **Fill in the PR template.** It asks what changed, how it differs from what was agreed,
   and what was tested for real. A reviewer should be able to judge the PR from it.
 - **One plan task per PR,** small enough for a person to review properly.
+
+## Handoffs
+
+At the end of a session, update your owner's file in [`docs/handoff/`](docs/handoff/) and
+only that file. It's how the next session, and the other teammates' agents, pick up
+where you left off.
+
+- **Rewrite it to the current state**, don't append. Sections: last updated (date and
+  agent), where things stand, in progress (branches, half-done work), next up (plan task
+  numbers), waiting on (who and what), notes for the next session.
+- **Keep it short.** Task status belongs in `docs/plan.md`, settled questions in
+  `docs/decisions.md`. Refer to them; don't copy them.
+- **Files don't notify anyone.** If something is urgent, tell the person driving you to
+  message the teammate directly.
+- Commit the handoff update in the same PR as the work, or as its own docs-only PR.
 
 ## Branches and releases
 

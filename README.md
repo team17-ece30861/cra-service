@@ -52,12 +52,11 @@ Phase 3 ticket integration, acceptance coverage, and portable tests against a se
 base URL are described in [Phase 3 validation](docs/phase3.md). External runs require
 a coordinated reset window and an access token supplied through the environment.
 
-## API/data handoff
+## Handoffs
 
-Ann's starting point is [API + Data handoff](docs/ann-handoff.md): the integration
-branch, implemented files, review checklist, domain boundary, later-phase gaps,
-and a starter prompt for her coding assistant. Review the existing Phase 3 layer
-before adding another implementation.
+Each teammate has a handoff file in [docs/handoff/](docs/handoff/): what they're in
+the middle of, what's next, and what they're waiting on. Agents read all three at the
+start of a session and update their owner's file at the end (see [AGENTS.md](AGENTS.md)).
 
 ## Deploying
 
