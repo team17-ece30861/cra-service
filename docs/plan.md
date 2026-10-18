@@ -18,7 +18,7 @@ section below, and update its status row in the same PR that finishes it.
 | Repository rules (clock, UTC, errors, X-Actor, logging, branches) | [`CLAUDE.md`](../CLAUDE.md) |
 | Hosting, deploys, rollback, cost, platform interpretations | [platform.md](platform.md), [`README.md`](../README.md) |
 | Why something was decided, and what's already settled | [decisions.md](decisions.md) |
-| Phase 3 integration details, domain helpers, triage rules | `docs/phase3.md`, `docs/domain.md`, `docs/triage.md` |
+| The system as delivered (models, interfaces, limitations), domain helpers, triage rules | `docs/phase3.md`, `docs/domain.md`, `docs/triage.md` |
 | What each teammate is in the middle of and waiting on | `docs/handoff/` (one file per person) |
 
 ## Team and ownership
@@ -103,7 +103,7 @@ first PR description before building on them.
 | 4.D5 | Listing helpers: `next_due_at` (earliest due time among unsubmitted, applicable reports; null if none) and the sort key (nulls last, tie-break per Q2). | REQ-10; AC-11 | To do |
 | 4.T1 | Acceptance cases for AC-06 to 12 and AC-16 in `acceptance/cases.py`, running both locally and over HTTP. | | To do |
 | 4.T2 | Add Phase 4 cases to the shared test file with Team 21, cross-checked. | | To do |
-| 4.T3 | Harness README: running needs `CRA_BASE_URL`, `CRA_API_TOKEN`, and `--allow-reset` (the explicit reset permission). Explain the reset-window etiquette. | | To do |
+| 4.T3 | Harness README: running needs `CRA_BASE_URL`, `CRA_API_TOKEN`, and `--allow-reset` (the explicit reset permission). Explain the reset-window etiquette. | Quincy's agent | Done 2026-10-18: `acceptance/README.md`, tested in a clean environment |
 | 4.T4 | First full cross-team run, both directions. Resolve disagreements in the spec, not by quietly changing tests. | | Blocked on 4.A1 to 4.A5 |
 
 ### API and Data (Ann)

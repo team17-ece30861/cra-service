@@ -1,44 +1,68 @@
-# Phase 3 integration and validation
+# Team 17 system documentation (as delivered in Phase 3)
 
-This branch implements the Phase 2 Q6.1 ticket workflow through the common HTTP
-interface. It integrates the domain work from PRs #5 and #6 with ticket storage,
-request schemas, audit records, and response generation. It is a proposed increment
-until reviewed, merged, and released. The existing README deployment URLs do not
-prove that this branch is deployed.
+What Team 17's CRA reporting service does at the end of Phase 3: its models, interfaces,
+functionality, validation, and known limitations. Last updated 2026-10-18.
 
-Review the complete increment in
-[PR #7](https://github.com/team17-ece30861/cra-service/pull/7). Detailed helper
-interfaces are in [domain logic](domain.md) and [triage rules](triage.md);
-the existing platform is documented in [platform notes](platform.md).
+The service is deployed on Google Cloud Run (details in [platform.md](platform.md)). The
+interface contract shared with Team 21 is [`openapi.yaml`](../openapi.yaml), and the agreed
+behavior is in [spec.md](spec.md). Lower-level references: [domain logic](domain.md),
+[triage rules](triage.md), and the [acceptance test runner](../acceptance/README.md).
 
-For Ann's API/data review, start with Ann's handoff file:
-[handoff/ann.md](handoff/ann.md).
+## Functionality
 
-## Delivered behavior on this branch
+Through the common HTTPS interface, a client can:
 
-- REQ-01: create a ticket with a unique opaque ID, state `received`, and receipt
-  time from the service clock.
-- REQ-02/REQ-03: triage an actively exploited vulnerability as `reportable`, or
-  close a non-reportable/invalid ticket with the corresponding resolution.
-- REQ-04: calculate exact UTC deadlines, including fixes preceding awareness.
-- Initial REQ-05 behavior: derive unsubmitted statuses on every read. No fix
-  means `awaiting_fix`; the exact deadline remains `pending`.
-- REQ-12/REQ-13: strict input validation, problem details, error precedence,
-  timestamp normalization, and no stored changes after an error.
-- REQ-14/REQ-16: reuse bearer authentication, actor validation, and persistent
-  clock/reset controls. Deployment HTTPS enforcement needs a deployed-target run.
+- **Submit a vulnerability report as a ticket** (REQ-01). The service assigns an opaque ID,
+  sets state `received`, and stamps the receipt time from the service clock.
+- **Triage it** (REQ-02, REQ-03): as actively exploited, with an awareness time and reason,
+  which makes it `reportable` and starts the deadlines; or as not actively exploited or
+  invalid, which closes it with that resolution.
+- **See the Article 14 deadlines with live status** (REQ-04, REQ-05): early warning at
+  awareness + 24 h, notification at + 72 h, and the final report 14 days after a fix (or
+  after awareness, if the fix came first). Statuses (`not_applicable`, `awaiting_fix`,
+  `pending`, `overdue`) are recalculated on every read from the service clock.
+- **Update ticket details** (REQ-06), including the awareness time (reason required, only
+  while `reportable`) and the fix time. Deadlines are recalculated immediately.
+- **Read a ticket's audit log** (REQ-11). Every successful change adds one entry with time,
+  actor, action, field changes, and reason. Failed requests add nothing.
+- **List tickets**, nearest deadline first (REQ-10, without filters so far).
+- **Use test controls** (REQ-16): reset all data, and fix or release the service clock.
 
-The increment also supports editable ticket details and awareness recalculation
-from REQ-06, an unfiltered ordered ticket list, and read-only audit access.
-These make the closed-ticket rejection and successful-change evidence observable.
-The Phase 4 reporting workflow remains incomplete.
+All requests except `GET /health` need a bearer token, and changes need an `X-Actor` header
+(REQ-14). Errors use problem details with the contract's status codes and precedence, and a
+failed request changes nothing (REQ-12). Reporter details appear only in
+`GET /tickets/{id}` (REQ-15).
 
-## Data and request flow
+## Interfaces
 
-`core.models.Ticket` stores state, receipt/awareness times, and validated client
-fields in a JSON column. `AuditEntry` stores per-ticket sequence, time, actor,
-action, changes, and reason. Migration `0002_phase3_tickets` adds both tables;
-the existing reset control clears them and preserves the fixed clock.
+| Operation | Status | Notes |
+| --- | --- | --- |
+| `GET /health` | Delivered | Public. Doesn't check the database. |
+| `POST /tickets` | Delivered | |
+| `GET /tickets` | Partial | Ordered list. `state` and `obligation_status` filters are ignored until Phase 4. |
+| `GET /tickets/{id}` | Delivered | The only response with reporter details. |
+| `PATCH /tickets/{id}` | Delivered | Merges nested objects one level deep; `null` clears optional fields. |
+| `POST /tickets/{id}/triage` | Delivered | |
+| `GET /tickets/{id}/audit` | Delivered | Other methods return 405. |
+| `POST /test/reset` | Delivered | Clears all tickets and audit entries; keeps a fixed clock. |
+| `GET`, `PUT`, `DELETE /test/clock` | Delivered | |
+| `GET /tickets/{id}/reports/{type}` | Not yet | Phase 4 (report drafts) |
+| `POST /tickets/{id}/reports/{type}/submission` | Not yet | Phase 4 (submission recording) |
+| `POST /tickets/{id}/close` | Not yet | Phase 4 (closing a reportable ticket) |
+
+Where the contract is silent (error precedence details, timestamp variants, how
+`errors[].field` is written, and so on), the service's behavior is listed in
+[platform.md](platform.md#known-limitations) and in the testing guide we share with
+Team 21 (`team17/TESTING.md` in `pod-k-shared`).
+
+## Models
+
+### Data
+
+`Ticket` stores the state, resolution, receipt and awareness times, and the validated client
+fields as JSON. `AuditEntry` stores each ticket's numbered log entries. `FixedClock` holds
+the test clock, in the database so every worker sees the same time. Deadlines and statuses
+are never stored; they're derived on every read.
 
 ```mermaid
 erDiagram
@@ -67,150 +91,89 @@ erDiagram
     }
 ```
 
-Ticket transitions implemented in this increment are `received` to `reportable`
-and `received` to `closed` with a non-reportable resolution. Closing a reportable
-ticket as `resolved` remains part of Phase 4; the full shared Model A is a
-specification, not a claim that all of its transitions have been delivered.
+### Ticket lifecycle (delivered part of Model A)
+
+`received` to `reportable` (actively exploited), and `received` to `closed` (not actively
+exploited or invalid). A closed ticket rejects every change with 409 and stays readable.
+Closing a `reportable` ticket as `resolved` arrives in Phase 4.
+
+### Request flow
 
 ```mermaid
 flowchart LR
-    Client --> Platform[Authentication and body size checks]
+    Client --> Platform[Auth, body size, X-Actor checks]
     Platform --> API[Ticket routes and request schemas]
-    API --> Ticket[(Ticket storage)]
-    API --> Domain[Triage deadline and status rules]
+    API --> Domain[Pure rules: triage, deadlines, statuses]
     Domain --> API
+    API --> Ticket[(Ticket storage)]
     API --> Audit[(Audit storage)]
-    Ticket --> Output[Response generation]
-    Domain --> Output
-    Output --> Client
     Clock[Service clock] --> API
+    API --> Client
 ```
 
-Mutating requests use the existing request transaction. Triage and updates lock
-the ticket row, validate before persistence, and add exactly one audit entry.
-Reporter data appears only in single-ticket detail responses and is omitted from
-audit changes and other ticket responses. Statuses and deadlines are derived,
-not persisted independently. A PostgreSQL concurrency test checks that competing
-triage requests produce one success, one conflict, and one triage audit entry.
+Each changing request runs in one database transaction that's rolled back on any error.
+Triage and updates lock the ticket row, so two competing triages give one success and one
+409. The deadline and triage rules are pure functions in `core/domain/`, with no database
+or clock access.
 
-## Common operation status
+## Validation
 
-| Operation | Implemented on this branch | Limitations |
-| --- | --- | --- |
-| `GET /health` | Yes | Does not verify the database. |
-| `POST /tickets` | Yes | Uses the common input schema. |
-| `GET /tickets` | Partial | Ordered unfiltered list; filters remain Phase 4 work. |
-| `GET /tickets/{id}` | Yes | Includes reporter details and initial obligation statuses. |
-| `PATCH /tickets/{id}` | Yes for editable details | Submitted-content locking awaits the submission workflow. |
-| `POST /tickets/{id}/triage` | Yes | Non-reportable decisions have no reporting awareness time. |
-| `GET /tickets/{id}/reports/{type}` | No | Phase 4 drafts. |
-| `POST /tickets/{id}/reports/{type}/submission` | No | Phase 4 submissions and content locking. |
-| `POST /tickets/{id}/close` | No | Phase 4 resolution after all submissions. |
-| `GET /tickets/{id}/audit` | Yes | Other methods return 405. |
-| `POST /test/reset` | Yes | Clears all application data on the selected deployment. |
-| `GET /test/clock` | Yes | Reads fixed or real time. |
-| `PUT /test/clock` | Yes | Strict timestamp validation. |
-| `DELETE /test/clock` | Yes | Releases the fixed clock. |
+**Acceptance criteria covered by the automated runner** (`acceptance/`, run over HTTPS and
+inside CI):
 
-Success and documented error responses exercised by the acceptance suite are
-validated against `openapi.yaml`. This does not claim conformance of operations
-whose success behavior is not implemented, or verification of a deployed revision.
+| Criterion | What's checked |
+| --- | --- |
+| AC-01 | Two tickets get unique IDs, state `received`, and the fixed receipt time. |
+| AC-02 | Missing or invalid fields, invalid JSON, and an over-64-KB body are rejected; ticket count unchanged. |
+| AC-03 | Model D E1 to E5 deadlines and statuses, exactly. |
+| AC-04 | Missing or future awareness, missing reason, and re-triage are rejected; ticket unchanged. |
+| AC-05 | Both non-reportable decisions close the ticket; changes return 409; reads work. |
+| AC-14 | E7 offset handling, fractional-second truncation, malformed timestamps rejected. |
+| AC-15 | 401 on every protected operation with no or a wrong token; 400 without `X-Actor`; plain HTTP redirected to HTTPS. |
+| AC-17 | Reset empties the service; the clock stays fixed; receipt time follows it. |
 
-## Automated acceptance coverage
+Every response is also checked against `openapi.yaml`. The Model D E6 boundary (part of
+AC-06) is checked too. Local integration tests add AC-07 (updates), audit privacy and
+counts, rollback, and PostgreSQL row locking. The pod's shared Model D test file (E1 to E8)
+is proposed in `pod-k-shared` and waiting on Team 21's check.
 
-| Criterion | Shared test methods in `acceptance/cases.py` | Evidence |
-| --- | --- | --- |
-| AC-01 | `test_ac01_intake_has_unique_ids_and_fixed_receipt_time` | Two unique tickets, receipt time, initial state. |
-| AC-02 | `test_ac02_invalid_intake_preserves_ticket_count`, `test_ac02_malformed_intake_preserves_ticket_count` | Missing/invalid fields, invalid JSON, body size, no new rows. |
-| AC-03 | `test_ac03_model_d_exact_deadlines_and_statuses` | Exact Model D E1-E5 fixture results. |
-| AC-04 | `test_ac04_rejected_triage_preserves_ticket`, `test_ac04_retriage_is_conflict_and_changes_nothing` | Missing awareness/reason, future awareness, repeat triage, unchanged ticket. |
-| AC-05 | `test_ac05_closed_ticket_remains_readable_and_rejects_changes` | Both non-reportable decisions, no obligations, closed update rejection. |
-| AC-14 | `test_ac14_timestamps_are_normalized`, `test_ac14_bad_timestamp_leaves_ticket_unchanged` | E7 offset, truncation, bad timestamp rejection. |
-| AC-15 | `test_ac15_every_protected_operation_rejects_unauthorized_requests`, `test_ac15_missing_actor_changes_nothing`, public health and HTTP probe | Authentication across the whole contract; HTTPS probe only on deployed targets. |
-| AC-17 | `test_ac17_reset_deletes_tickets`, `test_ac17_clock_stays_fixed_and_controls_receipt`, invalid clock case | Reset, two reads two seconds apart, fixed receipt, invalid clock rollback. |
+**Recorded runs:**
 
-The initial status boundary test adds the unsubmitted portion of AC-06. Local
-integration tests also check audit privacy/counts, failed update rollback,
-recalculation, out-of-range deadline rejection, and PostgreSQL row locking.
-Expected dates come from Phase 2 Model D; status boundaries come from Model B.
-Schema checks use the common OpenAPI file, not Ninja's generated documentation.
-
-The integration class uses transaction tests so each request commits independently,
-as it does in the service. Linux CI caught an initial test-setup error: PostgreSQL
-cannot truncate the audit table while deferred foreign-key triggers are pending
-inside an outer Django test transaction. Switching the test class to real request
-transaction boundaries corrected that failure. This is a concrete GenAI correction
-example for the Phase 3 report; SQLite-only validation did not expose it.
-
-## Recorded validation
-
-These results document completed runs, not a deployed-service release. Both were
-performed on 2026-10-14; the different revisions are recorded deliberately.
-
-| Run | Revision and environment | Result | Evidence |
+| Run | Target | Result | When |
 | --- | --- | --- | --- |
-| GitHub CI | `6c8d8a7f1b871352ac1980b0897ce5e8a00ed7ac`; Linux, Python 3.12, PostgreSQL 18 | 513 tests passed; lint/format, migration consistency, and Django checks passed. | [Successful CI run](https://github.com/team17-ece30861/cra-service/actions/runs/38585892219) |
-| External HTTP acceptance | `ce653938d0f5d0b61788d0ad3aa09d916ca50378`; isolated local SQLite service at `http://127.0.0.1:8001` | 54 passed, 0 failed, 1 skipped. | Local report `.venv/phase3-http-report.json`; 14:45:28-14:45:40 UTC. |
-| Deployed acceptance: Launchpad | `00bda4a` (same code as merge `6548e49`; only docs differ) on Cloud Run `team17-dev`, Neon Postgres, `https://team17-dev-7zneiwx4ba-uc.a.run.app` | 55 passed, 0 failed, 0 skipped, including the plain-HTTP probe (HTTP returns 302 to HTTPS). Median test 1.07 s, slowest 3.7 s. | Run by Quincy's agent with the dev token, 2026-10-17 22:04:18-22:05:33 UTC. Report kept locally, not committed. |
-| Deployed acceptance: Orbit | `262fedf` (same code as merge `6548e49`; only docs differ) on Cloud Run `team17-prod`, Neon Postgres, `https://team17-prod-7zneiwx4ba-uc.a.run.app` | 55 passed, 0 failed, 0 skipped, including the plain-HTTP probe. Median test 0.87 s, slowest 3.65 s. | Orbit launched by Quincy 2026-10-18 00:45 UTC. Run by Quincy's agent with the Team 17 prod token, 2026-10-18 00:51:32-00:52:50 UTC. Report kept locally, not committed. |
-| Manual AC-07 (REQ-06): Launchpad | `8ed9202` on `team17-dev` (revision `team17-dev-00023`) | All four cases passed. Awareness change on a `received` ticket: 409. Change without `change_reason`: 422. Future `fix.available_at`: 422. The two failed requests left the ticket and its audit log unchanged. Change with a reason: 200, deadlines recalculated (early warning moved to 2026-10-05T09:00:00Z) and one `updated` audit entry with actor, reason, and the `aware_at` change. | Run by Quincy's agent with the dev token, 2026-10-18 about 02:00 UTC. AC-07 is not yet in `acceptance/`. |
-| REQ-18 restart check: Launchpad | Ticket created on revision `team17-dev-00023` (`8ed9202`), read again after `team17-dev-00024` (`d316e4d`) took 100% of traffic | Survived the new revision: all 21 ticket fields (including reporter details) and both audit entries were identical before and after. | Run by Quincy's agent, 2026-10-18 02:03-02:09 UTC. This is not AC-19's recorded demonstration (with a recorded report), which is planned for Phase 5. |
+| Acceptance suite | Evaluation deployment (Cloud Run, Neon Postgres) | 55 passed, 0 failed, 0 skipped | 2026-10-18 00:51 to 00:52 UTC |
+| Acceptance suite | Development deployment | 55 passed, 0 failed, 0 skipped | 2026-10-17 22:04 to 22:05 UTC |
+| AC-07, by hand | Development deployment | All four cases passed, with failed requests leaving the ticket and audit log unchanged | 2026-10-18 about 02:00 UTC |
+| REQ-18 restart check | Development deployment | A ticket and its audit log read back identically after a new revision replaced the running service | 2026-10-18 02:03 to 02:09 UTC |
+| CI (every PR) | Linux, Python 3.12, PostgreSQL 18 | Full test suite, lint, migration and Django checks | Ongoing |
 
-The skipped HTTP case is the HTTPS-enforcement probe, which does not apply to a
-loopback HTTP server. The raw local report is ignored by Git; its summary is
-recorded here, but it is not evidence of a Cloud Run release. The CI run includes
-the PostgreSQL concurrent-triage test, which cannot be validated with SQLite.
-CI skipped deployment because this was a pull-request run rather than a merge
-to `main`.
+**GenAI corrections caught by testing:** a test setup that passed on SQLite but failed on
+PostgreSQL in CI (truncating the audit table with deferred foreign-key triggers pending); a
+PATCH bug where every update re-checked a stored fix time (found in review, fixed in PR #11
+with regression tests); and two testing-guide claims that held under the development server
+but not on the deployed stack (`pod-k-shared` PR #6).
 
-After the local HTTP run, `db2fc8f` corrected the PostgreSQL test-transaction setup
-described above. `6c8d8a7` corrected the problem-details field for final-deadline
-overflow caused by fix availability and added its regression test. The successful
-CI result covers both corrections; no later external HTTP run is claimed here.
+## Known limitations
 
-## Running the external suite
-
-The ordinary `pytest -q` runs local regression tests, including the same acceptance
-cases through Django's test client. The external suite has a separate configuration
-and does not require Django settings or a database connection.
-
-Set `CRA_API_TOKEN` locally to the selected deployment's access token, then run:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -c acceptance/pytest.ini acceptance `
-  --base-url https://your-coordinated-test-host `
-  --allow-reset --tested-version YOUR_RELEASE_SHA `
-  --report .venv/phase3-http-report.json -q
-```
-
-`CRA_BASE_URL` can replace `--base-url`; `CRA_TESTED_VERSION` can replace the version
-option. The version is an operator-provided label, not automatic verification of
-the Cloud Run image. The report records UTC run times, target, counts, durations,
-test IDs, and outcomes, never the access token or request/response bodies.
-
-Run serially and coordinate the reset window with the deployment owner and Team 21.
-The suite requires explicit reset permission, resets before each case, and leaves
-the last case's simulated data and fixed clock in place for inspection. It refuses
-credential-bearing base URLs and uses HTTPS except for loopback development.
-Authenticated requests never follow redirects. A loopback HTTP run skips the HTTPS
-enforcement probe and cannot be used as evidence of deployed HTTPS compliance.
-
-External HTTP tests exercise API, clock, ticket-state, and deadline components and
-Models A/B/D behavior. They do not measure source-code coverage of another team's
-service. Report that limit rather than inventing code coverage.
-
-## Release and evidence still required
-
-1. Team review of the API/data changes and the inherited domain PRs.
-2. Merge through a PR, then use the existing deployment workflow for the selected
-   environment. Record the actual deployed image SHA; do not substitute a local run.
-3. Run the suite against that release and against Team 21 during coordinated windows.
-4. Obtain Team 21's run against our service and classify any mismatches.
-5. Update the actual class registry and Phase 3 report with release, test-run,
-   operational-log, model, limitation, and GenAI evidence.
-
-The standalone OpenAPI description omits some arithmetic specified in the Phase 2
-report. Non-reportable triage with an optional awareness input is also underspecified.
-This implementation uses the existing domain result's absent reporting awareness;
-confirm any extra response/audit expectations with the pod. No shared contract
-version or deployed-service registry has been changed by this branch.
+- **Phase 4 operations aren't built:** report drafts, submission recording (so no
+  `submitted` or `submitted_late` statuses yet), closing a reportable ticket, and list
+  filters.
+- **Open questions with Team 21** (see [plan.md](plan.md#open-questions-for-the-pod)): a
+  non-reportable triage that includes `aware_at` is accepted and the time dropped (Q1); a
+  future fix time is accepted at submission (Q7); the final-report clock should arguably
+  start at a mitigating measure, not only a fix (Q8); early-warning required fields are
+  stricter than the CRA (Q9). See [reports/risk1-cra-review.md](reports/risk1-cra-review.md).
+- **Not yet cross-tested:** Team 21 hasn't run their suite against us, and the shared test
+  file isn't cross-checked yet.
+- **AC-07 isn't in the automated runner yet;** it's covered by local tests and was checked by
+  hand on the development deployment.
+- **Hosting:** the service scales to zero, so the first request after idle takes about 3 to 6
+  s, plus about 1.5 s for the first database read. It runs as one instance handling two
+  requests at a time. All clients share one database and test clock. A $10 spending cap
+  would stop it until lifted by hand. `GET /health` doesn't check the database.
+- **Deployed edge cases:** Google's front end rejects any `GET` that has a body before it
+  reaches the service.
+- **Deadlines use exact elapsed UTC hours,** with no weekend, holiday, or daylight-saving
+  adjustment. That's deliberate and conservative (see the risk 1 review).
+- **Persistence** is shown by a restart check; the recorded AC-19 demonstration is planned
+  for Phase 5.
