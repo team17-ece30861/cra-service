@@ -89,6 +89,7 @@ def problem_response(
     detail: str | None = None,
     errors: list[FieldError] | None = None,
     headers: dict[str, str] | None = None,
+    extra: dict | None = None,
 ) -> HttpResponse:
     body: dict = {"title": TITLES.get(status) or HTTPStatus(status).phrase, "status": status}
     if detail:
@@ -97,8 +98,22 @@ def problem_response(
         body["errors"] = errors or [field_error("request", "is invalid")]
     elif errors:
         body["errors"] = errors
+    if extra:
+        body.update(extra)
     return HttpResponse(
         json.dumps(body), status=status, content_type=PROBLEM_CONTENT_TYPE, headers=headers
+    )
+
+
+def interface_problem(
+    status: int, message: str, source: str, errors: list[FieldError] | None = None
+) -> HttpResponse:
+    """An error from the course's cross-team testing interface (/test/setup,
+    /test/report, and the tester under /tester). That interface requires a non-empty
+    `message` and a `source` (tester, system, communication, or unknown), which are
+    added to the usual problem fields."""
+    return problem_response(
+        status, detail=message, errors=errors, extra={"message": message, "source": source}
     )
 
 

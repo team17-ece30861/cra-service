@@ -4,6 +4,7 @@ from ninja.errors import ValidationError
 from core import controls, tickets
 from cra_service.errors import install_exception_handlers
 from cra_service.validation import JSONParser, field_errors
+from tester import api as tester_api
 
 
 class ServiceAPI(NinjaAPI):
@@ -53,3 +54,4 @@ def health(request):
 
 api.add_router("/test", controls.router)
 api.add_router("/tickets", tickets.router)
+api.add_router("/tester/test", tester_api.router)

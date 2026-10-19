@@ -55,6 +55,8 @@ jobs:
             echo "::error::Repository variable $VAR is not set"
             exit 1
           fi
+          # Tokens our tester sends to other teams' systems (tester/runner.py).
+          TOKEN_SECRETS="$TOKEN_SECRETS,TESTER_TARGET_TOKENS=tester-target-tokens:latest"
           echo "ALLOWED_HOST=$HOST" >> "$GITHUB_ENV"
           echo "TOKEN_SECRETS=$TOKEN_SECRETS" >> "$GITHUB_ENV"
 
@@ -90,7 +92,7 @@ jobs:
             --set-env-vars "DJANGO_DEBUG=false,ALLOWED_HOSTS=$ALLOWED_HOST" \
             --cpu 1 --memory 512Mi \
             --min-instances 0 --max-instances 1 \
-            --concurrency 80 --timeout 30 --cpu-throttling \
+            --concurrency 80 --timeout 600 --cpu-throttling \
             --allow-unauthenticated --quiet
 
       - name: Smoke test /health

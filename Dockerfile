@@ -20,6 +20,7 @@ RUN useradd --create-home app
 USER app
 
 # Cloud Run sets $PORT. Access logs (gunicorn.conf.py) record the client, method,
-# path, and status, never tokens or bodies.
+# path, and status, never tokens or bodies. The timeout covers a full tester run
+# (tester/runner.py).
 CMD exec gunicorn cra_service.wsgi:application --config gunicorn.conf.py \
-    --bind 0.0.0.0:$PORT --workers 2 --timeout 30
+    --bind 0.0.0.0:$PORT --workers 2 --timeout 600
