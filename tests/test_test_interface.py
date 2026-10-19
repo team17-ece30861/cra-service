@@ -252,3 +252,31 @@ def test_tester_sends_our_own_token_only_to_this_service(settings):
     assert runner.target_token("https://team17.example") == "own-token"
     assert runner.target_token("https://team21.example") == "their-token"
     assert runner.target_token("https://elsewhere.example") is None
+
+
+def test_tester_calls_send_an_actor_and_the_target_token(settings, monkeypatch):
+    settings.TESTER_TARGET_TOKENS = {"team21.example": "their-token"}
+    sent = []
+
+    class FakeResponse:
+        code = 201
+
+        def read(self):
+            return b'{"session_id": "run-1"}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def urlopen(request, timeout):
+        sent.append(request)
+        return FakeResponse()
+
+    monkeypatch.setattr(runner, "urlopen", urlopen)
+    status, body = runner.call(TARGET, "POST", "/test/setup", {"session_id": "run-1"}, timeout=5)
+    assert (status, body) == (201, {"session_id": "run-1"})
+    headers = dict(sent[0].header_items())
+    assert headers["X-actor"] == runner.TESTER_ACTOR
+    assert headers["Authorization"] == "Bearer their-token"

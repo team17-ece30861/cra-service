@@ -32,6 +32,11 @@ REPORT_TIMEOUT = 30
 # Our own client name in settings.API_TOKENS, used when the tester targets this service.
 SELF_CLIENT = "team17"
 
+# Sent on our calls to the target's /test/setup and /test/report. The course spec
+# doesn't ask for it, but some systems (Team 21's) require X-Actor on every write,
+# and systems that don't need it ignore it.
+TESTER_ACTOR = "team17-tester"
+
 ACCEPTANCE_CRITERIA_TOTAL = 19  # AC-01 to AC-19 in docs/spec.md
 COMMUNICATION_FAILURE = re.compile(
     r"URLError|timed out|TimeoutError|Connection(Refused|Reset)Error|RemoteDisconnected"
@@ -63,7 +68,7 @@ def target_token(target_url: str) -> str | None:
 
 def call(target_url: str, method: str, path: str, body=None, *, timeout: int):
     """One JSON request to the target. Returns (status, body as a dict, or {})."""
-    headers = {"Accept": "application/json"}
+    headers = {"Accept": "application/json", "X-Actor": TESTER_ACTOR}
     data = None
     if body is not None:
         data = json.dumps(body).encode("utf-8")
