@@ -4,9 +4,12 @@ Required: DATABASE_URL, DJANGO_SECRET_KEY
 Optional: DJANGO_DEBUG (default false), ALLOWED_HOSTS (comma-separated),
           API_TOKEN_<NAME> (one bearer token per client, for every route except
           GET /health; when none is set, every protected request is rejected),
-          API_TOKEN (older single token, accepted as client "default")
+          API_TOKEN (older single token, accepted as client "default"),
+          TESTER_TARGET_TOKENS (JSON: tokens our tester sends to other systems),
+          TESTER_ALLOWED_HOSTS (comma-separated systems our tester may target)
 """
 
+import json
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -45,6 +48,29 @@ ALLOWED_HOSTS = [
 
 API_TOKENS = env_api_tokens(os.environ)
 
+
+def env_tester_tokens(raw: str) -> dict[str, str]:
+    """Tokens our tester sends to other teams' systems: a JSON object mapping a target
+    hostname (or full base URL) to its bearer token. Invalid JSON means none."""
+    try:
+        data = json.loads(raw or "{}")
+    except ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k).rstrip("/").lower(): str(v).strip() for k, v in data.items() if v}
+
+
+TESTER_TARGET_TOKENS = env_tester_tokens(os.environ.get("TESTER_TARGET_TOKENS", ""))
+
+# Other teams' systems our tester may target, besides this service itself (the
+# course spec: "approved pod service URLs"). Anything else is rejected with 400.
+TESTER_ALLOWED_HOSTS = [
+    h.strip().lower()
+    for h in os.environ.get("TESTER_ALLOWED_HOSTS", "cra-phase3.onrender.com").split(",")
+    if h.strip()
+]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -53,6 +79,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "core",
+    "tester",
 ]
 
 MIDDLEWARE = [

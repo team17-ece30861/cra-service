@@ -7,5 +7,7 @@ __pycache__
 .env
 staticfiles
 tests
+# The tester's Model D cases (acceptance/cases.py)
+!tests/fixtures/phase3_model_d.json
 .pytest_cache
 .ruff_cache

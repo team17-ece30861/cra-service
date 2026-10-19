@@ -4,3 +4,7 @@ gunicorn~=26.2
 psycopg[binary]~=3.3
 dj-database-url~=3.1
 whitenoise~=6.12
+# The tester (/tester) runs the acceptance suite in production.
+pytest~=8.4
+PyYAML~=6.0
+jsonschema[format-nongpl]~=4.0

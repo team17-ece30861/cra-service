@@ -55,6 +55,9 @@ def pytest_runtest_logreport(report):
         report.nodeid, {"test": report.nodeid, "outcome": "not_run", "seconds": 0}
     )
     entry["seconds"] += report.duration
+    if report.failed and "message" not in entry:
+        crash = getattr(report.longrepr, "reprcrash", None)
+        entry["message"] = crash.message if crash else str(report.longrepr)[-500:]
     if report.failed or entry["outcome"] != "failed" and (report.when == "call" or report.skipped):
         entry["outcome"] = report.outcome
 

@@ -19,6 +19,10 @@ CLIENT_ENVIRON_KEY = "cra_service.client"
 # opens a database connection, which would wake Neon).
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
+# The tester's routes manage their own writes: a run lasts minutes, and its session
+# state must be visible to other requests (409 while running) before it ends.
+NO_TRANSACTION_PREFIX = "/tester/"
+
 # Headers worth keeping when an error response is rewritten as a problem.
 _KEPT_HEADERS = ("Allow", "WWW-Authenticate", "Retry-After")
 
@@ -48,7 +52,7 @@ class PlatformMiddleware:
             return problem_response(401, headers={"WWW-Authenticate": "Bearer"})
         if _content_length(request) > MAX_BODY_BYTES:
             return problem_response(413)
-        if request.method in SAFE_METHODS:
+        if request.method in SAFE_METHODS or request.path_info.startswith(NO_TRANSACTION_PREFIX):
             return _as_problem(self.get_response(request))
         with transaction.atomic():
             response = self.get_response(request)

@@ -11,6 +11,15 @@ class FixedClock(models.Model):
     at = models.DateTimeField()
 
 
+class SystemSession(models.Model):
+    """A session prepared by POST /test/setup (the course's cross-team testing
+    interface). Kept on reset, so a tester can still read GET /test/report after
+    its suite resets the data."""
+
+    session_id = models.CharField(max_length=200, primary_key=True)
+    created_at = models.DateTimeField()
+
+
 class Ticket(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     state = models.CharField(max_length=20, default="received")
