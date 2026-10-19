@@ -183,10 +183,10 @@ Changed since Phase 2:
 - Testing infrastructure now exists: an acceptance suite that validates every response against the OpenAPI contract, CI that blocks merging and deployment on any failure, and a public pod repository with the specification, our testing guide, our tester, and a shared Model D test file.
 
 Remaining incomplete:
-- Report drafts with missing-field checks, including the user advisory (REQ-07; AC-08).
-- Recording report submissions with locked content, and the submitted and submitted_late statuses that depend on it (REQ-05, REQ-08; AC-06, AC-09).
+- Report drafts with missing-field checks (including the user advisory), and recording report submissions with locked content and the submitted and submitted_late statuses that depend on it (REQ-05, REQ-07, REQ-08; AC-06, AC-08, AC-09).
 - Closing a reportable ticket as resolved, and filtering the ticket list by state and report status (REQ-09, REQ-10; AC-10, AC-11).
 - The full audit-log lifecycle, reporter confidentiality in drafts and error bodies, and testing with 500 or more generated malformed requests (REQ-11, REQ-12, REQ-15; AC-12, AC-13, AC-16).
-- The performance target with 1,000 tickets and the recorded restart demonstration (REQ-17, REQ-18; AC-18, AC-19), plus the Phase 3 pod items still open: freezing the contract, Team 21's check of the shared test file, and the two-way cross-team runs.
+- The performance target with 1,000 tickets and the recorded restart demonstration (REQ-17, REQ-18; AC-18, AC-19).
+- Phase 3 pod items planned in Phase 2, Section 6.1: freezing the contract for the Phase 3 operations, Team 21's check of the shared Model D test file, and the two-way cross-team test runs.
 
-**To revisit before submitting:** trim the last "Remaining" bullet for any Phase 3 pod item that gets done (contract freeze, test-file approval, cross-team runs).
+**To revisit before submitting:** update the last "Remaining" bullet for any Phase 3 pod item that gets done (contract freeze, test-file approval, cross-team runs).
