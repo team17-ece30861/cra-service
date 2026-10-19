@@ -163,9 +163,15 @@ We verified each updated model against the code rather than generating it: every
 
 **Notes:** the code fix is cra-service PR #11. A teammate walkthrough isn't claimed, because none is confirmed; if Ann or Richard reviews the diagrams before submission, add "and reviewed by a teammate" to the first sentence.
 
-## Q6.1 Cross-team test (pending Team 21)
+## Q6.1 Cross-team test
 
-**Not answerable yet.** It needs both directions run before submitting: our tester against Team 21's service, and theirs against Orbit. As of 2026-10-18 about 05:00 UTC, Team 21 had accepted the `pod-k-shared` invite (Becker42) but had not posted their base URL or sent us a token, and Orbit's access log showed no requests using Team 21's token. Quincy expects to hear from them on 2026-10-18. When they reply: run `pod-k-shared/team17/tester` against their URL (ask Quincy first), get their run date and pass count against Orbit, then draft this answer with coverage per direction. If they don't come through before submission, draft an honest "attempted, pending" version instead.
+Neither direction of the cross-team test was run before submission. Our side has been ready since October 17, 2026. Our evaluation base URL is in the pod's shared repository and the class registry, Team 21 has its own access token, and our tester and testing guide are public. On October 18 we emailed Team 21 to ask about their status and had received no reply by submission. As of October 18, 2026, 8:40 PM Eastern, Team 21 had not published a base URL or shared a token with us, and our evaluation deployment had received no requests made with Team 21's token. Running both directions is the first item of our Phase 4 plan.
+
+Our tests → Team 21 service │ Date: not run │ Run/passed: 0/0 │ Main problem and owner: Team 21's base URL and an access token for our team were not yet available (owner: Team 21 to share them; Team 17 will run our suite within one day of receiving them) │ Coverage: none yet. When run, our 55-test suite checks authentication on all 14 contract operations; success and error paths for submitting, reading, listing, and triaging tickets and for the test controls; all eight Model D examples; both triage outcomes in Model A; and the four unsubmitted statuses in Model B. Code coverage cannot be measured from outside another team's service.
+
+Team 21 tests → our service │ Date: not run │ Run/passed: 0/0 │ Main problem and owner: no run had been made against our evaluation deployment (owner: Team 21; Team 17 will support the run and fix any mismatch it finds) │ Coverage: none yet.
+
+**Notes:** checked 2026-10-19 00:42 UTC: the pod README's Team 21 row still reads "to be added by Team 21", and Orbit's logs (last 3 days) have no requests from the `team21` client (the same query does find `team17` requests). Team 21's token was sent 2026-10-18 01:33 UTC (pod-k-shared #4). The email date (October 18) is assumed; Quincy sent it from another account. Coverage claims come from `acceptance/cases.py` (E1–E5 fixture, E6 exact-deadline, E7 offset, E8 future awareness; the AC-15 test covers every protected operation).
 
 ## Q6.2 Specification issues discovered
 
