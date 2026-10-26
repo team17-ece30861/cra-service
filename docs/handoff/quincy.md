@@ -15,7 +15,10 @@ Decided at the kickoff (2026-10-26):
 - Quincy builds a **console** (4.U1 to U4, see `docs/decisions.md`). Ann and Richard stay
   on the API and domain work. The console is cut first if that work slips.
 - **Quincy sends the Team 21 email** (as PM), not Ann.
-- **Schemathesis (4.A6) is offered to Richard** to lighten Ann's load. Not accepted yet.
+- **Phase 4 is split by feature**, not rules-then-API. Richard: drafts, recording a
+  submission, closing a ticket (rule, endpoint, and tests for each). Ann: the submission
+  table, statuses, list filters and order, the privacy sweep, Schemathesis (4.A6), and the
+  contract freeze. Table in [`docs/plan.md`](../plan.md#who-builds-what-in-phase-4).
 - Quincy **isn't pursuing** the one-off 404 from Team 21's system (Oct 18) or the
   `registry-probe` 401s on our `/test/report` (Oct 20). The Phase 3 report said we'd share
   the 404's request sequence with Team 21 in Phase 4, so the Phase 4 report should say we
@@ -79,9 +82,10 @@ Decided at the kickoff (2026-10-26):
    >
    > Thanks! Team 17
 
-   Messages for Ann and Richard: point each at `docs/plan.md` (proposed schedule) and
-   their own handoff file. Ask Richard for the 4.D1 to D5 signatures today and whether
-   they'll take 4.A6. Tell Ann the 4.A1 to A5 target is Thursday.
+   Messages for Ann and Richard: explain the split by feature and point each at
+   `docs/plan.md` (who builds what, and the schedule) and their own handoff file. Ask Ann
+   to post the submission model's fields today, since Richard's submission work builds on
+   it. Target for both: features merged by Thursday.
 2. **4.U1: decide how people sign in to the console** and how that becomes `X-Actor`.
    It's a guided decision because it touches auth. Options in `docs/plan.md`: per-person
    Django accounts, a shared password plus a name prompt, or Google sign-in in front of
@@ -91,7 +95,7 @@ Decided at the kickoff (2026-10-26):
    Server-rendered in the same Django service; the API token stays on the server; reporter
    details only on the single-ticket page.
 4. **4.U3:** report pages (drafts with missing fields, record a submission, close) once
-   Ann's 4.A2 to A4 are live. **4.U4:** UX notes and screenshots for the report.
+   Richard's 4.A2 to A4 are live. **4.U4:** UX notes and screenshots for the report.
 5. **4.P1:** review Ann's and Richard's Phase 4 PRs as they arrive. **4.P2:** launch Orbit
    once 4.A2 to A5 pass on Launchpad (Fri 10-30), then merge the `pod-k-shared` update.
 6. 4.P4 (5xx alert) and 4.P5 (early performance check) if time allows. Both were promised
@@ -101,9 +105,10 @@ Decided at the kickoff (2026-10-26):
 
 - **Team 21:** everything in the email above, plus their Phase 4 endpoints for the
   cross-team run on Sat 10-31.
-- **Ann:** 4.A1 to A5 by Thursday, the freeze PR (3.9), and accepting the `pod-k-shared`
-  invite (`zuo30`, still pending on 2026-10-26).
-- **Richard:** 4.D1 to D5 signatures today, merged by Wednesday; an answer on 4.A6.
+- **Ann:** the submission model's fields today and 4.A1 merged Tuesday (review the
+  migration the same day); statuses, filters, and order by Thursday; the freeze PR (3.9);
+  accepting the `pod-k-shared` invite (`zuo30`, still pending on 2026-10-26).
+- **Richard:** drafts merged Wednesday; submission and close by Thursday.
 
 ## Notes for the next session
 
