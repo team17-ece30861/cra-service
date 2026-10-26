@@ -216,6 +216,7 @@ contract changes.
 | Q8 | Art. 14(2)(c) starts the final-report clock when a corrective **or mitigating** measure is available. We start it only at `fix.available_at` (a fix), so a workaround released first leaves our deadline too late. Redefine `fix.available_at` as the first corrective or mitigating measure? | Proposed: yes, as a wording change to `docs/spec.md` and `openapi.yaml` only. See `docs/reports/risk1-cra-review.md`, Finding 1. | Phase 4 (raise with Team 21 now) |
 | Q9 | Art. 14(2)(a) needs Member States only "where applicable" and no product versions, but Model C requires `member_states` and `product.affected_versions` before an early warning can be recorded. Keep it strict, or allow recording with those fields marked unknown? | Undecided. See `docs/reports/risk1-cra-review.md`, Finding 2. | 4.D3 |
 | Q6 | A PATCH that changes nothing: still one `updated` audit entry? | Affects AC-12 counts. Propose yes, with an empty `changes` list. | 4.T1 |
+| Q10 | Must `POST /test/setup` (the course testing interface) require `X-Actor`? Team 21's does (400 without it); ours doesn't, because our rule exempts `/test/*`, and the course interface doesn't mention it. | Our tester sends it anyway since 2026-10-18 (PR #64). Propose: not required, matching the course interface. | 4.T4 |
 
 ## Report work
 
