@@ -1,8 +1,8 @@
 # How we work with agents
 
 Team 17 uses AI agents (Claude Code, Codex) for as much of the building as we can, and
-the humans stay in control: people make the decisions and approve what ships. This file
-applies to every agent working in this repository. "The person" means the teammate
+the humans stay in control: people make the decisions and decide what reaches Orbit.
+This file applies to every agent working in this repository. "The person" means the teammate
 driving you.
 
 Read these before starting any task:
@@ -73,10 +73,20 @@ Read these before starting any task:
 
 ## Humans stay in control
 
-- **A human approves every code change.** Any PR that changes code, tests, migrations,
-  workflows, or `openapi.yaml` needs approval from a teammate before it merges: the area
-  owner, or another teammate if the owner wrote it. Agents never merge those PRs and never
-  launch to Orbit.
+- **Every code change gets an independent review before it merges.** Any PR that changes
+  code, tests, or migrations needs one approving review from either a teammate or an
+  agent that didn't write it: a fresh session (Claude Code or Codex) with none of the
+  author's conversation, given only the PR. Merging to `main` only deploys Launchpad, our
+  development environment, which is why an agent's review is enough (Quincy, 2026-10-26).
+  - The reviewing agent posts its review as a PR comment: that it's an agent review, what
+    it checked (the diff against `docs/spec.md`, `openapi.yaml`, and `CLAUDE.md`), and
+    approve or request changes. Fix or answer every finding before merging.
+  - Once CI passes and the review approves, the author's agent may merge, with the
+    person driving it saying go.
+  - **Still needs a human teammate's approval:** changes to `.github/workflows/` and to
+    `openapi.yaml` (contract changes also need Team 21, see below).
+  - **Agents never launch to Orbit.** Only Quincy launches Orbit, and that launch is the
+    human checkpoint for everything Team 21 and the course staff see.
 - **Docs-only PRs** (plan, decision log, spec copy, guides) may be merged by the agent that
   wrote them once CI passes, if the person driving it allows that.
 - **Fill in the PR template.** It asks what changed, how it differs from what was agreed,
