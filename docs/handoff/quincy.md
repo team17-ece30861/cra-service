@@ -17,7 +17,7 @@ Decided at the kickoff (2026-10-26):
 - **Quincy sends the Team 21 email** (as PM), not Ann.
 - **Phase 4 is split by feature**, not rules-then-API. Richard: drafts, recording a
   submission, closing a ticket (rule, endpoint, and tests for each). Ann: the submission
-  table, statuses, list filters and order, the privacy sweep, Schemathesis (4.A6), and the
+  table, statuses, list filters and order, the privacy sweep, and the
   contract freeze. Table in [`docs/plan.md`](../plan.md#who-builds-what-in-phase-4).
 - Quincy **isn't pursuing** the one-off 404 from Team 21's system (Oct 18) or the
   `registry-probe` 401s on our `/test/report` (Oct 20). The Phase 3 report said we'd share
@@ -98,7 +98,12 @@ Decided at the kickoff (2026-10-26):
    Richard's 4.A2 to A4 are live. **4.U4:** UX notes and screenshots for the report.
 5. **4.P1:** review Ann's and Richard's Phase 4 PRs as they arrive. **4.P2:** launch Orbit
    once 4.A2 to A5 pass on Launchpad (Fri 10-30), then merge the `pod-k-shared` update.
-6. 4.P4 (5xx alert) and 4.P5 (early performance check) if time allows. Both were promised
+6. **4.A6: Schemathesis** (Quincy took it on 2026-10-26): at least 500 generated malformed
+   requests against `openapi.yaml`, no 5xx, every error problem+json, data unchanged
+   afterward. Runs in CI against the local service and from `acceptance/` against a
+   deployment. Run it once Thursday's endpoints are merged: locally Friday, Launchpad
+   Saturday. Covers AC-13.
+7. 4.P4 (5xx alert) and 4.P5 (early performance check) if time allows. Both were promised
    in the Phase 3 report.
 
 ## Waiting on

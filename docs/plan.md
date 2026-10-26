@@ -111,7 +111,7 @@ original numbers; this table says who owns each one.
 | Statuses on each ticket (`submitted`, `submitted_late`, `next_due_at`) | Ann | 4.D2, and the response part of 4.A5 |
 | List filters and urgency order | Ann | 4.D5, and the filter part of 4.A5 |
 | Reporter confidentiality sweep | Ann | 4.A7 |
-| Schemathesis (500 malformed requests) | Ann | 4.A6. Was offered to Richard; moved back to Ann because the feature split already balances the load. |
+| Schemathesis (500 malformed requests) | Quincy | 4.A6. Quincy took it on 2026-10-26. |
 | Contract freeze and sync | Ann | 3.9, 4.A8 |
 | Report drafts | Richard | 4.D1, 4.A2 |
 | Recording a submission (it locks the draft, so it stays with drafts) | Richard | 4.D3, 4.A3. Needs Ann's 4.A1. |
@@ -133,8 +133,8 @@ Owners: say if a date doesn't work for you.
 | Tue 10-27 | Drafts PR open | 4.A1 merged (Quincy reviews the migration the same day); start statuses (4.D2) | 4.U2 pages on existing endpoints | |
 | Wed 10-28 | Drafts merged; start submission (4.D3, 4.A3) | Statuses; start filters and order (4.D5, 4.A5) | 4.U2 | Team 21's answers to Q1 to Q10 due; otherwise we build our proposals and say so in the report |
 | Thu 10-29 | Submission and close (4.D4, 4.A4) merged; acceptance cases | Statuses, filters, and order merged; acceptance cases | 4.P1 reviews; 4.U3 report screens | |
-| Fri 10-30 | Run `acceptance/` on Launchpad; fix failures | Privacy sweep (4.A7); start Schemathesis (4.A6) | Launch Orbit (4.P2); draft `pod-k-shared` update | |
-| Sat 10-31 | Cross-team run, both directions (4.T4) | Schemathesis; fixes | 4.U4 report notes; merge pod update | Needs Team 21's Phase 4 endpoints live |
+| Fri 10-30 | Run `acceptance/` on Launchpad; fix failures | Privacy sweep (4.A7); fixes | Schemathesis (4.A6) locally; launch Orbit (4.P2); draft `pod-k-shared` update | |
+| Sat 10-31 | Cross-team run, both directions (4.T4) | Fixes | Schemathesis against Launchpad; 4.U4 report notes; merge pod update | Needs Team 21's Phase 4 endpoints live |
 | Sun 11-01 | Report | Report | Report; submit | |
 
 **Dependencies outside our control:** the cross-team run (4.T4) needs Team 21's Phase 4
