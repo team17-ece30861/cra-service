@@ -29,6 +29,10 @@ section below, and update its status row in the same PR that finishes it.
 | API and Data | Ann (Codex) | Ticket, triage, report, and audit endpoints: validation, status codes, and responses that match `openapi.yaml`. Models and migrations for tickets, submissions, and audit entries. Schemathesis contract tests. Keeping `openapi.yaml` in sync with Team 21. |
 | Domain Logic and Testing | Richard (Codex) | Deadlines, statuses, triage, draft, submission, and closure rules as pure functions in `core/domain/`. Unit tests driven by Models C and D. The black-box harness in `acceptance/` (takes a base URL and token) and its run instructions. The shared test file with Team 21. |
 
+**Phase 4 exception (2026-10-26):** Phase 4 work is split by feature, not by these areas.
+Each person builds the rule, the endpoint, and the tests for their own features. See
+[Who builds what in Phase 4](#who-builds-what-in-phase-4).
+
 Team 21 (Aashik, Andrew, Ryan, Conrad) builds an independent implementation of the
 same spec. We test their deployment and they test ours.
 
@@ -91,22 +95,46 @@ listing filters, audit log, reporter confidentiality (REQ-05 to 11, REQ-15). Val
 AC-06 to 13 and AC-16, plus the first full cross-team run. A scripted incident (submit,
 triage, three submissions, close) passes against Team 21's deployment.
 
-**Due Sunday 2026-11-01.** Domain work comes first so the API can wire it in. Agree on
-function signatures in the first PR description before building on them.
+**Due Sunday 2026-11-01.**
+
+### Who builds what in Phase 4
+
+Decided 2026-10-26 (see [decisions.md](decisions.md)): Phase 4 is split **by feature**.
+Each person writes the rule (a pure function in `core/domain/`), the endpoint that calls
+it, and the tests, for their own features. The boundary rules above still apply: business
+rules live in `core/domain/`, and routes only call them. The task tables below keep their
+original numbers; this table says who owns each one.
+
+| Feature | Owner | Tasks |
+|---|---|---|
+| Recorded-reports table (the shared foundation) | Ann | 4.A1. Post the model's fields in the PR description on Mon 10-26, so Richard can build submission against them. |
+| Statuses on each ticket (`submitted`, `submitted_late`, `next_due_at`) | Ann | 4.D2, and the response part of 4.A5 |
+| List filters and urgency order | Ann | 4.D5, and the filter part of 4.A5 |
+| Reporter confidentiality sweep | Ann | 4.A7 |
+| Schemathesis (500 malformed requests) | Ann | 4.A6. Was offered to Richard; moved back to Ann because the feature split already balances the load. |
+| Contract freeze and sync | Ann | 3.9, 4.A8 |
+| Report drafts | Richard | 4.D1, 4.A2 |
+| Recording a submission (it locks the draft, so it stays with drafts) | Richard | 4.D3, 4.A3. Needs Ann's 4.A1. |
+| Closing a ticket | Richard | 4.D4, 4.A4 |
+| Acceptance cases | Both | 4.T1: each adds cases for their own features to `acceptance/cases.py`. Richard keeps the harness. |
+| Launchpad run and cross-team run | Richard | 4.T4 |
+
+Both edit `core/tickets.py`, so keep PRs small and merge often to limit conflicts. Each
+person tests their own features, so code review (Quincy, 4.P1) is the second pair of eyes.
 
 ### Proposed schedule
 
-All dates are proposals from the 2026-10-26 kickoff, not agreed yet. Owners: say if a date
-doesn't work for you.
+Quincy approved these dates on 2026-10-26; updated the same day for the split by feature.
+Owners: say if a date doesn't work for you.
 
-| Day | Domain (Richard) | API (Ann) | Platform and console (Quincy) | Pod |
+| Day | Richard (drafts, submission, close) | Ann (table, statuses, lists, checks) | Platform and console (Quincy) | Pod |
 |---|---|---|---|---|
-| Mon 10-26 | Post function signatures for 4.D1 to D5 in a PR description | Start 4.A1 (submission model) | Kickoff; settle console login (4.U1) | Email Team 21: freeze, shared test file, Q2 to Q9, the 404 sequence |
-| Tue 10-27 | 4.D1 to D5 PRs open | 4.A1 merged; start 4.A5 filters | 4.U2 pages on existing endpoints | |
-| Wed 10-28 | 4.D1 to D5 merged; start 4.T1 | 4.A2 to A4 against Richard's signatures | 4.U2 | Ask Team 21 to answer Q2 to Q9 by today; otherwise we build our proposals and say so in the report |
-| Thu 10-29 | 4.T1 acceptance cases | 4.A2 to A5 merged (Launchpad deploys) | 4.P1 reviews; 4.U3 report screens | |
-| Fri 10-30 | Run `acceptance/` on Launchpad; fix failures | Fixes; 4.A7 sweep | Launch Orbit (4.P2); draft `pod-k-shared` update | |
-| Sat 10-31 | Cross-team run, both directions (4.T4) | 4.A6 Schemathesis | 4.U4 report notes; merge pod update | Needs Team 21's Phase 4 endpoints live |
+| Mon 10-26 | Start drafts (4.D1, 4.A2) | Post the submission model's fields; start 4.A1 | Kickoff; settle console login (4.U1) | Email Team 21: tester, freeze, shared test file, Q1 to Q10 |
+| Tue 10-27 | Drafts PR open | 4.A1 merged (Quincy reviews the migration the same day); start statuses (4.D2) | 4.U2 pages on existing endpoints | |
+| Wed 10-28 | Drafts merged; start submission (4.D3, 4.A3) | Statuses; start filters and order (4.D5, 4.A5) | 4.U2 | Team 21's answers to Q1 to Q10 due; otherwise we build our proposals and say so in the report |
+| Thu 10-29 | Submission and close (4.D4, 4.A4) merged; acceptance cases | Statuses, filters, and order merged; acceptance cases | 4.P1 reviews; 4.U3 report screens | |
+| Fri 10-30 | Run `acceptance/` on Launchpad; fix failures | Privacy sweep (4.A7); start Schemathesis (4.A6) | Launch Orbit (4.P2); draft `pod-k-shared` update | |
+| Sat 10-31 | Cross-team run, both directions (4.T4) | Schemathesis; fixes | 4.U4 report notes; merge pod update | Needs Team 21's Phase 4 endpoints live |
 | Sun 11-01 | Report | Report | Report; submit | |
 
 **Dependencies outside our control:** the cross-team run (4.T4) needs Team 21's Phase 4
