@@ -1,9 +1,12 @@
 from django.db import models
 
 
-class FixedClock(models.Model):
-    """The fixed test time, if any (REQ-16). At most one row, with pk=1; while it
-    exists, core.clock.now() returns `at` instead of real time. Stored in the
-    database so every worker and instance sees the same clock."""
+class TesterSession(models.Model):
+    """One tester session (the course's cross-team testing interface): created by
+    POST /tester/test/setup, run once, and its report kept for lookup."""
 
-    at = models.DateTimeField()
+    session_id = models.CharField(max_length=200, primary_key=True)
+    target_url = models.CharField(max_length=2000)
+    state = models.CharField(max_length=10, default="ready")  # ready, running, finished
+    report = models.JSONField(null=True)
+    created_at = models.DateTimeField()
