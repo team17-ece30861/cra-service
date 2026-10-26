@@ -14,8 +14,8 @@ Phase 4 is due **Sunday 2026-11-01**. Phase 3 is done and live on both deploymen
 **Phase 4 is split by feature** (Quincy, 2026-10-26): each person writes the rule in
 `core/domain/`, the endpoint, and the tests for their own features. Richard builds the
 reports end to end: **drafts, recording a submission, and closing a ticket**. Ann has the
-submission table, statuses, list filters, the privacy sweep, Schemathesis, and the
-contract freeze. See [Who builds what in Phase 4](../plan.md#who-builds-what-in-phase-4)
+submission table, statuses, list filters, the privacy sweep, and the
+contract freeze; Quincy has Schemathesis. See [Who builds what in Phase 4](../plan.md#who-builds-what-in-phase-4)
 and the day-by-day [schedule](../plan.md#proposed-schedule). Richard built the Phase 3 API
 (PR #7), so this is familiar ground. Quincy is building a web console on top of the API
 and reviews every PR.

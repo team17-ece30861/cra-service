@@ -38,9 +38,7 @@ API and reviews every PR.
    **Target: everything above merged by Thu 10-29**, so Launchpad can be tested Friday.
 6. **4.A7 (Fri):** reporter confidentiality sweep (AC-16) across lists, drafts, audit
    entries, error bodies, and logs.
-7. **4.A6 (Fri to Sat):** Schemathesis, at least 500 generated malformed requests, no 5xx,
-   every error problem+json, data unchanged.
-8. **3.9: contract freeze PR in `pod-k-shared`.** Bump `openapi.yaml`'s `info.version` from
+7. **3.9: contract freeze PR in `pod-k-shared`.** Bump `openapi.yaml`'s `info.version` from
    `0.1.0-draft`, record the agreed date in `info.description`, and get one approval from
    Team 21. Then mirror it into this repo's `openapi.yaml` and
    `pod-k-shared/team17/tester/openapi.yaml`. Quincy's email to Team 21 tells them the PR
