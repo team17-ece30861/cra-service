@@ -2,7 +2,7 @@
 
 The working plan for Team 17's CRA reporting service: who owns what, what's done, and
 what's next. It's written for teammates and their coding agents (Claude Code and Codex).
-Last updated 2026-10-17.
+Last updated 2026-10-26.
 
 **Agents: read this first.** Then read [`CLAUDE.md`](../CLAUDE.md) (repository rules; they
 apply to every agent, not just Claude), [spec.md](spec.md) (the agreed behavior),
@@ -45,17 +45,19 @@ same spec. We test their deployment and they test ours.
 - Changing someone else's area is fine when it unblocks you. Say so in the PR description
   and ask that owner to review.
 
-## Where we are (2026-10-17)
+## Where we are (2026-10-26)
 
 | Item | Status |
 |---|---|
-| Platform layer: auth, errors, timestamps, clock, reset, logging, CI, deploys (PRs #1 to #4) | Done, merged, live on Launchpad and Orbit |
-| Phase 3 ticket API: intake, get, list (unfiltered), update, triage, audit read, deadlines, unsubmitted statuses | Merged (PR #7), live on Launchpad and Orbit, and the acceptance suite passes 55/55 on both |
-| PRs #5 (deadlines) and #6 (triage) | Merged as part of PR #7 |
-| Portable acceptance harness, Phase 3 cases (AC-01 to 05, 14, 15, 17) | On `main`. Passed over HTTP against a local server (54 passed, 1 skipped). Not yet run against a deployment. |
-| Phase 4 reporting workflow | Not started |
-| Phase 3 due date | **2026-10-18.** PR #7 is still a draft and nothing ticket-related is deployed, so 3.1 to 3.6 are the critical path. |
-| Phase 4 due date | Not announced yet |
+| Platform layer: auth, errors, timestamps, clock, reset, logging, CI, deploys | Done, live on Launchpad and Orbit |
+| Phase 3 ticket API: intake, get, list (unfiltered), update, triage, audit read, deadlines, unsubmitted statuses | Done. Acceptance suite 55/55 on Launchpad and Orbit (`262fedf`) |
+| Course testing interface: `/test/setup`, `/test/report`, and our deployed tester at `/tester` (PR #63) | Done 2026-10-18 |
+| Phase 3 report | Was due 2026-10-18. Answers in [reports/phase3.md](reports/phase3.md) |
+| Phase 3 pod items carried into Phase 4 | Contract freeze (3.9), Team 21's check of the shared test file (3.10), and Team 21 running their tester against Orbit (3.8) are all still open |
+| Phase 4 reporting workflow | Not started. No Phase 4 code on `main` as of 2026-10-26 |
+| Console (4.U1 to U4) | Not started. Moved up from Phase 5 (task 5.3) on 2026-10-26 |
+| **Phase 4 due date** | **Sunday 2026-11-01** (time of day to confirm) |
+| Phase 4 report questions | Not received yet (2026-10-26) |
 | Phase 5 due date | Not announced yet |
 
 ## Phase 3: deployed service with intake, triage, and deadlines
@@ -73,11 +75,11 @@ deployments.
 | 3.4 | Mark PR #7 ready, merge. Launchpad deploys automatically. Close #5 and #6. | Quincy | Done 2026-10-17: merged as `6548e49`; Launchpad runs it; #5 and #6 auto-closed as merged |
 | 3.5 | Run `acceptance/` against Launchpad. Fix anything that fails. | Quincy's agent | Done 2026-10-17: 55/55 passed on Launchpad (`00bda4a`). See `docs/phase3.md`. |
 | 3.6 | Launch to Orbit (Actions → Launch to Orbit). Re-run `acceptance/` against Orbit, including the plain-HTTP probe (AC-15). Record the image SHA. | Quincy runs the launch, Richard runs the suite | Done 2026-10-18: Orbit runs `262fedf`; 55/55 passed. See `docs/phase3.md`. |
-| 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | Partly done 2026-10-18: `pod-k-shared` created with our URL; Team 21's token sent via OneDrive. Class registry entry still to do. |
-| 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Team 17 runs suites only against Launchpad and Team 21's deployment, never Orbit (`pod-k-shared` README). Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Blocked on 3.6 |
+| 3.7 | Put the Orbit URL in the shared pod file. Send Team 21 the `prod-api-token-team21` token privately. Add or confirm the class registry entry. | Quincy | Done: pod URL and Team 21's token on 2026-10-18; class registry row added 2026-10-17 (Eastern). |
+| 3.8 | Get Team 21's base URL and token. Run our suite against them; have them run theirs against Orbit. Team 17 runs suites only against Launchpad and Team 21's deployment, never Orbit (`pod-k-shared` README). Classify every mismatch as our bug, their bug, or a spec gap. | Richard | Half done: our tester passed 55/55 against Team 21 on 2026-10-18 (Eastern). Team 21 hasn't run theirs against Orbit yet; their tester is in `pod-k-shared/team21/` since 2026-10-19. |
 | 3.9 | Freeze the `phase-3` operations in `openapi.yaml` with Team 21 (bump `info.version`, note the agreed date). | Ann | To do. The contract and pod spec are now published in `pod-k-shared` (PR #10); freeze that copy, then mirror it here. |
 | 3.10 | Start the shared test file with Team 21: Model D inputs and hand-calculated outputs, each checked by the other team. `tests/fixtures/phase3_model_d.json` is a starting point. | Richard (finished by Quincy's agent) | E1 to E8 plus a runner proposed in `pod-k-shared` PR #8 (2026-10-18). Waiting on Team 21's check and approval. |
-| 3.11 | Phase 3 report (see [Report work](#report-work)). | Everyone | To do |
+| 3.11 | Phase 3 report (see [Report work](#report-work)). | Everyone | Done: answers in [reports/phase3.md](reports/phase3.md) |
 
 **Done when** both deployments pass the shared Phase 3 suite and the report records the
 runs.
@@ -89,8 +91,27 @@ listing filters, audit log, reporter confidentiality (REQ-05 to 11, REQ-15). Val
 AC-06 to 13 and AC-16, plus the first full cross-team run. A scripted incident (submit,
 triage, three submissions, close) passes against Team 21's deployment.
 
-Domain work comes first so the API can wire it in. Agree on function signatures in the
-first PR description before building on them.
+**Due Sunday 2026-11-01.** Domain work comes first so the API can wire it in. Agree on
+function signatures in the first PR description before building on them.
+
+### Proposed schedule
+
+All dates are proposals from the 2026-10-26 kickoff, not agreed yet. Owners: say if a date
+doesn't work for you.
+
+| Day | Domain (Richard) | API (Ann) | Platform and console (Quincy) | Pod |
+|---|---|---|---|---|
+| Mon 10-26 | Post function signatures for 4.D1 to D5 in a PR description | Start 4.A1 (submission model) | Kickoff; settle console login (4.U1) | Email Team 21: freeze, shared test file, Q2 to Q9, the 404 sequence |
+| Tue 10-27 | 4.D1 to D5 PRs open | 4.A1 merged; start 4.A5 filters | 4.U2 pages on existing endpoints | |
+| Wed 10-28 | 4.D1 to D5 merged; start 4.T1 | 4.A2 to A4 against Richard's signatures | 4.U2 | Ask Team 21 to answer Q2 to Q9 by today; otherwise we build our proposals and say so in the report |
+| Thu 10-29 | 4.T1 acceptance cases | 4.A2 to A5 merged (Launchpad deploys) | 4.P1 reviews; 4.U3 report screens | |
+| Fri 10-30 | Run `acceptance/` on Launchpad; fix failures | Fixes; 4.A7 sweep | Launch Orbit (4.P2); draft `pod-k-shared` update | |
+| Sat 10-31 | Cross-team run, both directions (4.T4) | 4.A6 Schemathesis | 4.U4 report notes; merge pod update | Needs Team 21's Phase 4 endpoints live |
+| Sun 11-01 | Report | Report | Report; submit | |
+
+**Dependencies outside our control:** the cross-team run (4.T4) needs Team 21's Phase 4
+endpoints live, and it needs Quincy to launch Orbit first (4.P2). If Team 21 isn't ready by
+Saturday, the report records a one-way run and says why.
 
 ### Domain Logic and Testing (Richard)
 
@@ -127,9 +148,32 @@ first PR description before building on them.
 |---|---|---|
 | 4.P1 | Review Phase 4 PRs for platform rules: clock, one transaction per request, rollback on failure, no request bodies in logs, error precedence. | Ongoing |
 | 4.P2 | Release each merged increment to Orbit before cross-team runs, and record the image SHA used. | Ongoing |
-| 4.P3 | Share the "Open interpretations" table in [platform.md](platform.md#known-limitations) with Team 21 so both services agree on edge cases (reset keeps the clock, 405 precedence, 413 on bodyless routes, and so on). | To do |
+| 4.P3 | Share the "Open interpretations" table in [platform.md](platform.md#known-limitations) with Team 21 so both services agree on edge cases (reset keeps the clock, 405 precedence, 413 on bodyless routes, and so on). | Done 2026-10-18: covered by the gray-areas tables in `pod-k-shared/team17/TESTING.md` |
 | 4.P4 | Automated alerting, promised in Phase 2 (Q7.3) but missing: a Cloud Monitoring alert on 5xx responses (from the request logs) for both deployments. Weigh an uptime check against cost and its effect on spin-up times. | Quincy | To do |
 | 4.P5 | Measure AC-18 early: load 1,000 tickets on Launchpad and time 200 mixed requests one at a time (p95 must be at most 1 s), with warm-up handled per `team17/TESTING.md`. Promised in the Phase 3 report (Q7.3) as an early check of the Phase 5 target; the formal run stays task 5.1. | Quincy (hosting), Richard (load script) | To do |
+
+### Console (Quincy)
+
+Our own intake channel (task 5.3), moved up to Phase 4: web pages for a manufacturer's
+security team to submit, triage, and follow tickets through to closure. It isn't part of
+the shared spec, so it doesn't change the contract or need Team 21's approval. Decided on
+2026-10-26 (see [decisions.md](decisions.md)):
+
+- **Who it's for:** the manufacturer's security team (an operations console), not a public
+  reporter form.
+- **Who builds it:** Quincy. Ann and Richard stay on the graded API and domain work.
+- **Where it lives:** server-rendered pages in the same Django service, so there's no second
+  deployment. The API token stays on the server and never reaches the browser.
+- **Rules it follows:** the same rules as the API, with no business rules in the pages;
+  reporter details only on the single-ticket page; the signed-in person's name sent as
+  `X-Actor` on every change.
+
+| # | Task | Status |
+|---|---|---|
+| 4.U1 | Decide how people sign in and how that becomes `X-Actor` (touches auth, so it's a guided decision). Options include per-person Django accounts, a shared password plus a name prompt, or Google sign-in in front of Cloud Run. Not decided. | To do |
+| 4.U2 | Pages on the existing endpoints: ticket list (state, report statuses, time until the next deadline), single ticket with audit trail, submit a ticket, triage. | To do |
+| 4.U3 | Report pages: each draft with its missing fields highlighted, record a submission, close a ticket. Show "not available yet" until 4.A2 to A4 are live. | Blocked on 4.A2 to A4 |
+| 4.U4 | UX notes and screenshots for the Phase 4 report: who it's for, the main flows, and the design decisions. | To do |
 
 ## Phase 5: performance, persistence, intake, final version
 
@@ -141,7 +185,7 @@ against Team 21 before each deadline.
 |---|---|---|---|
 | 5.1 | AC-18 performance on Orbit: load 1,000 tickets, then 200 mixed requests one at a time, p95 ≤ 1 s. Orbit scales to zero and Neon suspends when idle, so warm both with a few requests before measuring and report cold-start numbers separately. If p95 still fails, check query counts on `GET /tickets` first, then consider a temporary minimum instance for the evaluation window. | Quincy (hosting), Richard (load script) | To do |
 | 5.2 | AC-19 restart demo: create a ticket with a recorded report, force a new revision (redeploy, or `gcloud run services update` with a harmless env change), read the ticket, report, and audit log back unchanged. Screen-record it. | Quincy | To do |
-| 5.3 | Our own intake channel (team's choice, outside the shared spec). If behind, cut it to "clients call `POST /tickets` directly" (Q6.4). | Unassigned. Decide at the end of Phase 4. | To do |
+| 5.3 | Our own intake channel (team's choice, outside the shared spec). If behind, cut it to "clients call `POST /tickets` directly" (Q6.4). | Quincy | Moved up to Phase 4 as the console (4.U1 to U4) on 2026-10-26. Phase 5 finishes it. |
 | 5.4 | Full suite (AC-01 to 18) runs in CI on every change, and against Team 21 before each deadline. | Richard | To do |
 | 5.5 | Short operations guide: deploy, roll back, rotate tokens, lift the spend cap, read logs. Mostly a trim of [platform.md](platform.md). | Quincy | To do |
 | 5.6 | Final spec version agreed with Team 21; final cross-team results recorded. | Ann (spec), Richard (results) | To do |
@@ -151,6 +195,9 @@ against Team 21 before each deadline.
 From Q6.4, cut in this order: (1) intake becomes direct API calls, (2) replace the
 REQ-17 target with a measured baseline, (3) drop listing filters and ordering (REQ-10).
 REQ-01 to 09 and REQ-11 are never cut.
+
+The console (4.U1 to U4) is that intake channel, so it's the first thing cut: if the
+Phase 4 API work slips, Quincy pauses the console and helps unblock it.
 
 ## Open questions for the pod
 
@@ -173,6 +220,10 @@ contract changes.
 ## Report work
 
 Each phase report reuses the shared Sections 1 to 6 and updates our own Sections 7 to 9.
+
+- **Phase 4 report:** due with Phase 4 on 2026-11-01. The questions haven't been
+  released yet (2026-10-26). Save answers to `docs/reports/phase4.md`, building on
+  [reports/phase3.md](reports/phase3.md).
 
 - **Q7 and Q8 are out of date.** The Phase 2 report says FastAPI, SQLite, and
   SQLAlchemy. We built Django + Django Ninja on Cloud Run with Neon Postgres. Rewrite
