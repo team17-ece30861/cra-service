@@ -1,53 +1,48 @@
 # Handoff: Quincy (Platform and Hosting)
 
-**Last updated:** 2026-10-18 by Claude Code (Quincy's agent).
+**Last updated:** 2026-10-26 by Claude Code (Quincy's agent).
 
 ## Where things stand
 
-Phase 3 is due **2026-10-18**. The Phase 3 code is merged (PR #7, `6548e49`) and live on
-both deployments: Launchpad and Orbit (`262fedf`, launched by Quincy at 00:45 UTC). The
-acceptance suite passed 55/55 on each. Orbit was then reset and returned to real time
-(00:55 UTC). The shared pod repo `team17-ece30861/pod-k-shared` exists (private) with our
-base URL, the pod rules, and a status chart (operations and milestones by team) in its
-README.
+Phase 4 is due **Sunday 2026-11-01**. The report questions aren't out yet. Phase 3 is done:
+the ticket API and the course testing interface (`/test/setup`, `/test/report`, `/tester`)
+are live on Launchpad and Orbit (`262fedf`). No Phase 4 code exists yet. The proposed
+day-by-day schedule is in [`docs/plan.md`](../plan.md#proposed-schedule).
+
+On 2026-10-26 Quincy moved our own intake channel up from Phase 5 as a console for a
+manufacturer's security team (tasks 4.U1 to U4, see `docs/decisions.md`). Quincy builds
+it; Ann and Richard stay on the API and domain work.
 
 ## In progress
 
-- No open branches in `cra-service`.
-- `pod-k-shared` invites are pending for `richardlin-btfu`, `zuo30`, and `Becker42`. Only
-  one Team 21 member is invited so far.
+- Branch `docs/phase4-kickoff`: this plan refresh, the decision entry, and this file.
+- Kickoff drafts given in chat on 2026-10-26, not yet sent: an email to Team 21, and
+  messages to Ann and Richard.
 
 ## Next up
 
-1. **Task 3.7:** find out what the "class registry entry" is (likely on the course site)
-   and add it. Team 21's token was sent through OneDrive on 2026-10-18 (marked Done in
-   the `pod-k-shared` status chart). Delete the OneDrive file once Team 21 confirms they
-   saved it. The staff token (`prod-api-token-staff`) goes to the course staff the same
-   way when they review.
-2. Decide whether to invite the rest of Team 21 (Aashik, Andrew, Conrad) to `pod-k-shared`,
-   or leave that to Ryan.
-3. **Task 3.11:** the Phase 3 report. Q7 and Q8 still describe FastAPI and SQLite; the
-   evidence for the rewrite is in `docs/phase3.md` and `docs/decisions.md`.
-4. Phase 4 platform tasks 4.P1 to 4.P3.
+1. **4.U1:** decide how people sign in to the console and how that becomes `X-Actor`.
+   It's a guided decision because it touches auth.
+2. **4.U2:** console pages on the existing endpoints.
+3. **4.P1:** review Ann's and Richard's Phase 4 PRs as they arrive.
+4. **4.P2:** launch Orbit once 4.A2 to A5 pass on Launchpad (proposed Fri 10-30), then
+   merge the `pod-k-shared` update.
+5. 4.P4 (5xx alert) and 4.P5 (early performance check) if time allows. Both were promised
+   in the Phase 3 report.
 
 ## Waiting on
 
-- **Ann:** the contract freeze with Team 21 (3.9, deadline-critical) and Ann's review of the
-  merged code (3.1). Ann's handoff is in `ann.md`.
-- **Richard:** cross-team runs (3.8) and the shared test file (3.10).
-- **Team 21:** confirming they saved the token, their base URL in `pod-k-shared`, a token
-  for us, and accepting the invite.
+- **Team 21:** the contract freeze (3.9), their check of `pod-k-shared` PR #8 (open since
+  2026-10-18), answers to Q2 to Q9, running their tester against Orbit, and their Phase 4
+  endpoints for the cross-team run.
+- **Ann:** 4.A1 to A8. Ann's handoff file still has the 2026-10-18 version.
+- **Richard:** function signatures for 4.D1 to D5, then the rules and 4.T1. Richard's
+  handoff file still has the 2026-10-18 version.
 
 ## Notes for the next session
-
-- Class registry (Google Sheet) values are ready, in chat on 2026-10-18: system URL, tester
-  link (`pod-k-shared/team17/tester`), spec link, and access notes. The registry entry's
-  date goes into report Q2.2.
 
 - Claude Code's safety check merges a code PR only after Quincy names it in their own message
   ("merge #7"). Docs-only PRs can be merged by the agent.
 - Team 17 never runs suites against Orbit; use Launchpad.
-- Launchpad's test clock is still frozen from the 22:04 UTC run.
-- The Field Guide page (https://claude.ai/artifact/GjzNLxnmFqXwJhzm2tu1x5) is private
-  until Quincy shares it, and its Phase 3 table is a snapshot from the evening of
-  2026-10-17.
+- Team 21 committed their tester straight to `pod-k-shared` `main` on 2026-10-19,
+  including `__pycache__` files. It's harmless, but worth a gentle note to them.
