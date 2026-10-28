@@ -125,15 +125,16 @@ person tests their own features, so code review (Quincy, 4.P1) is the second pai
 ### Proposed schedule
 
 Quincy approved these dates on 2026-10-26; updated the same day for the split by feature.
+Quincy's column revised on 2026-10-27: design standards and sign-in Wednesday, main pages Thursday.
 Owners: say if a date doesn't work for you.
 
 | Day | Richard (drafts, submission, close) | Ann (table, statuses, lists, checks) | Platform and console (Quincy) | Pod |
 |---|---|---|---|---|
-| Mon 10-26 | Start drafts (4.D1, 4.A2) | Post the submission model's fields; start 4.A1 | Kickoff; settle console login (4.U1) | Email Team 21: tester, freeze, shared test file, Q1 to Q10 |
-| Tue 10-27 | Drafts PR open | 4.A1 merged (Quincy reviews the migration the same day); start statuses (4.D2) | 4.U2 pages on existing endpoints | |
-| Wed 10-28 | Drafts merged; start submission (4.D3, 4.A3) | Statuses; start filters and order (4.D5, 4.A5) | 4.U2 | |
-| Thu 10-29 | Submission and close (4.D4, 4.A4) merged; acceptance cases | Statuses, filters, and order merged; acceptance cases | 4.P1 reviews; 4.U3 report screens | Team 21's answers due noon ET; otherwise we build our proposals and say so in the report (Q7 and Q9 change the contract, so they wait for approval) |
-| Fri 10-30 | Run `acceptance/` on Launchpad; fix failures | Privacy sweep (4.A7); fixes | Schemathesis (4.A6) locally; launch Orbit (4.P2); draft `pod-k-shared` update | |
+| Mon 10-26 | Start drafts (4.D1, 4.A2) | Post the submission model's fields; start 4.A1 | Kickoff | Email Team 21: tester, freeze, shared test file, Q1 to Q10 |
+| Tue 10-27 | Drafts PR open | 4.A1 merged (Quincy reviews the migration the same day); start statuses (4.D2) | Team 21 email sent; schedule revised (2026-10-27) | |
+| Wed 10-28 | Drafts merged; start submission (4.D3, 4.A3) | Statuses; start filters and order (4.D5, 4.A5) | Morning: design standards (4.U0). Afternoon: Django sign-in (4.U1) | |
+| Thu 10-29 | Submission and close (4.D4, 4.A4) merged; acceptance cases | Statuses, filters, and order merged; acceptance cases | 4.U2 main pages; 4.P1 reviews | Team 21's answers due noon ET; otherwise we build our proposals and say so in the report (Q7 and Q9 change the contract, so they wait for approval) |
+| Fri 10-30 | Run `acceptance/` on Launchpad; fix failures | Privacy sweep (4.A7); fixes | Schemathesis (4.A6) locally; launch Orbit (4.P2); draft `pod-k-shared` update; 4.U3 report pages if time allows | |
 | Sat 10-31 | Cross-team run, both directions (4.T4) | Fixes | Schemathesis against Launchpad; 4.U4 report notes; merge pod update | Needs Team 21's Phase 4 endpoints live |
 | Sun 11-01 | Report | Report | Report; submit | |
 
@@ -198,7 +199,8 @@ the shared spec, so it doesn't change the contract or need Team 21's approval. D
 
 | # | Task | Status |
 |---|---|---|
-| 4.U1 | Decide how people sign in and how that becomes `X-Actor` (touches auth, so it's a guided decision). Options include per-person Django accounts, a shared password plus a name prompt, or Google sign-in in front of Cloud Run. Not decided. | To do |
+| 4.U0 | Design standards: a short `docs/design.md` (type, colors, spacing, components such as the ticket table, status badge, forms, and buttons, page layout, accessibility, copy voice), referenced from `CLAUDE.md` so every agent building UI follows it. | To do (Wed 10-28) |
+| 4.U1 | Sign-in with Django's built-in accounts: one account per person, Django's login page, and the signed-in username sent as `X-Actor` on every change (decided 2026-10-27; Google sign-in not needed for now). | To do (Wed 10-28) |
 | 4.U2 | Pages on the existing endpoints: ticket list (state, report statuses, time until the next deadline), single ticket with audit trail, submit a ticket, triage. | To do |
 | 4.U3 | Report pages: each draft with its missing fields highlighted, record a submission, close a ticket. Show "not available yet" until 4.A2 to A4 are live. | Blocked on 4.A2 to A4 |
 | 4.U4 | UX notes and screenshots for the Phase 4 report: who it's for, the main flows, and the design decisions. | To do |
