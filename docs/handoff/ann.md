@@ -48,11 +48,15 @@ API and reviews every PR.
 
 - The contract is still `0.1.0-draft`; nothing is frozen and Phase 4 operations aren't
   agreed.
-- Quincy is sending Team 21 an email on 2026-10-26 with open questions Q1 to Q10
-  (`docs/plan.md`), asking for answers by **Wed 10-28**. For any still open, build the
+- Quincy is sending Team 21 an email on 2026-10-27 with open questions Q1 to Q10
+  (`docs/plan.md`), asking for answers by **noon Thu 10-29**. For any still open, build the
   proposal listed in the plan and note it in the PR. Q2 (list tie-break), Q4 (whether a
-  later date change can flip a submitted report to late), and Q6 (a no-change PATCH still
-  logs an audit entry) affect Ann's features directly.
+  later date change can flip a submitted report to late), and Q6 affect Ann's features
+  directly.
+- **Q6 changed on 2026-10-27** (Quincy and the team): a PATCH that changes nothing should
+  succeed but add **no** audit entry. Today's code (`_audit` in `core/tickets.py`) adds one
+  with an empty `changes` list, so the PATCH path needs to skip the entry when nothing
+  changed. This changes the AC-12 counts.
 - When a question is answered, log it in `docs/decisions.md`, remove it from the plan's
   table, and update `openapi.yaml` (all three copies) if the contract changes.
 
