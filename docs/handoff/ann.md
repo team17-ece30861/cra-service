@@ -52,7 +52,8 @@ API and reviews every PR.
   (`docs/plan.md`), asking for answers by **noon Thu 10-29**. For any still open, build the
   proposal listed in the plan and note it in the PR. Q2 (list tie-break), Q4 (whether a
   later date change can flip a submitted report to late), and Q6 affect Ann's features
-  directly.
+  directly. Q4's proposal (2026-10-27): yes, recalculate, so a later date edit can flip a
+  report to `submitted_late`.
 - **Q6 changed on 2026-10-27** (Quincy and the team): a PATCH that changes nothing should
   succeed but add **no** audit entry. Today's code (`_audit` in `core/tickets.py`) adds one
   with an empty `changes` list, so the PATCH path needs to skip the entry when nothing

@@ -1,6 +1,6 @@
 # Handoff: Quincy (Platform and Hosting)
 
-**Last updated:** 2026-10-26 by Claude Code (Quincy's agent), after the Phase 4 kickoff.
+**Last updated:** 2026-10-27 by Claude Code (Quincy's agent), after sending the Team 21 email.
 
 ## Where things stand
 
@@ -24,7 +24,7 @@ Decided at the kickoff (2026-10-26):
   the 404's request sequence with Team 21 in Phase 4, so the Phase 4 report should say we
   dropped it and why.
 
-## Alignment with Team 21 (as of 2026-10-26)
+## Alignment with Team 21 (as of 2026-10-27)
 
 - **Testing has only gone one way.** Our tester passed 55/55 against them on 2026-10-18
   (Eastern). Their tester has never got past our token check: three 401s on 2026-10-19
@@ -41,51 +41,14 @@ Decided at the kickoff (2026-10-26):
 
 ## Next up
 
-1. **Send the Team 21 email (today).** To Ryan Becker, cc the rest of Team 21 (Aashik,
-   Andrew, Conrad). Then send the Ann and Richard messages (below). Draft:
-
-   > Subject: Phase 4 kickoff: testing us, contract freeze, shared tests, spec questions
-   >
-   > Hi all, with Phase 4 due Sunday, here's what we'd like to settle early in the week:
-   >
-   > 1. **Run your tester against our Orbit deployment.** Your runs on Oct 18 got 401
-   >    because the tester wasn't sending the token we sent you. Add it as a bearer
-   >    token and run whenever you like, then send us the results. Testing has only
-   >    gone one way so far.
-   > 2. **Freeze the Phase 3 operations** in `pod-k-shared/openapi.yaml`. Ann will open a
-   >    PR that bumps the version; it needs one approval from your team.
-   > 3. **Shared test file (pod-k-shared PR #8):** Model D examples E1 to E8 with a
-   >    runner. Could someone check the expected values and approve?
-   > 4. **Spec questions.** We'd like answers by **Wednesday**. For anything still open
-   >    then, we'll build our proposal and note it in the report.
-   >    - Q1: triage of `invalid`/`not_actively_exploited` that includes `aware_at`. We
-   >      accept it and ignore the time.
-   >    - Q2: list order on equal or null `next_due_at`. Proposal: `received_at`
-   >      ascending, then `id`.
-   >    - Q3: drafts for a ticket that never became reportable. Proposal: 409. A ticket
-   >      closed as `resolved` keeps returning its locked reports.
-   >    - Q4: after a report is submitted, can changing `aware_at` or `fix.available_at`
-   >      move its due time and flip it to `submitted_late`? What do you think?
-   >    - Q5: must `submitted_at` be no earlier than the previous report's? Proposal: no
-   >      extra rule.
-   >    - Q6: a PATCH that changes nothing. Proposal: it succeeds but adds no audit
-   >      entry (changed 2026-10-27).
-   >    - Q7: `POST /tickets` with a future `fix.available_at`. Proposal: add a 422.
-   >    - Q8: the CRA starts the final-report clock at a corrective *or mitigating*
-   >      measure. Proposal: define `fix.available_at` as the first of either (wording
-   >      change only).
-   >    - Q9: the early warning requires `member_states` and `affected_versions`, which
-   >      the CRA asks for only "where applicable". Keep it strict, or allow "unknown"?
-   >    - Q10: your `/test/setup` requires `X-Actor`; ours doesn't, and the course
-   >      interface doesn't mention it. Proposal: not required. Our tester sends it
-   >      either way.
-   >
-   > Thanks! Team 17
-
-   Messages for Ann and Richard: explain the split by feature and point each at
-   `docs/plan.md` (who builds what, and the schedule) and their own handoff file. Ask Ann
-   to post the submission model's fields today, since Richard's submission work builds on
-   it. Target for both: features merged by Thursday.
+1. **Team 21 email: sent 2026-10-27** to Ryan Becker, cc Aashik, Andrew, Conrad. It asks:
+   their tester to send our token and run against Orbit; approval of Ann's freeze PR
+   (coming); a check of `pod-k-shared` PR #8; their Phase 4 endpoints and tests timeline
+   (we launch Orbit Fri 10-30, cross-team run Sat 10-31); and answers to 10 questions by
+   **noon Thu 10-29**, or we go ahead with our proposals. Email items are numbered 1 to 13:
+   items 4 to 13 are plan Q1 to Q10 (item N = Q(N-3)), so "7: agree" means Q4. Items 10
+   and 12 (Q7, Q9) change the contract, so they wait for Team 21's approval. Watch for
+   replies and log answers in `docs/decisions.md`.
 2. **4.U1: decide how people sign in to the console** and how that becomes `X-Actor`.
    It's a guided decision because it touches auth. Options in `docs/plan.md`: per-person
    Django accounts, a shared password plus a name prompt, or Google sign-in in front of
@@ -108,7 +71,7 @@ Decided at the kickoff (2026-10-26):
 
 ## Waiting on
 
-- **Team 21:** everything in the email above, plus their Phase 4 endpoints for the
+- **Team 21:** replies to the 2026-10-27 email, plus their Phase 4 endpoints for the
   cross-team run on Sat 10-31.
 - **Ann:** the submission model's fields today and 4.A1 merged Tuesday (review the
   migration the same day); statuses, filters, and order by Thursday; the freeze PR (3.9);
