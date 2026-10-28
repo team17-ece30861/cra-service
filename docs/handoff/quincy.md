@@ -68,8 +68,8 @@ Decided at the kickoff (2026-10-26):
    >      move its due time and flip it to `submitted_late`? What do you think?
    >    - Q5: must `submitted_at` be no earlier than the previous report's? Proposal: no
    >      extra rule.
-   >    - Q6: a PATCH that changes nothing. Proposal: still one `updated` audit entry,
-   >      with an empty `changes` list.
+   >    - Q6: a PATCH that changes nothing. Proposal: it succeeds but adds no audit
+   >      entry (changed 2026-10-27).
    >    - Q7: `POST /tickets` with a future `fix.available_at`. Proposal: add a 422.
    >    - Q8: the CRA starts the final-report clock at a corrective *or mitigating*
    >      measure. Proposal: define `fix.available_at` as the first of either (wording
