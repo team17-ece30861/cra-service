@@ -48,17 +48,19 @@ and reviews every PR.
 
 - **Testing has only gone one way.** Our tester passed 55/55 against Team 21 on 2026-10-18
   (Eastern). Their tester has never got past our token check (401s, because it didn't
-  send the token we issued). Quincy's email (being sent 2026-10-26) asks them to fix that
+  send the token we issued). Quincy's email (sent 2026-10-27) asks them to fix that
   and run against Orbit.
 - **Shared test file:** `pod-k-shared` PR #8 (E1 to E8 plus runner) is still waiting on
   Team 21's check. Fill in `checked_by` once they approve.
 - **Testing-interface mismatch (Q10):** Team 21's `/test/setup` requires `X-Actor`; ours
   doesn't. Our tester sends it anyway (PR #64), so this doesn't block our runs.
 - **Open questions Q1 to Q10** (`docs/plan.md`) are going to Team 21 in Quincy's email
-  (2026-10-26), with a Wed 10-28 deadline. Q3 (drafts for never-reportable tickets), Q5
+  (sent 2026-10-27), with a noon Thu 10-29 deadline. Q3 (drafts for never-reportable tickets), Q5
   (submission order of `submitted_at`), and Q9 (early-warning required fields) change
   Richard's features. If one is still open when you build, use the plan's proposal and
-  note it in the PR.
+  note it in the PR. **Exception, Q9:** the proposal is to allow "unknown" for the early
+  warning's countries and versions, but that changes the contract, so build it **strict**
+  (as the spec says today) until Team 21 approves.
 - Quincy isn't pursuing the one-off 404 seen in Team 21's system on 2026-10-18.
 
 ## Waiting on
