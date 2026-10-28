@@ -49,11 +49,11 @@ Decided at the kickoff (2026-10-26):
    items 4 to 13 are plan Q1 to Q10 (item N = Q(N-3)), so "7: agree" means Q4. Items 10
    and 12 (Q7, Q9) change the contract, so they wait for Team 21's approval. Watch for
    replies and log answers in `docs/decisions.md`.
-2. **4.U1: decide how people sign in to the console** and how that becomes `X-Actor`.
-   It's a guided decision because it touches auth. Options in `docs/plan.md`: per-person
-   Django accounts, a shared password plus a name prompt, or Google sign-in in front of
-   Cloud Run. Also pick a name for the console (offer two or three options).
-3. **4.U2:** console pages on the existing endpoints: ticket list (state, report statuses,
+2. **Wed 10-28 morning, 4.U0: design standards** in `docs/design.md`, referenced from
+   `CLAUDE.md`. Afternoon, **4.U1: Django sign-in** (decided 2026-10-27): built-in
+   accounts, one per person, username sent as `X-Actor`. Also pick a name for the console
+   (offer two or three options).
+3. **Thu 10-29, 4.U2:** console pages on the existing endpoints: ticket list (state, report statuses,
    time until the next deadline), single ticket with audit trail, submit, triage.
    Server-rendered in the same Django service; the API token stays on the server; reporter
    details only on the single-ticket page.
