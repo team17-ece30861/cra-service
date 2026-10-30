@@ -146,7 +146,7 @@ Saturday, the report records a one-way run and says why.
 
 | # | Task | Covers | Status |
 |---|---|---|---|
-| 4.D1 | `core/domain/drafts.py`: for a report type, ticket fields, ticket ID, and `aware_at`, return the draft `content` and `missing_fields` exactly as Model C says. Never include reporter fields. Unit tests that fill fields one at a time and check all four drafts at each step. | REQ-07, 15; AC-08 | To do |
+| 4.D1 | `core/domain/drafts.py`: for a report type, ticket fields, ticket ID, and `aware_at`, return the draft `content` and `missing_fields` exactly as Model C says. Never include reporter fields. Unit tests that fill fields one at a time and check all four drafts at each step. | REQ-07, 15; AC-08 | Implemented locally 2026-10-30; domain tests pass. Review/merge pending. The HTTP integration remains 4.A2. |
 | 4.D2 | Extend statuses for submitted reports: `submitted` if `submitted_at` ≤ `due_at`, otherwise `submitted_late`. Include the E6 boundary and a clock moved backward. | REQ-05; AC-06 | To do |
 | 4.D3 | Submission rule: 409 if the ticket isn't `reportable`, the previous report isn't submitted, or this one is already submitted; 422 if required fields are missing or `submitted_at` isn't between `aware_at` and now. 409 is checked before 422. | REQ-08; AC-09 | To do |
 | 4.D4 | Close rule: 409 unless `reportable` with all three reports submitted. | REQ-09; AC-10 | To do |
