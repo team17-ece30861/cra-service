@@ -75,6 +75,42 @@ persistence, audit, and rollback checks in `tests/test_phase3_api.py` and the
 portable cases in `acceptance/cases.py`. See [Phase 3 validation](phase3.md) for
 the requirement mapping, recorded results, and deployment work still pending.
 
+## Phase 4 report draft content
+
+`core.domain.drafts.build_draft` implements Model C's field selection and
+completeness rules for `early_warning`, `notification`, `final_report`, and
+`user_advisory`. Call it with keyword arguments `report_type`, `ticket_id`,
+`aware_at`, and `ticket_fields` (the already validated, nested ticket fields).
+It returns a `DraftResult` with `content` and `missing_fields`.
+
+Content contains `ticket_id` and UTC-to-the-second `aware_at`, plus only the
+nonempty fields allowed for that report type. Nested fields keep their ticket
+structure, such as `product.name` and `mitigations.for_users`. Fix availability
+timestamps are normalized to UTC seconds as well. Required fields that are
+absent, null, empty strings, or empty lists appear in `missing_fields` using
+dotted paths, in Model C row order. Optional fields never block completeness.
+Countries and affected versions remain required for early warnings under the
+published contract; the proposed Q9 relaxation has not been approved.
+
+The function copies selected values individually, so it cannot include reporter
+details or unlisted fields nested inside an allowed object. Building or editing
+the returned draft does not mutate the ticket or any other draft. It reads no
+database or service clock and accepts timezone-aware datetimes. Unknown report
+types raise `ValueError` at this internal boundary; the HTTP caller must map
+unknown client report types to 404 before invoking it.
+
+`tests/test_drafts.py` establishes expected field selections and missing-field
+lists independently from Model C. It checks each required field, incremental
+completion, cleared sections, optional fields, exclusion of reporter/unlisted
+data, UTC normalization, and independence from mutable inputs.
+
+This completes the pure generator portion (4.D1), not the entire AC-08 HTTP
+criterion. The read endpoint (4.A2) must still enforce resource/state checks,
+add status/deadline/submission metadata, and return locked content after a
+submission. Recorded-report storage is Ann's 4.A1; its interface is not yet
+published. This change adds no migration, route, or submission persistence and
+does not mark API or deployed acceptance as passing.
+
 ## Contract documentation gap
 
 The current `openapi.yaml` references REQ-04 and exposes obligation deadlines,
