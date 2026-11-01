@@ -1,4 +1,6 @@
 {% extends "console/shell.html" %}
+{% load static %}
+{% block head %}<link rel="stylesheet" href="{% static 'console/reports.css' %}">{% endblock %}
 {% block title %}{{ t.title }} · Ledger{% endblock %}
 {% block screen_label %}Ticket{% endblock %}
 {% block screen_class %} tk{% endblock %}
@@ -22,8 +24,8 @@
         <button class="btn secondary icon" type="button" id="tk-more" aria-haspopup="menu" aria-expanded="false" aria-controls="tk-menu" aria-label="More actions"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>
         <div class="menu tk-menu" role="menu" id="tk-menu" hidden>
           <button role="menuitem" type="button" data-copy="{{ t.id }}"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy Ticket ID</button>
-          <hr>
-          <button role="menuitem" type="button" class="danger" data-soon="Close Ticket"><svg class="i" aria-hidden="true"><use href="#i-archive"/></svg>Close Ticket…</button>
+          {% if t.state != "closed" %}<hr>
+          <button role="menuitem" type="button" class="danger" data-sheet-open="{% url 'console:close' t.id %}"><svg class="i" aria-hidden="true"><use href="#i-archive"/></svg>Close Ticket…</button>{% endif %}
         </div>
       </div>
     </div>
@@ -37,7 +39,7 @@
     <p class="tk-count"><span class="{% if next.late %}late{% endif %}" data-hms2="{{ next.due_at }}">{{ next.count }}</span><small data-left>{% if next.late %}overdue{% else %}left{% endif %}</small></p>
     <p class="t-footnote muted mono">Due {{ next.due }}{% if next.window %} · {{ next.window.total }} after {{ next.window.since }}{% endif %}</p>
   </div>
-  <button class="btn primary lg" type="button" data-soon="Record {{ next.title }}">Record {{ next.title }}</button>
+  <a class="btn primary lg" href="{% url 'console:record' t.id next.type %}?from=ticket" data-sheet-open>Record {{ next.title }}</a>
 </section>
 {% elif t.state == "received" %}
 <section class="tk-next" aria-label="Triage">
@@ -61,7 +63,7 @@
     <div class="meter{% if c.window.soon %} soon{% endif %}" role="img" aria-label="{{ c.window.left }} left of {{ c.window.total }}" data-meter data-start="{{ c.window.start }}" data-due="{{ c.window.due }}" data-total="{{ c.window.total }}"><i style="width:{{ c.window.pct }}%"></i></div>
     <span class="t-footnote muted num" data-meter-text>{% if c.window.late %}{{ c.window.left }}{% else %}{{ c.window.left }} left of {{ c.window.total }}{% endif %}</span>
     {% endif %}
-    <button class="btn tinted sm r-act" type="button" data-soon="{{ c.view }}">{{ c.view }}</button>
+    <a class="btn tinted sm r-act" href="{% url 'console:report' t.id c.type %}">{{ c.view }}</a>
   </div>
   {% endfor %}
 </div>
@@ -114,3 +116,11 @@
   </div>
 </div>
 {% endblock %}
+{% block sheets %}
+<div class="sheet-layer{% if sheet %} open{% endif %}" id="sheet-layer" data-base="{% url 'console:ticket' t.id %}"{% if not sheet %} hidden{% endif %}>
+  <div class="sheet-scrim" data-close></div>
+  {% include "console/_close_dialog.html" %}
+  {% block more_sheets %}{% endblock %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'console/reports.js' %}"></script>{% endblock %}

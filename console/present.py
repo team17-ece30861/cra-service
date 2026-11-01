@@ -217,6 +217,8 @@ def shell(tickets: list[dict], now: datetime) -> dict:
                 "text": f"{r['action']} · {r['title']}",
                 "hint": r["rel"].replace("in ", "due in ", 1),
                 "soon": r["action"],
+                "id": r["id"],
+                "record": r["report"],
             }
         )
     for g in ("triage",):

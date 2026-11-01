@@ -12,8 +12,9 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods, require_POST
 
-from console import present
+from console import present, present_reports
 from console.api_calls import call_api
+from console.flash import take as take_flash
 from console.mark import MARK_PATH, MARK_VIEWBOX
 from core import clock
 from core.models import FixedClock
@@ -122,6 +123,7 @@ def _shell(request, route: str, tickets: list[dict], now) -> dict:
         "clock_fixed": FixedClock.objects.exists(),
         "username": username,
         "initials": present.initials(username),
+        "flash": take_flash(request),
         **present.shell(tickets, now),
     }
 
@@ -173,21 +175,19 @@ def tickets(request):
     return render(request, "console/tickets.html", context, status=400 if problem else 200)
 
 
-@never_cache
-@signed_in_required
-@require_http_methods(["GET", "HEAD"])
-def ticket(request, ticket_id: str):
-    now = clock.now()
+def ticket_context(request, ticket_id: str, now) -> tuple[dict, bool]:
+    """The ticket page's context, and whether the ticket was found (the shell alone if not).
+    The report views render this page too, under the Close Ticket dialog."""
     everything = call_api(request, "GET", "/tickets")
     shell = _shell(request, "ticket", everything.data if everything.ok else [], now)
     found = call_api(request, "GET", f"/tickets/{ticket_id}")
     if found.status == 404:
-        return render(request, "console/not_found.html", shell, status=404)
+        return shell, False
     data = found.data
     trail = call_api(request, "GET", f"/tickets/{ticket_id}/audit")
     cards = present.report_cards(data, now)
     report = present.next_report(data)
-    context = {
+    return {
         **shell,
         "t": data,
         "state_label": present.STATE_LABEL.get(data["state"], data["state"]),
@@ -200,5 +200,15 @@ def ticket(request, ticket_id: str):
         "next": next((c for c in cards if c["type"] == report), None),
         "cards": cards,
         "audit": present.audit(trail.data if trail.ok else []),
-    }
+        "close": present_reports.close_view(data),
+    }, True
+
+
+@never_cache
+@signed_in_required
+@require_http_methods(["GET", "HEAD"])
+def ticket(request, ticket_id: str):
+    context, found = ticket_context(request, ticket_id, clock.now())
+    if not found:
+        return render(request, "console/not_found.html", context, status=404)
     return render(request, "console/ticket.html", context)
