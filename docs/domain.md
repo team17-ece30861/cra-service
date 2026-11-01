@@ -100,8 +100,8 @@ types raise `ValueError` at this internal boundary; the HTTP caller must map
 unknown client report types to 404 before invoking it.
 
 `tests/test_drafts.py` establishes expected field selections and missing-field
-lists independently from Model C. It checks each required field, incremental
-completion, cleared sections, optional fields, exclusion of reporter/unlisted
+lists from Model C, independently of the code. It checks each required field, incremental
+completion (including one fill order checked against all four drafts), cleared sections, optional fields, exclusion of reporter/unlisted
 data, UTC normalization, and independence from mutable inputs.
 
 This completes the pure generator portion (4.D1), not the entire AC-08 HTTP

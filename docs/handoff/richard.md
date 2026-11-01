@@ -55,6 +55,11 @@ review, releases, and the optional console.
 - Q3 still describes proposed behavior for never-reportable/resolved draft
   reads. Resolve or explicitly document the agreed fallback before the endpoint.
 - Both owners edit `core/tickets.py`; keep increments small.
+- Q5 (must `submitted_at` be no earlier than the previous report's?) affects 4.D3.
+  Proposal: no extra rule beyond "between `aware_at` and now".
+- Expected test values come from `docs/spec.md` or hand calculation, never from the
+  code under test.
+- Launchpad's token is `dev-api-token` in Secret Manager; ask Quincy, never paste it.
 - Team 17 tests on Launchpad with permission; Quincy controls Orbit releases.
 - Preserve the original checkout's local Gradescope draft. Do not mistake its
   old Phase 3 branch for the latest main or overwrite uncommitted work there.

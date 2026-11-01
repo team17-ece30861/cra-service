@@ -188,6 +188,51 @@ def test_model_c_fields_can_be_completed_one_at_a_time(report_type):
         assert _build(report_type, fields).missing_fields == required_fields[position + 1 :]
 
 
+# One fill order for the whole ticket, reporter first, in Model C row order (4.D1).
+FILL_ORDER = [
+    "reporter.name",
+    "reporter.contact",
+    "source",
+    "title",
+    "description",
+    "product.manufacturer",
+    "product.name",
+    "product.affected_versions",
+    "member_states",
+    "vulnerability.cve_id",
+    "vulnerability.description",
+    "exploit.description",
+    "mitigations.taken",
+    "mitigations.for_users",
+    "sensitivity",
+    "severity",
+    "impact",
+    "malicious_actor",
+    "fix.available_at",
+    "fix.description",
+    "fix.fixed_versions",
+]
+
+
+def test_filling_one_field_at_a_time_updates_all_four_drafts():
+    fields = {}
+
+    for position, field in enumerate(FILL_ORDER):
+        if "." in field:
+            parent, name = field.split(".")
+            fields.setdefault(parent, {})[name] = deepcopy(TICKET_FIELDS[parent][name])
+        else:
+            fields[field] = deepcopy(TICKET_FIELDS[field])
+        filled = set(FILL_ORDER[: position + 1])
+
+        for report_type, required_fields in REQUIRED_FIELDS.items():
+            draft = _build(report_type, fields)
+            expected = [f for f in required_fields if f not in filled]
+            assert draft.missing_fields == expected, (field, report_type)
+            assert "reporter" not in draft.content
+            assert PRIVATE_REPORTER not in json.dumps(draft.content)
+
+
 @pytest.mark.parametrize("report_type", REQUIRED_FIELDS)
 @pytest.mark.parametrize("section", ["product", "vulnerability", "exploit", "mitigations", "fix"])
 def test_cleared_nested_sections_are_treated_as_missing(report_type, section):
