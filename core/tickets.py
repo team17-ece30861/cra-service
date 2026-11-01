@@ -241,6 +241,13 @@ def update_ticket(request, id: str):
     if "aware_at" in payload.model_fields_set:
         ticket.aware_at = payload.aware_at
     response = _render(ticket, now)
+    # Q6 (agreed with Team 21, 2026-11-01): a PATCH that changes nothing succeeds but adds
+    # no audit entry. The comparison includes the reporter, so a reporter-only edit still
+    # gets an entry (with the reporter left out of its changes). A field sent as null
+    # that was never set counts as no change, as the response is the same.
+    after = _snapshot(ticket)
+    if not _changes(before, after) and before.get("reporter") == after.get("reporter"):
+        return response
     ticket.save(update_fields=["data", "aware_at"])
     _audit(
         ticket, now=now, actor=actor, action="updated", before=before, reason=payload.change_reason
