@@ -146,7 +146,7 @@ Saturday, the report records a one-way run and says why.
 
 | # | Task | Covers | Status |
 |---|---|---|---|
-| 4.D1 | `core/domain/drafts.py`: for a report type, ticket fields, ticket ID, and `aware_at`, return the draft `content` and `missing_fields` exactly as Model C says. Never include reporter fields. Unit tests that fill fields one at a time and check all four drafts at each step. | REQ-07, 15; AC-08 | To do |
+| 4.D1 | `core/domain/drafts.py`: for a report type, ticket fields, ticket ID, and `aware_at`, return the draft `content` and `missing_fields` exactly as Model C says. Never include reporter fields. Unit tests that fill fields one at a time and check all four drafts at each step. | REQ-07, 15; AC-08 | Done (PR #75). The HTTP integration is 4.A2. |
 | 4.D2 | Extend statuses for submitted reports: `submitted` if `submitted_at` ≤ `due_at`, otherwise `submitted_late`. Include the E6 boundary and a clock moved backward. | REQ-05; AC-06 | Rule done (PR #76): `submitted_report_status`. It takes no clock, so a clock moved backward can't change a recorded report's status. Wiring into ticket responses is 4.A5. |
 | 4.D3 | Submission rule: 409 if the ticket isn't `reportable`, the previous report isn't submitted, or this one is already submitted; 422 if required fields are missing or `submitted_at` isn't between `aware_at` and now. 409 is checked before 422. | REQ-08; AC-09 | To do |
 | 4.D4 | Close rule: 409 unless `reportable` with all three reports submitted. | REQ-09; AC-10 | To do |
@@ -163,7 +163,7 @@ Saturday, the report records a one-way run and says why.
 | # | Task | Covers | Status |
 |---|---|---|---|
 | 4.A1 | Submission model and migration: one row per ticket and report type with `submitted_at`, `reference`, the locked `content` snapshot, and the actor. Reset must clear it (anything in the `core` app is cleared automatically). | REQ-08, 18 | Done (PR #76): `ReportSubmission`, migration `0004`. |
-| 4.A2 | `GET /tickets/{id}/reports/{type}`: unknown type → 404. Before submission, build the draft live (4.D1). After submission, return the locked snapshot. | REQ-07, 08, 15; AC-08, 09 | Blocked on 4.D1 |
+| 4.A2 | `GET /tickets/{id}/reports/{type}`: unknown type → 404. Before submission, build the draft live (4.D1). After submission, return the locked snapshot. | REQ-07, 08, 15; AC-08, 09 | To do (4.D1 done) |
 | 4.A3 | `POST /tickets/{id}/reports/{type}/submission`: `user_advisory` and unknown types → 404. Use 4.D3, store the snapshot, add one `report_submitted` audit entry, return the locked report as a `Draft`. | REQ-05, 08; AC-06, 09 | Blocked on 4.D3 |
 | 4.A4 | `POST /tickets/{id}/close`: use 4.D4, set `closed`/`resolved`, add one `closed` audit entry. | REQ-09; AC-10 | Blocked on 4.D4 |
 | 4.A5 | Ticket responses use submissions for `obligations.*.status`, `submitted_at`, `reference`, and `next_due_at`. `GET /tickets` supports `state` and `obligation_status` filters (bad values → 400) and the 4.D5 ordering. | REQ-05, 10; AC-06, 11 | Blocked on 4.D2, 4.D5 |
