@@ -12,11 +12,19 @@ from core import clock
 from core.domain.closure import close_ticket
 from core.domain.deadlines import calculate_deadlines
 from core.domain.drafts import DraftReportType, DraftResult, build_draft
+from core.domain.listing import next_due_at, urgency_key
 from core.domain.statuses import ReportType, submitted_report_status, unsubmitted_obligation_status
 from core.domain.submissions import validate_submission
 from core.domain.triage import triage_ticket
 from core.models import AuditEntry, ReportSubmission, Ticket
-from core.schemas import SubmissionRequest, TicketCreate, TicketUpdate, TriageRequest
+from core.schemas import (
+    ObligationStatus,
+    SubmissionRequest,
+    TicketCreate,
+    TicketState,
+    TicketUpdate,
+    TriageRequest,
+)
 from cra_service.errors import Conflict, NotFound, RuleViolation, field_error
 from cra_service.timestamps import format_timestamp, parse_timestamp
 from cra_service.validation import parse_body, require_actor
@@ -56,6 +64,25 @@ def _fix_time(data: dict):
     return parse_timestamp(value) if value is not None else None
 
 
+def _obligation(report_type, due_at, submission, applicable: bool, now) -> dict:
+    """One report's obligation: a recorded report's status is checked against the
+    current deadline (Q4), so an edit that moves the deadline earlier can make it late."""
+    if submission is None:
+        status = unsubmitted_obligation_status(
+            report_type=report_type, applicable=applicable, due_at=due_at, now=now
+        )
+    else:
+        status = submitted_report_status(
+            report_type=report_type, submitted_at=submission.submitted_at, due_at=due_at
+        )
+    return {
+        "status": status,
+        "due_at": format_timestamp(due_at) if due_at is not None else None,
+        "submitted_at": format_timestamp(submission.submitted_at) if submission else None,
+        "reference": submission.reference if submission else None,
+    }
+
+
 def _render(ticket: Ticket, now, *, detail: bool = False) -> dict:
     applicable = ticket.aware_at is not None and ticket.resolution not in (
         "invalid",
@@ -78,18 +105,12 @@ def _render(ticket: Ticket, now, *, detail: bool = False) -> dict:
             "notification": deadlines.notification_due,
             "final_report": deadlines.final_report_due,
         }
+    submissions = {s.report_type: s for s in ticket.submissions.all()}
     obligations = {
-        report_type: {
-            "status": unsubmitted_obligation_status(
-                report_type=report_type, applicable=applicable, due_at=due_at, now=now
-            ),
-            "due_at": format_timestamp(due_at) if due_at is not None else None,
-            "submitted_at": None,
-            "reference": None,
-        }
+        report_type: _obligation(report_type, due_at, submissions.get(report_type), applicable, now)
         for report_type, due_at in due_times.items()
     }
-    deadlines = [value for value in due_times.values() if value is not None]
+    next_due = next_due_at(applicable=applicable, due_times=due_times, submitted=submissions)
     result = {key: deepcopy(ticket.data.get(key)) for key in CLIENT_FIELDS}
     result["product"]["affected_versions"] = result["product"].get("affected_versions") or []
     result["member_states"] = result["member_states"] or []
@@ -102,7 +123,7 @@ def _render(ticket: Ticket, now, *, detail: bool = False) -> dict:
         received_at=format_timestamp(ticket.received_at),
         aware_at=format_timestamp(ticket.aware_at) if ticket.aware_at is not None else None,
         obligations=obligations,
-        next_due_at=format_timestamp(min(deadlines)) if deadlines else None,
+        next_due_at=format_timestamp(next_due) if next_due is not None else None,
     )
     if detail:
         reporter = deepcopy(ticket.data.get("reporter"))
@@ -165,17 +186,32 @@ def create_ticket(request):
 
 
 @router.get("", response=list[dict], operation_id="listTickets")
-def list_tickets(request):
+def list_tickets(
+    request,
+    state: TicketState | None = None,
+    obligation_status: ObligationStatus | None = None,
+):
     now = clock.now()
-    tickets = [_render(ticket, now) for ticket in Ticket.objects.all()]
-    return sorted(
-        tickets,
-        key=lambda ticket: (
-            ticket["next_due_at"] is None,
-            ticket["next_due_at"] or "",
-            ticket["id"],
-        ),
-    )
+    tickets = Ticket.objects.prefetch_related("submissions")
+    if state is not None:
+        tickets = tickets.filter(state=state)
+    rows = []
+    for ticket in tickets:
+        rendered = _render(ticket, now)
+        if obligation_status is not None and not any(
+            obligation["status"] == obligation_status
+            for obligation in rendered["obligations"].values()
+        ):
+            continue
+        next_due = rendered["next_due_at"]
+        key = urgency_key(
+            next_due_at=parse_timestamp(next_due) if next_due is not None else None,
+            received_at=ticket.received_at,
+            ticket_id=rendered["id"],
+        )
+        rows.append((key, rendered))
+    rows.sort(key=lambda row: row[0])
+    return [rendered for _, rendered in rows]
 
 
 @router.get("/{id}", response=dict, operation_id="getTicket")
@@ -295,26 +331,16 @@ def _render_draft(ticket: Ticket, type: DraftReportType, now) -> dict:
     else:
         content, missing_fields = deepcopy(submission.content), []
 
-    status, due_at = None, None
+    # The ticket's obligation is the single source for status, deadline and receipt
+    # details, so a draft and its ticket can never disagree.
+    obligation = {"status": None, "due_at": None, "submitted_at": None, "reference": None}
     if type != "user_advisory":
         obligation = _render(ticket, now)["obligations"][type]
-        status, due_at = obligation["status"], obligation["due_at"]
-        if submission is not None:
-            status = submitted_report_status(
-                report_type=type,
-                submitted_at=submission.submitted_at,
-                due_at=parse_timestamp(due_at) if due_at is not None else None,
-            )
 
     return {
         "ticket_id": str(ticket.pk),
         "type": type,
-        "status": status,
-        "due_at": due_at,
-        "submitted_at": format_timestamp(submission.submitted_at)
-        if submission is not None
-        else None,
-        "reference": submission.reference if submission is not None else None,
+        **obligation,
         "content": content,
         "missing_fields": missing_fields,
     }

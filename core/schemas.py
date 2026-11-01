@@ -43,6 +43,10 @@ MemberState = Literal[
 ]
 Severity = Literal["low", "medium", "high", "critical"]
 Sensitivity = Literal["CLEAR", "GREEN", "AMBER", "AMBER+STRICT", "RED"]
+TicketState = Literal["received", "reportable", "closed"]
+ObligationStatus = Literal[
+    "not_applicable", "awaiting_fix", "pending", "overdue", "submitted", "submitted_late"
+]
 
 
 class ProductIn(RequestSchema):
