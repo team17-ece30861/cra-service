@@ -11,6 +11,11 @@ MAX_BODY_BYTES = 65_536
 # Every other request needs a client's bearer token (openapi.yaml `security`).
 PUBLIC_ROUTES = {("GET", "/health")}
 
+# The console's pages and its static files sign people in with a session instead of a
+# token (docs/plan.md, 4.U1). Only these exact prefixes: a session never unlocks the API.
+CONSOLE_PATHS = ("/console/", "/static/")
+CONSOLE_CLIENT = "console"
+
 # WSGI environ key holding the matched client's name. gunicorn's access log reads
 # it as %({cra_service.client}e)s (gunicorn.conf.py).
 CLIENT_ENVIRON_KEY = "cra_service.client"
@@ -44,6 +49,8 @@ class PlatformMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
+        if _is_console(request.path_info):
+            return self._console(request)
         request.client_name = _client_name(request)
         if request.client_name:
             # request.META is the WSGI environ that gunicorn logs from.
@@ -59,6 +66,26 @@ class PlatformMiddleware:
             if response.status_code >= 400:
                 transaction.set_rollback(True)
         return _as_problem(response)
+
+    def _console(self, request: HttpRequest) -> HttpResponse:
+        """Console pages: no token (the pages check the session), the same body limit, and
+        the same rule that a failed request changes nothing. Their errors are pages, not
+        problem+json."""
+        request.client_name = CONSOLE_CLIENT
+        request.META[CLIENT_ENVIRON_KEY] = CONSOLE_CLIENT
+        if _content_length(request) > MAX_BODY_BYTES:
+            return problem_response(413)
+        if request.method in SAFE_METHODS:
+            return self.get_response(request)
+        with transaction.atomic():
+            response = self.get_response(request)
+            if response.status_code >= 400:
+                transaction.set_rollback(True)
+        return response
+
+
+def _is_console(path: str) -> bool:
+    return path == "/console" or path.startswith(CONSOLE_PATHS)
 
 
 def _client_name(request: HttpRequest) -> str | None:

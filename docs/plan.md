@@ -200,7 +200,7 @@ the shared spec, so it doesn't change the contract or need Team 21's approval. D
 | # | Task | Status |
 |---|---|---|
 | 4.U0 | Design standards: a short `docs/design.md` (type, colors, spacing, components such as the ticket table, status badge, forms, and buttons, page layout, accessibility, copy voice), referenced from `CLAUDE.md` so every agent building UI follows it. | Done 2026-11-01: [design.md](design.md), with the reference prototype in `docs/design/` |
-| 4.U1 | Sign-in with Django's built-in accounts: one account per person, Django's login page, and the signed-in username sent as `X-Actor` on every change (decided 2026-10-27; Google sign-in not needed for now). | To do (Wed 10-28) |
+| 4.U1 | Sign-in with Django's built-in accounts: one account per person, Django's login page, and the signed-in username sent as `X-Actor` on every change (decided 2026-10-27; Google sign-in not needed for now). | Done 2026-11-01: `/console/` with session sign-in; pages call the API's own views in-process as the signed-in person |
 | 4.U2 | Pages on the existing endpoints: ticket list (state, report statuses, time until the next deadline), single ticket with audit trail, submit a ticket, triage. | To do |
 | 4.U3 | Report pages: each draft with its missing fields highlighted, record a submission, close a ticket. Show "not available yet" until 4.A2 to A4 are live. | Blocked on 4.A2 to A4 |
 | 4.U4 | UX notes and screenshots for the Phase 4 report: who it's for, the main flows, and the design decisions. | To do |

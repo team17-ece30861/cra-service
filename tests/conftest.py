@@ -11,6 +11,15 @@ def api_token(settings):
     return TOKEN
 
 
+@pytest.fixture(autouse=True)
+def plain_static_files(settings):
+    # Pages use {% static %}; the hashed manifest only exists after collectstatic (Docker build).
+    settings.STORAGES = {
+        **settings.STORAGES,
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+
+
 @pytest.fixture
 def authed():
     """A client that sends the bearer token on every request."""

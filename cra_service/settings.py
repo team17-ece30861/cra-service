@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "core",
     "tester",
+    "console",
 ]
 
 MIDDLEWARE = [
@@ -111,6 +112,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "console.context_processors.ledger",
             ],
         },
     },
@@ -142,6 +144,12 @@ STORAGES = {
 # Cloud Run terminates HTTPS in front of the container.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = not DEBUG
+# Console sign-in (4.U1). Sessions last 12 hours from sign-in, and the session and CSRF
+# cookies only go to console pages, never with API requests.
+LOGIN_URL = "/console/sign-in"
+SESSION_COOKIE_AGE = 12 * 3600
+SESSION_COOKIE_PATH = "/console/"
+CSRF_COOKIE_PATH = "/console/"
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_HSTS_SECONDS = 0 if DEBUG else 3600
 # Cloud Run only serves HTTPS on *.run.app, so Django doesn't need to redirect.
