@@ -1,0 +1,25 @@
+{# Triage (docs/design/ledger-screens.html, data-sheet="triage"). The deadline preview reads its offsets from core/domain/deadlines.py; the API sets the real deadlines. #}
+<section class="sheet-card" data-sheet="triage" id="sheet-triage" data-url="{{ tr.action }}" data-base="{{ tr.base }}" role="dialog" aria-modal="true" aria-labelledby="tr-title"{% if open_sheet != "triage" %} hidden{% endif %}>
+  <header class="sh-bar"><a class="btn plain" href="{{ tr.base }}" data-close>Cancel</a><h2 class="sh-title" id="tr-title">Triage</h2><button class="btn primary sm" type="submit" form="tr-form" data-go>Triage</button></header>
+  <form class="sh-body tr-form" id="tr-form" method="post" action="{{ tr.action }}" novalidate data-offsets='{"early_warning": {{ tr.offsets.early_warning }}, "notification": {{ tr.offsets.notification }}}'>
+    {% csrf_token %}
+    {% if tr.general %}<div class="alert error sh-alert" role="alert"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><div><div class="a-title">{{ tr.general_title }}</div><div class="a-body">{{ tr.general }}</div></div><span></span></div>{% endif %}
+    <div class="sh-context"><span class="state {{ tr.state }}"><span class="dot" aria-hidden="true"></span>{{ tr.state_label }}</span><div><b>{{ tr.title }}</b><span>{{ tr.product }} · received {{ tr.received }}</span></div></div>
+    <div class="sh-group field" data-field="decision">
+      <span class="lbl" id="tr-dec-l">Decision</span>
+      <div class="opts" role="radiogroup" aria-labelledby="tr-dec-l" aria-describedby="tr-dec-err">
+        <label class="opt"><input type="radio" name="decision" value="actively_exploited"{% if tr.decision == "actively_exploited" %} checked{% endif %}><span class="opt-t">Actively exploited<small>The ticket becomes reportable. The early warning is due {{ tr.ew_after }} after awareness, the notification {{ tr.n_after }} after.</small></span></label>
+        <label class="opt"><input type="radio" name="decision" value="not_actively_exploited"{% if tr.decision == "not_actively_exploited" %} checked{% endif %}><span class="opt-t">Not actively exploited<small>The ticket closes. No reports are needed.</small></span></label>
+        <label class="opt"><input type="radio" name="decision" value="invalid"{% if tr.decision == "invalid" %} checked{% endif %}><span class="opt-t">Invalid<small>The ticket closes as invalid.</small></span></label>
+      </div>
+      {% include "console/sheets/_err.html" with id="tr-dec" msg=tr.e.decision %}
+    </div>
+    <div class="reveal-wrap{% if tr.decision == 'actively_exploited' %} open{% endif %}" id="tr-aware-wrap"><div>
+      <div class="sh-group">
+        <div class="field" data-field="aware_at"><label for="tr-aware">Aware since</label><div class="row tr-aware-row"><div class="input-group"><input class="input mono{% if tr.e.aware_at %} invalid{% endif %}" id="tr-aware" name="aware_at" value="{{ tr.aware }}" data-time="aware" placeholder="2026-10-29 13:30:00" autocomplete="off" spellcheck="false" aria-describedby="tr-aware-help tr-aware-err"{% if tr.e.aware_at %} aria-invalid="true"{% endif %}><span class="suffix">UTC</span></div><button class="btn secondary" type="button" id="tr-now">Now</button></div><span class="help" id="tr-aware-help">When your team first knew it was being exploited.</span>{% include "console/sheets/_err.html" with id="tr-aware" msg=tr.e.aware_at %}</div>
+        <div class="deadline-preview" id="tr-preview" aria-live="polite"></div>
+      </div>
+    </div></div>
+    <div class="field" data-field="reason"><label for="tr-reason">Reason</label><textarea class="textarea{% if tr.e.reason %} invalid{% endif %}" id="tr-reason" name="reason" placeholder="What you checked, and what you found" aria-describedby="tr-reason-help tr-reason-err"{% if tr.e.reason %} aria-invalid="true"{% endif %}>{{ tr.reason }}</textarea><span class="help" id="tr-reason-help">Required. It appears in the audit trail.</span>{% include "console/sheets/_err.html" with id="tr-reason" msg=tr.e.reason %}</div>
+  </form>
+</section>

@@ -51,7 +51,7 @@
     <div class="right"><span class="dl">
       <span class="when" tabindex="0" role="button" aria-label="Actions for {% if r.report %}{{ r.report_label|lower }}{% else %}{{ r.chip|lower }}{% endif %}, {{ r.title }}"><span class="wt">{% if r.report %}{{ r.report_label }} · <span class="rl {{ r.rel_cls }}" data-rl="{{ r.due }}">{{ r.rel }}</span>{% else %}{{ r.chip }}{% endif %}</span><svg class="i sm more" aria-hidden="true"><use href="#i-more"/></svg></span>
       <span class="acts">
-        {% if r.action %}<a class="btn sm secondary act-open" href="{{ href }}">Open</a><button class="btn sm tinted act-main" type="button" data-soon="{{ r.action }}"><span class="lab">{{ r.action }}</span></button>
+        {% if r.action %}<a class="btn sm secondary act-open" href="{{ href }}">Open</a>{% if r.action_href %}<a class="btn sm tinted act-main" href="{{ r.action_href }}" data-sheet-href="{{ r.action_href }}"><span class="lab">{{ r.action }}</span></a>{% else %}<button class="btn sm tinted act-main" type="button" data-soon="{{ r.action }}"><span class="lab">{{ r.action }}</span></button>{% endif %}
         {% else %}<a class="btn sm tinted act-main" href="{{ href }}"><span class="lab">Open</span></a>{% endif %}
       </span>
     </span></div>
@@ -63,7 +63,7 @@
   <span class="glyph"><svg class="i lg" aria-hidden="true"><use href="#i-tray"/></svg></span>
   {% if not any_tickets %}
   <h2 class="t-headline">No tickets yet</h2>
-  <p>Tickets appear here once they're submitted. New Ticket arrives in the next update.</p>
+  <p>Tickets appear here once they're submitted. Use New Ticket to add one.</p>
   {% elif filtered %}
   <h2 class="t-headline">No tickets here</h2>
   <p>Tickets that match this view appear here.</p>

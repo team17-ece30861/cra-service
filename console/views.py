@@ -12,7 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods, require_POST
 
-from console import present
+from console import forms, present
 from console.api_calls import call_api
 from console.mark import MARK_PATH, MARK_VIEWBOX
 from core import clock
@@ -130,6 +130,13 @@ def _shell(request, route: str, tickets: list[dict], now) -> dict:
 @signed_in_required
 @require_http_methods(["GET", "HEAD"])
 def tickets(request):
+    template, context, status = tickets_page(request)
+    return render(request, template, context, status=status)
+
+
+def tickets_page(request) -> tuple[str, dict, int]:
+    """The Tickets list's template, context and status. The New Ticket sheet
+    (console/views_forms.py) opens over it."""
     now = clock.now()
     everything = call_api(request, "GET", "/tickets")
     all_tickets = everything.data if everything.ok else []
@@ -169,20 +176,28 @@ def tickets(request):
         "any_tickets": bool(all_tickets),
         "hero_on_page": bool(upcoming) and not (view or query),
         "dock_current": view or ("" if query else "all"),
+        **forms.new_sheet(),
     }
-    return render(request, "console/tickets.html", context, status=400 if problem else 200)
+    return "console/tickets.html", context, 400 if problem else 200
 
 
 @never_cache
 @signed_in_required
 @require_http_methods(["GET", "HEAD"])
 def ticket(request, ticket_id: str):
+    template, context, status = ticket_page(request, ticket_id)
+    return render(request, template, context, status=status)
+
+
+def ticket_page(request, ticket_id: str) -> tuple[str, dict, int]:
+    """The Ticket page's template, context and status. Its sheets (New Ticket, Edit
+    Ticket, Triage; console/views_forms.py) open over it."""
     now = clock.now()
     everything = call_api(request, "GET", "/tickets")
     shell = _shell(request, "ticket", everything.data if everything.ok else [], now)
     found = call_api(request, "GET", f"/tickets/{ticket_id}")
     if found.status == 404:
-        return render(request, "console/not_found.html", shell, status=404)
+        return "console/not_found.html", shell, 404
     data = found.data
     trail = call_api(request, "GET", f"/tickets/{ticket_id}/audit")
     cards = present.report_cards(data, now)
@@ -200,5 +215,6 @@ def ticket(request, ticket_id: str):
         "next": next((c for c in cards if c["type"] == report), None),
         "cards": cards,
         "audit": present.audit(trail.data if trail.ok else []),
+        **forms.ticket_sheets(data),
     }
-    return render(request, "console/ticket.html", context)
+    return "console/ticket.html", context, 200

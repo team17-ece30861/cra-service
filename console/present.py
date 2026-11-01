@@ -4,6 +4,8 @@ nothing here decides a business rule (docs/design.md, "Console rules that come f
 
 from datetime import datetime, timedelta
 
+from django.urls import reverse
+
 from cra_service.timestamps import format_timestamp, parse_timestamp
 
 REPORTS = ("early_warning", "notification", "final_report")
@@ -161,8 +163,18 @@ def row(ticket: dict, now: datetime) -> dict:
         "seconds": seconds,
         "chip": chip,
         "action": action,
+        "action_href": _sheet_href(ticket["id"], action),
         "state": ticket["state"],
     }
+
+
+def _sheet_href(ticket_id: str, action: str | None) -> str:
+    """The row actions that open a sheet (console/views_forms.py)."""
+    if action == "Triage":
+        return reverse("console:triage", args=[ticket_id])
+    if action == "Edit Ticket":
+        return reverse("console:edit-ticket", args=[ticket_id]) + "?focus=fix.available_at"
+    return ""
 
 
 def group_rows(tickets: list[dict], now: datetime) -> list[dict]:
@@ -226,10 +238,12 @@ def shell(tickets: list[dict], now: datetime) -> dict:
                     "icon": "i-shield",
                     "text": f"Triage · {r['title']}",
                     "hint": "received",
-                    "soon": "Triage",
+                    "sheet": reverse("console:triage", args=[r["id"]]),
                 }
             )
-    commands.append({"icon": "i-plus", "text": "New Ticket", "hint": "", "soon": "New Ticket"})
+    commands.append(
+        {"icon": "i-plus", "text": "New Ticket", "hint": "", "sheet": reverse("console:new-ticket")}
+    )
     for t in tickets:
         commands.append(
             {"icon": "i-doc", "text": f"Open · {t['title']}", "hint": t["id"][:8], "href": t["id"]}
