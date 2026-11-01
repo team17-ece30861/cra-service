@@ -1,0 +1,12 @@
+{% extends "console/shell.html" %}
+{% block title %}Ticket Not Found · Ledger{% endblock %}
+{% block screen_label %}Ticket not found{% endblock %}
+{% block screen %}
+<a class="tk-back" href="{% url 'console:tickets' %}"><svg class="i" aria-hidden="true"><use href="#i-chev-l"/></svg>Tickets</a>
+<div class="empty not-found">
+  <span class="glyph"><svg class="i lg" aria-hidden="true"><use href="#i-search"/></svg></span>
+  <h1 class="t-title2">There's no ticket with that ID</h1>
+  <p>Check the ID, or find the ticket in the list.</p>
+  <a class="btn secondary" href="{% url 'console:tickets' %}">Show Tickets</a>
+</div>
+{% endblock %}
