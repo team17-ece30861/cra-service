@@ -55,7 +55,7 @@
   <div class="report{% if c.active %} active{% endif %}">
     <div class="r-name">{{ c.label }}<span class="badge {{ c.cls }}"><svg class="i" aria-hidden="true"><use href="#{{ c.icon }}"/></svg>{{ c.badge }}</span></div>
     {% if c.submitted or c.due or c.status == "awaiting_fix" %}
-    <span class="r-time">{% if c.submitted %}Submitted {{ c.submitted }}<br>{% endif %}{% if c.due %}Due {{ c.due }}{% else %}Due 14 days after a fix is available{% endif %}{% if c.reference %}<br>Reference {{ c.reference }}{% endif %}</span>
+    <span class="r-time">{% if c.submitted %}Submitted {{ c.submitted }}<br>{% endif %}{% if c.due %}Due {{ c.due }}{% else %}No deadline until a fix is available{% endif %}{% if c.reference %}<br>Reference {{ c.reference }}{% endif %}</span>
     {% endif %}
     {% if c.window %}
     <div class="meter{% if c.window.soon %} soon{% endif %}" role="img" aria-label="{{ c.window.left }} left of {{ c.window.total }}" data-meter data-start="{{ c.window.start }}" data-due="{{ c.window.due }}" data-total="{{ c.window.total }}"><i style="width:{{ c.window.pct }}%"></i></div>

@@ -10,7 +10,7 @@
     {% if island_more %}
     <div class="more"><div><ul>
       {% for r in island_more %}
-      <li data-href="{% url 'console:ticket' r.id %}"><span class="track"><span class="{{ r.report_cls }}">{{ r.report_short }}</span></span><span class="n">{{ r.title }}</span><span class="rl {{ r.rel_cls }}" data-rl="{{ r.due }}">{{ r.rel }}</span></li>
+      <li><span class="track"><span class="{{ r.report_cls }}">{{ r.report_short }}</span></span><a class="n" href="{% url 'console:ticket' r.id %}" tabindex="-1">{{ r.title }}</a><span class="rl {{ r.rel_cls }}" data-rl="{{ r.due }}">{{ r.rel }}</span></li>
       {% endfor %}
     </ul></div></div>
     {% endif %}
@@ -41,7 +41,7 @@
         {% for c in commands %}
         <li role="option" aria-selected="false"{% if c.href %} data-href="{% url 'console:ticket' c.href %}"{% else %} data-soon="{{ c.soon }}"{% endif %}><svg class="i" aria-hidden="true"><use href="#{{ c.icon }}"/></svg><span class="x">{{ c.text }}</span><span class="s">{{ c.hint }}</span></li>
         {% endfor %}
-        <li class="none" hidden>No match.</li>
+        <li class="none" hidden>{% if commands_capped %}No match in the {{ command_tickets }} most urgent tickets. Find others in the list.{% else %}No match.{% endif %}</li>
       </ul>
       <div class="field-slot" aria-hidden="true"></div>
     </div>

@@ -165,7 +165,13 @@ def row(ticket: dict, now: datetime) -> dict:
     }
 
 
-def group_rows(tickets: list[dict], now: datetime) -> list[dict]:
+def rows(tickets: list[dict], now: datetime) -> list[dict]:
+    """Every ticket's row, built once per request and shared by the list, the island and
+    the dock."""
+    return [row(t, now) for t in tickets]
+
+
+def group_rows(rows: list[dict]) -> list[dict]:
     """Rows grouped by due window, in the API's order within each group. Grouping is
     presentation from next_due_at; closed tickets are left to their own view."""
     groups = {
@@ -176,11 +182,10 @@ def group_rows(tickets: list[dict], now: datetime) -> list[dict]:
         "waiting": ("Nothing due", []),
         "closed": ("Closed", []),
     }
-    for ticket in tickets:
-        r = row(ticket, now)
-        if ticket["state"] == "closed":
+    for r in rows:
+        if r["state"] == "closed":
             key = "closed"
-        elif ticket["state"] == "received":
+        elif r["state"] == "received":
             key = "triage"
         elif r["seconds"] is None:
             key = "waiting"
@@ -192,23 +197,29 @@ def group_rows(tickets: list[dict], now: datetime) -> list[dict]:
             key = "later"
         groups[key][1].append(r)
     return [
-        {"key": key, "title": title, "rows": rows} for key, (title, rows) in groups.items() if rows
+        {"key": key, "title": title, "rows": members}
+        for key, (title, members) in groups.items()
+        if members
     ]
 
 
-def deadlines(tickets: list[dict], now: datetime) -> list[dict]:
-    """Every ticket's next deadline, soonest first (the island and the hero)."""
-    out = [row(t, now) for t in tickets if t.get("next_due_at") and t["state"] != "closed"]
-    out = [r for r in out if r["report"]]
+def deadlines(rows: list[dict]) -> list[dict]:
+    """Every open ticket's next deadline, soonest first (the island and the hero)."""
+    out = [r for r in rows if r["report"] and r["state"] != "closed"]
     out.sort(key=lambda r: r["due"])
     return out
 
 
-def shell(tickets: list[dict], now: datetime) -> dict:
+# The command field lists the suggestions, then at most this many tickets in the API's
+# order (most urgent first), so a long list doesn't put every ticket on every page.
+COMMAND_TICKETS = 20
+
+
+def shell(rows: list[dict], groups: list[dict], upcoming: list[dict]) -> dict:
     """What every signed-in page shows around its content: the island, the dock's counts,
-    and the command field's suggestions."""
-    upcoming = deadlines(tickets, now)
-    groups = {g["key"]: g for g in group_rows(tickets, now)}
+    and the command field's suggestions. Takes the rows, groups and deadlines already
+    built for the request."""
+    by_key = {g["key"]: g["rows"] for g in groups}
     commands = []
     for r in upcoming[:2]:
         commands.append(
@@ -219,30 +230,27 @@ def shell(tickets: list[dict], now: datetime) -> dict:
                 "soon": r["action"],
             }
         )
-    for g in ("triage",):
-        for r in groups.get(g, {}).get("rows", [])[:1]:
-            commands.append(
-                {
-                    "icon": "i-shield",
-                    "text": f"Triage · {r['title']}",
-                    "hint": "received",
-                    "soon": "Triage",
-                }
-            )
-    commands.append({"icon": "i-plus", "text": "New Ticket", "hint": "", "soon": "New Ticket"})
-    for t in tickets:
+    for r in by_key.get("triage", [])[:1]:
         commands.append(
-            {"icon": "i-doc", "text": f"Open · {t['title']}", "hint": t["id"][:8], "href": t["id"]}
+            {
+                "icon": "i-shield",
+                "text": f"Triage · {r['title']}",
+                "hint": "received",
+                "soon": "Triage",
+            }
+        )
+    commands.append({"icon": "i-plus", "text": "New Ticket", "hint": "", "soon": "New Ticket"})
+    for r in rows[:COMMAND_TICKETS]:
+        commands.append(
+            {"icon": "i-doc", "text": f"Open · {r['title']}", "hint": r["id"][:8], "href": r["id"]}
         )
     return {
         "island": upcoming[0] if upcoming else None,
         "island_more": upcoming[1:4],
-        "counts": {
-            "today": len(groups.get("today", {}).get("rows", [])),
-            "overdue": len(groups.get("overdue", {}).get("rows", [])),
-            "triage": len(groups.get("triage", {}).get("rows", [])),
-        },
+        "counts": {key: len(by_key.get(key, [])) for key in ("today", "overdue", "triage")},
         "commands": commands,
+        "commands_capped": len(rows) > COMMAND_TICKETS,
+        "command_tickets": COMMAND_TICKETS,
     }
 
 
@@ -253,12 +261,11 @@ def report_cards(ticket: dict, now: datetime) -> list[dict]:
     for r in REPORTS:
         ob = ticket["obligations"][r]
         cls, icon, label = STATUS[ob["status"]]
+        # The bar needs the window's start. The API gives it for the early warning and
+        # notification (aware_at); the final report's start isn't returned, so it has no bar.
         start, since = ticket.get("aware_at"), "awareness"
-        fix_at = (ticket.get("fix") or {}).get("available_at")
-        if r == "final_report" and fix_at:
-            start, since = fix_at, "the fix"
         window = None
-        if ob["due_at"] and start and ob["submitted_at"] is None:
+        if r != "final_report" and ob["due_at"] and start and ob["submitted_at"] is None:
             total = (parse_timestamp(ob["due_at"]) - parse_timestamp(start)).total_seconds()
             if total > 0:
                 left = (parse_timestamp(ob["due_at"]) - now).total_seconds()

@@ -258,3 +258,109 @@ def test_every_signed_in_page_has_the_account_menu_with_sign_out(api, console):
         assert 'id="acct-menu"' in html and "Signed in as <b>m.okafor</b>" in html
         assert 'method="post" action="/console/sign-out"' in html
         assert "csrfmiddlewaretoken" in html
+
+
+# --- Review follow-ups ---
+
+HOSTILE = '<script>alert("x")</script> "quoted" & \'single\''
+
+
+def test_hostile_titles_and_products_are_escaped_everywhere(api, console):
+    body = _ticket_body(title=HOSTILE)
+    body["product"]["name"] = HOSTILE
+    response = api.post(
+        "/tickets", body, content_type="application/json", headers={ACTOR_HEADER: "intake"}
+    )
+    ticket_id = response.json()["id"]
+    _triage(api, ticket_id)
+    for path in ("/console/", f"/console/tickets/{ticket_id}"):
+        html = console.get(path).content.decode()
+        assert "<script>alert" not in html
+        assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;" in html
+    home = console.get("/console/").content.decode()
+    # The command field, the island and the hero all show the title, escaped.
+    assert "Open · &lt;script&gt;" in home
+    assert 'class="what"><b>Early warning</b> · &lt;script&gt;' in home
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/console/?view=overdue", "/console/?state=reportable", "/console/?obligation_status=overdue"],
+)
+def test_filtered_views_never_show_reporter_details(api, console, path):
+    _triage(api, _create(api))
+    api.put("/test/clock", {"now": "2026-11-02T00:00:00Z"}, content_type="application/json")
+    response = console.get(path)
+    html = response.content.decode()
+    assert response.status_code == 200 and 'class="lrow"' in html  # the ticket is listed
+    assert REPORTER_NAME not in html and REPORTER_CONTACT not in html
+
+
+def _failing_list(monkeypatch, status=500, only=None):
+    from console import views
+    from console.api_calls import ApiResult
+
+    real = views.call_api
+
+    def fake(request, method, path, **kwargs):
+        if path == (only or "/tickets"):
+            return ApiResult(status, {"title": "Internal Server Error", "status": status})
+        return real(request, method, path, **kwargs)
+
+    monkeypatch.setattr(views, "call_api", fake)
+
+
+def test_a_failed_list_shows_an_error_not_an_empty_list(api, console, monkeypatch):
+    _create(api)
+    _failing_list(monkeypatch)
+    response = console.get("/console/")
+    assert response.status_code == 500
+    html = response.content.decode()
+    assert "Tickets couldn&#x27;t be loaded." in html
+    assert "No tickets yet" not in html and "Nothing is due" not in html
+
+
+def test_a_failed_ticket_read_shows_an_error_page(api, console, monkeypatch):
+    ticket_id = _create(api)
+    _failing_list(monkeypatch, status=503, only=f"/tickets/{ticket_id}/audit")
+    response = console.get(f"/console/tickets/{ticket_id}")
+    assert response.status_code == 503
+    assert "This ticket couldn&#x27;t be loaded." in response.content.decode()
+
+
+def test_sign_out_works_without_javascript(api, console):
+    html = console.get("/console/").content.decode()
+    menu = html[html.index('<details class="menu-wrap acct"') : html.index("</details>")]
+    assert "<summary" in menu and " hidden" not in menu
+    assert 'method="post" action="/console/sign-out"' in menu and "csrfmiddlewaretoken" in menu
+
+
+def test_final_report_without_a_fix_has_no_invented_deadline(api, console):
+    ticket_id = _create(api)
+    _triage(api, ticket_id)
+    html = console.get(f"/console/tickets/{ticket_id}").content.decode()
+    assert "No deadline until a fix is available" in html
+    assert "14 days" not in html
+
+
+def test_the_command_field_lists_at_most_twenty_tickets(api, console):
+    for n in range(present.COMMAND_TICKETS + 3):
+        _create(api, title=f"Ticket number {n}", reporter=False)
+    html = console.get("/console/").content.decode()
+    assert html.count('<span class="x">Open · ') == present.COMMAND_TICKETS
+    assert "most urgent tickets. Find others in the list." in html
+
+
+def test_island_rows_are_links(api, console):
+    for aware in ("2026-10-29T10:40:00Z", "2026-10-29T11:40:00Z"):
+        _triage(api, _create(api), aware=aware)
+    html = console.get("/console/").content.decode()
+    island = html[html.index('id="island"') : html.index('id="app-scroll"')]
+    assert '<a class="n" href="/console/tickets/' in island
+
+
+def test_template_comments_never_reach_the_page(api, console):
+    ticket_id = _create(api)
+    for path in ("/console/", f"/console/tickets/{ticket_id}", "/console/tickets/nope"):
+        html = console.get(path).content.decode()
+        assert "{#" not in html and "#}" not in html and "{%" not in html

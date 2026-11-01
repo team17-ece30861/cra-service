@@ -222,10 +222,12 @@ kbd { font: 500 11px/1 var(--font-ui); color: var(--label-2); background: var(--
 .app-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s4); }
 .app-top-end { gap: var(--s3); flex-wrap: nowrap; }
 .clock { font: 400 12px/1 var(--font-mono); color: var(--label-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
-button.avatar { position: relative; border: 0; padding: 0; cursor: pointer; transition: background var(--dur-hover) ease, transform var(--dur-press) ease-out; }
-button.avatar::after { content: ""; position: absolute; inset: -10px; }   /* a 44 px touch target around the 24 px avatar */
-button.avatar:hover, button.avatar[aria-expanded="true"] { background: var(--fill-1); }
-button.avatar.is-pressed { transform: scale(0.94); }
+/* The account menu is a <details>: it opens without JavaScript; ledger.js closes it on Escape and outside clicks */
+summary.avatar { position: relative; list-style: none; cursor: pointer; user-select: none; -webkit-user-select: none; transition: background var(--dur-hover) ease, transform var(--dur-press) ease-out; }
+summary.avatar::-webkit-details-marker { display: none; }
+summary.avatar::after { content: ""; position: absolute; inset: -10px; }   /* a 44 px touch target around the 24 px avatar */
+summary.avatar:hover, details[open] > summary.avatar { background: var(--fill-1); }
+summary.avatar.is-pressed { transform: scale(0.94); }
 
 /* Home: the next deadline is the hero, with the one metal number */
 .app-hero { padding: 56px 0 24px; max-width: 900px; }
@@ -306,7 +308,8 @@ html:not(.is-scrolling) .lrow .dl:hover .act-open, .lrow .dl:focus-within .act-o
 .island .more > div { overflow: hidden; }
 .island .more ul { list-style: none; margin: 0; padding: 12px 16px 14px; display: grid; gap: 10px; border-top: 1px solid var(--hairline); }
 .island .more li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 12px; }
-.island .more li .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.island .more li .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--label); text-decoration: none; border-radius: var(--r-xs); }
+.island .more li .n:focus-visible { outline-offset: 1px; }
 .island .more li { opacity: 0; translate: 0 -6px; filter: blur(4px); transition: opacity 100ms ease, translate 160ms ease, filter 110ms ease; }
 .island.open .more li { --d: calc(60ms + var(--i, 0) * 25ms); opacity: 1; translate: 0 0; filter: none; transition: opacity 200ms ease var(--d), translate 440ms var(--spring-smooth) var(--d), filter 240ms ease var(--d); }
 .island.open .more li:hover .n { color: var(--accent-text); }
@@ -503,7 +506,7 @@ button, .btn, [role="button"], [role="option"], .lrow, .island { -webkit-user-se
 /* ---------- Accessibility preferences ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
-  .btn.is-pressed:not(:disabled), button.avatar.is-pressed { transform: none; }
+  .btn.is-pressed:not(:disabled), summary.avatar.is-pressed { transform: none; }
   .island, .cmd, .dock-nav > * { transition: opacity 150ms ease !important; }
   .island.away { transform: translateX(-50%); }
   .island .pulse { animation: none; }
