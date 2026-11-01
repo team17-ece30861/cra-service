@@ -15,6 +15,8 @@ from acceptance.submission_cases import REPORT_TYPES, audit_log, submit_report
 SECRET = "ac16-unique-reporter-4f1c9e@example.invalid"
 SECRET_NAME = "AC16 Unique Reporter Name 4f1c9e"
 LATER_SECRET = "ac16-changed-reporter-7b2d10@example.invalid"
+REJECTED_SECRET = "ac16-rejected-reporter-93e5aa@example.invalid"
+SECRETS = (SECRET, SECRET_NAME, LATER_SECRET, REJECTED_SECRET)
 
 
 class PrivacyChecks:
@@ -36,11 +38,26 @@ class PrivacyChecks:
         ticket = service.create(**fields)
         seen.append(("POST /tickets -> 201", ticket))
         tid = ticket["id"]
+        call(
+            "POST",
+            "/tickets",
+            400,
+            "/tickets",
+            body={
+                **deepcopy(fields),
+                "reporter": {"name": "R", "contact": REJECTED_SECRET},
+                "unknown_field": 1,
+            },
+        )
         base = f"/tickets/{tid}"
 
+        def listed(query):
+            body = call("GET", "/tickets" + query, 200, "/tickets", actor=None)
+            assert tid in {ticket["id"] for ticket in body}, f"{query or 'list'} dropped the ticket"
+
         def reads():
-            call("GET", "/tickets", 200, "/tickets", actor=None)
-            call("GET", "/tickets?state=" + service.get(tid)["state"], 200, "/tickets", actor=None)
+            listed("")
+            listed("?state=" + service.get(tid)["state"])
             call("GET", base + "/audit", 200, "/tickets/{id}/audit", actor=None)
 
         reads()
@@ -81,7 +98,20 @@ class PrivacyChecks:
             "/tickets/{id}/triage",
             body={"decision": "actively_exploited", "aware_at": FIXED, "reason": "Confirmed"},
         )
-        call("GET", "/tickets?obligation_status=pending", 200, "/tickets", actor=None)
+        listed("?obligation_status=pending")
+        call("GET", "/tickets?state=bogus", 400, "/tickets", actor=None)
+        call("GET", base, 401, "/tickets/{id}", authenticated=False)
+        # A rule-breaking change that carries a reporter: the error must not quote it.
+        call(
+            "PATCH",
+            base,
+            422,
+            "/tickets/{id}",
+            body={
+                "reporter": {"name": SECRET_NAME, "contact": REJECTED_SECRET},
+                "fix": {"available_at": "2027-01-01T00:00:00Z"},
+            },
+        )
         for report in (*REPORT_TYPES, "user_advisory"):
             seen.append((f"draft {report}", read_draft(service, tid, report)))
         call("GET", base + "/reports/bogus", 404, "/tickets/{id}/reports/{type}", actor=None)
@@ -120,7 +150,13 @@ class PrivacyChecks:
         )
         call("POST", base + "/close", 200, "/tickets/{id}/close")
         call("POST", base + "/close", 409, "/tickets/{id}/close")
-        call("PATCH", base, 409, "/tickets/{id}", body={"title": "Closed"})
+        call(
+            "PATCH",
+            base,
+            409,
+            "/tickets/{id}",
+            body={"title": "Closed", "reporter": {"name": "X", "contact": REJECTED_SECRET}},
+        )
         for report in (*REPORT_TYPES, "user_advisory"):
             seen.append((f"draft after close {report}", read_draft(service, tid, report)))
         reads()
@@ -128,8 +164,9 @@ class PrivacyChecks:
 
         for label, body in seen:
             text = json.dumps(body)
-            for value in (SECRET, SECRET_NAME, LATER_SECRET):
+            for value in SECRETS:
                 assert value not in text, f"{label} leaked the reporter"
 
+        # Failed requests left the reporter as the last successful change set it.
         detail = service.get(tid)
         assert detail["reporter"] == {"name": SECRET_NAME, "contact": LATER_SECRET}
