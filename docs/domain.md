@@ -113,11 +113,11 @@ and status helper are merged through Quincy's reconciliation in PR #76. This
 ## Draft read endpoint (4.A2)
 
 `GET /tickets/{id}/reports/{type}` returns the existing Draft envelope. Unknown
-types/tickets return 404. Under Q3's documented proposal, never-reportable tickets
-return 409 and resolved tickets remain readable. Before recording, Model C builds
+types/tickets return 404. Under Q3 (agreed with Team 21, 2026-11-01), never-reportable
+tickets return 409 and resolved tickets remain readable. Before recording, Model C builds
 live content/missing fields; a stored submission instead supplies locked content,
-time/reference and empty missing fields. Metadata uses current deadlines under Q4.
-Both proposals remain open pod questions, not new contract agreements.
+time/reference and empty missing fields. Status, deadline, submitted_at and reference come from the ticket's obligation
+(4.A5), so a draft and its ticket always agree; deadlines are current (Q4, agreed).
 
 Advisory is always live, with null status/deadline/submission/reference. Auth is
 required but X-Actor is not. Reads add no writes/audit and exclude reporter data.
@@ -129,8 +129,20 @@ boundaries, auth, unknown paths and state conflicts. Local stored fixtures test
 locked reads, current-deadline recalculation and resolved tickets; they are not
 evidence of working submission POST, audits, closure or concurrency. Supplemental
 upgrade/reset/model/helper tests exercise the merged foundation without changing it.
-Local focused validation: 310 passed on SQLite; PostgreSQL/deployed validation
-and posted independent PR approval remain pending. Ann's 4.A5 remains separate.
+Merged in PR #77 after CI on PostgreSQL and an agent review.
+
+## Ticket statuses and listing (4.D5, 4.A5)
+
+Every ticket response builds each obligation from the stored deadline inputs and the
+recorded report, if any: an unrecorded report uses `unsubmitted_obligation_status`, a
+recorded one uses `submitted_report_status` against the current deadline (Q4) and
+shows its `submitted_at` and `reference`. `next_due_at` (`core.domain.listing`) is the
+earliest deadline among applicable reports not yet recorded; overdue ones count, a
+final report waiting for a fix doesn't. `GET /tickets` filters by `state` and by
+`obligation_status` (any of the three obligations), rejects unknown values with 400,
+and sorts nearest unmet deadline first, then oldest `received_at`, then `id` (Q2).
+Submissions are prefetched in one query. Merged in PR #84; portable cases for AC-06
+and AC-11 are in `acceptance/listing_cases.py`.
 
 ## Submission validation rule (4.D3)
 `core.domain.submissions.validate_submission` (4.D3) is pure: it receives state,
@@ -155,8 +167,8 @@ to the safe snapshot/time/reference/actor, at recording now. It returns the lock
 Draft. The outer POST transaction covers snapshot, audit and rendering; a nested
 savepoint permits uniqueness fallback without querying a broken transaction.
 Other IntegrityErrors are not disguised as conflicts. Failed writes/rendering
-roll back; duplicate/order 409 precede fields/time 422. PostgreSQL race CI remains
-needed. Ann's Ticket/list statuses/metadata/next_due_at (4.A5) remain separate.
+roll back; duplicate/order 409 precede fields/time 422. The PostgreSQL race test runs
+in CI. Merged in PR #79.
 
 ## Closure validation rule (4.D4)
 
