@@ -17,6 +17,10 @@ from console.api_calls import call_api
 from core import clock
 
 TOAST_TAG = "ledger-toast"
+PAGE_ONLY = ("console/not_found.html", "console/error.html")
+READ_FAILED = (
+    "This ticket couldn't be loaded, so nothing was changed. Reload the page to try again."
+)
 
 
 def _toast(request, title: str, body: str) -> None:
@@ -24,12 +28,25 @@ def _toast(request, title: str, body: str) -> None:
     messages.success(request, json.dumps({"title": title, "body": body}), extra_tags=TOAST_TAG)
 
 
+def _read_failed(request, ticket_id: str, found):
+    """The ticket read before a change failed: not found, or PR 1's error page."""
+    if found.status == 404:
+        return _over(request, views.ticket_page(request, ticket_id), "", {})
+    now = clock.now()
+    _, rows, groups, upcoming = views._everything(request, now)
+    context = {
+        **views._shell(request, "ticket", rows, groups, upcoming, now),
+        "message": READ_FAILED,
+    }
+    return render(request, "console/error.html", context, status=views._failed_status(found))
+
+
 def _over(request, page, sheet: str, extra: dict, *, status=None, enter=False):
     """The page with one of its sheets open. ``enter``: the sheet rises in (a fresh GET);
     otherwise it's simply there (the answer to a POST)."""
     template, context, page_status = page
-    if page_status == 404:
-        return render(request, template, context, status=404)
+    if template in PAGE_ONLY:  # the ticket wasn't found or couldn't be read: PR 1's pages
+        return render(request, template, context, status=page_status)
     context.update(extra)
     context["open_sheet"] = sheet
     context["sheet_enter"] = enter
@@ -42,7 +59,7 @@ def _over(request, page, sheet: str, extra: dict, *, status=None, enter=False):
 def new_ticket(request):
     if request.method != "POST":
         page = views.tickets_page(request)
-        return _over(request, page, "new", {}, status=200, enter=True)
+        return _over(request, page, "new", {}, enter=True)
     values = forms.values_from_post(request.POST)
     result = call_api(request, "POST", "/tickets", body=forms.create_body(values))
     if result.ok:
@@ -65,7 +82,7 @@ def edit_ticket(request, ticket_id: str):
     if request.method != "POST":
         page = views.ticket_page(request, ticket_id)
         extra = {}
-        if page[2] != 404:
+        if page[0] not in PAGE_ONLY:
             ticket = page[1]["t"]
             current = forms.values_from_ticket(ticket)
             extra["tf_edit"] = forms.ticket_form(
@@ -78,7 +95,7 @@ def edit_ticket(request, ticket_id: str):
         return _over(request, page, "edit", extra, enter=True)
     found = call_api(request, "GET", f"/tickets/{ticket_id}")
     if not found.ok:
-        return _over(request, views.ticket_page(request, ticket_id), "edit", {})
+        return _read_failed(request, ticket_id, found)
     ticket = found.data
     initial = forms.values_from_ticket(ticket)
     values = forms.values_from_post(request.POST)
@@ -98,6 +115,7 @@ def edit_ticket(request, ticket_id: str):
             )
             return redirect("console:ticket", ticket_id)
         problems = forms.problems(result, forms.edit_known(ticket), clock.now())
+        forms.explain_partial_clears(problems, initial, values)
         status = result.status
     sheet = forms.ticket_form(
         "edit", values=values, initial=initial, problems=problems, ticket=ticket
@@ -114,7 +132,7 @@ def triage(request, ticket_id: str):
         return _over(request, views.ticket_page(request, ticket_id), "triage", {}, enter=True)
     found = call_api(request, "GET", f"/tickets/{ticket_id}")
     if not found.ok:
-        return _over(request, views.ticket_page(request, ticket_id), "triage", {})
+        return _read_failed(request, ticket_id, found)
     title = found.data["title"]
     result = call_api(
         request, "POST", f"/tickets/{ticket_id}/triage", body=forms.triage_body(request.POST)

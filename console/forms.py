@@ -257,10 +257,27 @@ def problems(result, known: dict, now: datetime) -> Problems:
     return out
 
 
+GROUP_NAME = {"vulnerability": "vulnerability", "mitigations": "mitigation", "fix": "fix"}
+
+
+def explain_partial_clears(problems: Problems, initial: dict, values: dict) -> None:
+    """A field emptied inside a group whose other fields stay filled: the API can't clear
+    it on its own (PATCH merges groups one level deep; their fields aren't nullable), so
+    say what will work instead of echoing its "can't be empty"."""
+    for key in list(problems.fields):
+        top, _, sub = key.partition(".")
+        if top in GROUP_NAME and sub and initial.get(key) and not values.get(key):
+            problems.fields[key] = (
+                f"This can't be cleared while other {GROUP_NAME[top]} details are filled in. "
+                "Enter a value, or clear them too."
+            )
+
+
 def deadline_offsets() -> dict:
     """Seconds from awareness to each report's due time, read from the domain's own
     calculation (core/domain/deadlines.py) so the triage preview can't drift from it.
     The final report depends on the fix, so the preview leaves it out."""
+    # Not a copy of the rule: the domain function itself, run on a fixed time (agreed 2026-11-01).
     ref = datetime.fromisoformat("2026-01-01T00:00:00+00:00")
     d = calculate_deadlines(ref)
     return {

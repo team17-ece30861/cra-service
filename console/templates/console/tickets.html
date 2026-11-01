@@ -2,20 +2,6 @@
 {% block title %}{% if view_title %}{{ view_title }} · {% endif %}Tickets · Ledger{% endblock %}
 {% block screen_label %}Tickets{% endblock %}
 {% block screen %}
-<div class="app-top">
-  <span class="wordmark"><span class="mark" aria-hidden="true"></span>Ledger</span>
-  <span class="row app-top-end">
-    <span class="clock" data-clock>{{ now_utc }}</span>
-    <span class="menu-wrap">
-      <button class="avatar" type="button" id="acct-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="acct-menu" aria-label="Signed in as {{ username }}. Account menu" title="Signed in as {{ username }}">{{ initials }}</button>
-      <span class="menu acct-menu" role="menu" id="acct-menu" hidden>
-        <span class="menu-label">Signed in as <b>{{ username }}</b></span>
-        <hr>
-        <form method="post" action="{% url 'console:sign-out' %}">{% csrf_token %}<button role="menuitem" type="submit"><svg class="i" aria-hidden="true"><use href="#i-arrow-r"/></svg>Sign Out</button></form>
-      </span>
-    </span>
-  </span>
-</div>
 {% if clock_fixed %}
 <div class="banner"><svg class="i sm" aria-hidden="true"><use href="#i-clock"/></svg><span>Test clock is fixed at <span class="mono">{{ now_utc }}</span>. Deadlines below use this time.</span></div>
 {% endif %}
@@ -28,6 +14,8 @@
 {% if problem %}
 <div class="alert error view-alert" role="alert"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><div><div class="a-title">That filter didn't work</div><div class="a-body">{{ problem }}</div></div><span></span></div>
 {% endif %}
+{% elif failed %}
+<div class="view-head"><h1 class="t-title1">Tickets</h1></div>
 {% elif hero %}
 <div class="app-hero" id="app-hero">
   <p class="lbl"><svg class="i sm" aria-hidden="true"><use href="#i-clock"/></svg>Next deadline · {{ hero.report_label|lower }}</p>
@@ -59,6 +47,13 @@
   {% endfor %}
 </div></section>
 {% empty %}
+{% if failed %}
+<div class="empty" role="alert">
+  <span class="glyph"><svg class="i lg" aria-hidden="true"><use href="#i-alert"/></svg></span>
+  <h2 class="t-headline">Something went wrong</h2>
+  <p>{{ failed }}</p>
+</div>
+{% else %}
 <div class="empty">
   <span class="glyph"><svg class="i lg" aria-hidden="true"><use href="#i-tray"/></svg></span>
   {% if not any_tickets %}
@@ -72,6 +67,7 @@
   <p>Every ticket is closed.</p>
   {% endif %}
 </div>
+{% endif %}
 {% endfor %}
 {% if closed_count %}
 <p class="t-footnote faint list-foot">{{ closed_count }} closed ticket{{ closed_count|pluralize }}. <a href="{% url 'console:tickets' %}?view=closed">Show Closed Tickets</a></p>

@@ -110,7 +110,16 @@ VIEWS = {
 }
 
 
-def _shell(request, route: str, tickets: list[dict], now) -> dict:
+# One line for a failed read, in the console's voice (docs/design.md, "Copy voice").
+LOAD_FAILED = "Tickets couldn't be loaded. Reload the page to try again."
+
+
+def _failed_status(result) -> int:
+    """A page whose read failed answers with the API's error status (5xx as it was)."""
+    return result.status if result.status >= 400 else 500
+
+
+def _shell(request, route: str, rows: list[dict], groups: list[dict], upcoming: list[dict], now):
     """What every signed-in page shows around its content (the island, dock and command
     field), from the unfiltered list. The page's "now" is the service clock's, never the
     browser's: the page ticks forward from it."""
@@ -122,8 +131,16 @@ def _shell(request, route: str, tickets: list[dict], now) -> dict:
         "clock_fixed": FixedClock.objects.exists(),
         "username": username,
         "initials": present.initials(username),
-        **present.shell(tickets, now),
+        **present.shell(rows, groups, upcoming),
     }
+
+
+def _everything(request, now):
+    """The unfiltered list, its rows, groups and deadlines: built once per request."""
+    result = call_api(request, "GET", "/tickets")
+    rows = present.rows(result.data if result.ok else [], now)
+    groups = present.group_rows(rows)
+    return result, rows, groups, present.deadlines(rows)
 
 
 @never_cache
@@ -138,8 +155,7 @@ def tickets_page(request) -> tuple[str, dict, int]:
     """The Tickets list's template, context and status. The New Ticket sheet
     (console/views_forms.py) opens over it."""
     now = clock.now()
-    everything = call_api(request, "GET", "/tickets")
-    all_tickets = everything.data if everything.ok else []
+    everything, all_rows, all_groups, upcoming = _everything(request, now)
     view = request.GET.get("view", "")
     if view not in VIEWS:
         view = ""
@@ -148,37 +164,42 @@ def tickets_page(request) -> tuple[str, dict, int]:
     if view:
         title, query = VIEWS[view][0], {**VIEWS[view][1], **query}
     elif query:
-        title = "Filtered"
-    listed, problem = all_tickets, None
-    if query:
+        labels = [present.STATE_LABEL.get(query.get("state", ""), "")]
+        labels.append(present.STATUS.get(query.get("obligation_status", ""), ("", "", ""))[2])
+        title = " · ".join(label for label in labels if label) or "Filtered"
+    groups, problem, failed, status = all_groups, None, None, 200
+    if not everything.ok:
+        failed, status = LOAD_FAILED, _failed_status(everything)
+    elif query:
         result = call_api(request, "GET", "/tickets", query=query)
-        listed = result.data if result.ok else []
-        problem = (
-            None if result.ok else (result.data or {}).get("detail") or "That filter isn't valid."
-        )
-    groups = present.group_rows(listed, now)
+        if result.status == 400:
+            problem = (result.data or {}).get("detail") or "That filter isn't valid."
+            status = 400
+        elif not result.ok:
+            failed, status = LOAD_FAILED, _failed_status(result)
+        groups = present.group_rows(present.rows(result.data if result.ok else [], now))
     closed = next((g for g in groups if g["key"] == "closed"), None)
     if view == "due":
         groups = [g for g in groups if g["key"] == "today"]
     elif not query:
         groups = [g for g in groups if g["key"] != "closed"]
-    upcoming = present.deadlines(all_tickets, now)
     context = {
-        **_shell(request, "tickets", all_tickets, now),
+        **_shell(request, "tickets", all_rows, all_groups, upcoming, now),
         "view": view,
         "view_title": title,
         "filtered": bool(view or query),
         "problem": problem,
-        "groups": groups,
+        "failed": failed,
+        "groups": [] if failed else groups,
         "listed_count": sum(len(g["rows"]) for g in groups),
         "closed_count": len(closed["rows"]) if closed and not query else 0,
         "hero": upcoming[0] if upcoming else None,
-        "any_tickets": bool(all_tickets),
+        "any_tickets": bool(all_rows),
         "hero_on_page": bool(upcoming) and not (view or query),
         "dock_current": view or ("" if query else "all"),
         **forms.new_sheet(),
     }
-    return "console/tickets.html", context, 400 if problem else 200
+    return "console/tickets.html", context, status
 
 
 @never_cache
@@ -193,13 +214,20 @@ def ticket_page(request, ticket_id: str) -> tuple[str, dict, int]:
     """The Ticket page's template, context and status. Its sheets (New Ticket, Edit
     Ticket, Triage; console/views_forms.py) open over it."""
     now = clock.now()
-    everything = call_api(request, "GET", "/tickets")
-    shell = _shell(request, "ticket", everything.data if everything.ok else [], now)
+    _, rows, groups, upcoming = _everything(request, now)
+    shell = _shell(request, "ticket", rows, groups, upcoming, now)
     found = call_api(request, "GET", f"/tickets/{ticket_id}")
     if found.status == 404:
         return "console/not_found.html", shell, 404
+    trail = call_api(request, "GET", f"/tickets/{ticket_id}/audit") if found.ok else found
+    if not found.ok or not trail.ok:
+        failed = found if not found.ok else trail
+        context = {
+            **shell,
+            "message": "This ticket couldn't be loaded. Reload the page to try again.",
+        }
+        return "console/error.html", context, _failed_status(failed)
     data = found.data
-    trail = call_api(request, "GET", f"/tickets/{ticket_id}/audit")
     cards = present.report_cards(data, now)
     report = present.next_report(data)
     context = {
@@ -214,7 +242,7 @@ def ticket_page(request, ticket_id: str) -> tuple[str, dict, int]:
         "fix_at": present.utc((data.get("fix") or {}).get("available_at")),
         "next": next((c for c in cards if c["type"] == report), None),
         "cards": cards,
-        "audit": present.audit(trail.data if trail.ok else []),
+        "audit": present.audit(trail.data),
         **forms.ticket_sheets(data),
     }
     return "console/ticket.html", context, 200

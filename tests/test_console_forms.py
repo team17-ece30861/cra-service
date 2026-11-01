@@ -301,3 +301,37 @@ def test_list_never_carries_reporter_details_in_its_sheet(api, console):
     _create(api)
     html = console.get("/console/tickets/new").content.decode()
     assert "Reporter Person" not in html and "rp@example.invalid" not in html
+
+
+def test_clearing_one_field_of_a_group_says_what_works(api, console):
+    ticket_id = _create(api, vulnerability={"cve_id": "CVE-2026-12345", "description": "Path."})
+    current = forms.values_from_ticket(api.get(f"/tickets/{ticket_id}").json())
+    post = {k: "\n".join(v) if isinstance(v, list) else v for k, v in current.items()}
+    response = console.post(
+        f"/console/tickets/{ticket_id}/edit", {**post, "vulnerability.cve_id": ""}
+    )
+    assert response.status_code == 400
+    assert "This can&#x27;t be cleared while other vulnerability details are filled in." in (
+        response.content.decode()
+    )
+    assert Ticket.objects.get(pk=ticket_id).data["vulnerability"]["cve_id"] == "CVE-2026-12345"
+
+
+def test_a_failed_read_before_a_change_shows_the_error_page(api, console, monkeypatch):
+    from console import views_forms
+    from console.api_calls import ApiResult, call_api
+
+    ticket_id = _create(api)
+
+    def failing(request, method, path, **kwargs):
+        if method == "GET" and path == f"/tickets/{ticket_id}":
+            return ApiResult(503, None)
+        return call_api(request, method, path, **kwargs)
+
+    monkeypatch.setattr(views_forms, "call_api", failing)
+    response = console.post(
+        f"/console/tickets/{ticket_id}/triage", {"decision": "invalid", "reason": "No."}
+    )
+    assert response.status_code == 503
+    assert "Something went wrong" in response.content.decode()
+    assert Ticket.objects.get(pk=ticket_id).state == "received"

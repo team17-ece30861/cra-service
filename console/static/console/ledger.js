@@ -111,6 +111,14 @@
     if (all) { m.offsetWidth; m.style.transition = ''; }
   }
   function measureAll(all) { rowEls.forEach(function (r) { measureRow(r, all); }); }
+  /* After a tick: re-measure only the rows whose countdown text changed, all reads first, then all writes */
+  function remeasure(rows) {
+    var widths = rows.map(function (r) {
+      var dlEl = r.querySelector('.dl'), w = r.querySelector('.when');
+      return dlEl && w && !dlEl.matches(':hover, :focus-within') ? [dlEl, w.offsetWidth] : null;
+    });
+    widths.forEach(function (x) { if (x) x[0].style.setProperty('--w-rest', x[1] + 'px'); });
+  }
   measureAll(true);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { measureAll(true); });
   window.addEventListener('resize', function () { measureAll(true); });
@@ -130,24 +138,27 @@
     islandMorph = new Morph(function (w, h, r) { island.style.width = w + 'px'; island.style.height = h + 'px'; island.style.borderRadius = r + 'px'; });
     islandTarget = function () { var open = island.classList.contains('open'), max = app.clientWidth - 32; return { w: Math.min(open ? 460 : 360, max), h: islandBar.offsetHeight + (open && islandMore ? islandMore.offsetHeight : 0), r: open ? 26 : 22 }; };
     islandMorph.to(islandTarget(), true);
+    /* The expanded rows are links; they're in the tab order only while the island is open */
+    var islandLinks = [].slice.call(island.querySelectorAll('.more a'));
+    function syncIslandLinks(open) { islandLinks.forEach(function (a) { a.tabIndex = open ? 0 : -1; }); }
     toggleIsland = function (force) {
       if (!expandable) return;
       var o = island.classList.toggle('open', force);
-      island.setAttribute('aria-expanded', o ? 'true' : 'false'); islandMorph.to(islandTarget());
+      island.setAttribute('aria-expanded', o ? 'true' : 'false'); syncIslandLinks(o); islandMorph.to(islandTarget());
     };
-    island.addEventListener('click', function (e) {
-      var li = e.target.closest('li[data-href]');
-      if (li && island.classList.contains('open')) { location.href = li.getAttribute('data-href'); return; }
-      toggleIsland();
+    island.addEventListener('click', function (e) { if (e.target.closest('a')) return; toggleIsland(); });
+    island.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && island.classList.contains('open')) { toggleIsland(false); island.focus(); return; }
+      if (e.target !== island) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleIsland(); }
     });
-    island.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleIsland(); } });
     [].forEach.call(island.querySelectorAll('.more li'), function (li, i) { li.style.setProperty('--i', i); });
     /* On Home the hero shows the same deadline, so the island waits until the hero scrolls away */
     if (heroEl && 'IntersectionObserver' in window) {
       new IntersectionObserver(function (es) {
         es.forEach(function (e) {
           var away = e.isIntersecting; island.classList.toggle('away', away);
-          if (away && island.classList.contains('open')) { island.classList.remove('open'); island.setAttribute('aria-expanded', 'false'); islandMorph.to(islandTarget(), true); }
+          if (away && island.classList.contains('open')) { island.classList.remove('open'); island.setAttribute('aria-expanded', 'false'); syncIslandLinks(false); islandMorph.to(islandTarget(), true); }
         });
       }, { root: scroller, threshold: 0.35 }).observe(heroEl);
     } else island.classList.remove('away');
@@ -331,7 +342,7 @@
 
   /* ---------- Press system: one pressed state for every control ---------- */
   (function () {
-    var PRESSABLE = 'button, .btn, [role="button"], [role="option"], .dock-input, .lrow, .island, .dock-nav > a';
+    var PRESSABLE = 'button, summary, .btn, [role="button"], [role="option"], .dock-input, .lrow, .island, .dock-nav > a';
     var SLOP = 10, el = null, rect = null;
     function set(on) {
       if (!el || el.classList.contains('is-pressed') === on) return;
@@ -369,7 +380,7 @@
   function ntSlot(c) { var sl = mk('span', 'nt-s'); sl.appendChild(ntGlyph(c)); return sl; }
   function ntCurrent(sl) { var k = sl.lastElementChild; while (k && k.classList.contains('nt-out')) k = k.previousElementSibling; return k; }
   function ntSet(el, text, down) {
-    if (el._nt === text) return;
+    if (el._nt === text) return false;
     var prev = el._nt, v = el.querySelector(':scope > .nt-v');
     el._nt = text;
     if (prev == null || !v) {
@@ -377,7 +388,7 @@
       var sr = mk('span', 'sr-only', text); el.appendChild(sr);
       v = mk('span', 'nt-v'); v.setAttribute('aria-hidden', 'true');
       for (var i = 0; i < text.length; i++) v.appendChild(ntSlot(text[i]));
-      el.appendChild(v); return;
+      el.appendChild(v); return true;
     }
     el.firstChild.textContent = text;
     var live = !!el.offsetParent, calm = reduceMotion.matches, dir = down ? 1 : -1;
@@ -416,6 +427,7 @@
         sl.animate([{ width: w2 + 'px' }, { width: '0px' }], { duration: calm ? 150 : NT_DUR, delay: d, easing: NT_EASE, fill: 'both' }).onfinish = function () { sl.remove(); };
       }
     });
+    return true;
   }
   /* Pairs old and new characters. When the words match ("in 6 h 10 m" / "in 6 h 9 m"), each number is aligned on its own from the
      right, so only digits move; otherwise the whole strings are aligned from the right. */
@@ -440,9 +452,11 @@
     document.querySelectorAll('[data-clock]').forEach(function (e) { e.textContent = isoStr(n); });
     document.querySelectorAll('[data-hms]').forEach(function (e) { countdown(e, false); });
     document.querySelectorAll('[data-hms2]').forEach(function (e) { countdown(e, true); });
+    var changedRows = [];
     document.querySelectorAll('[data-rl]').forEach(function (e) {
       var ms = Date.parse(e.getAttribute('data-rl')) - n;
-      ntSet(e, relStr(ms), ms >= 0); e.classList.toggle('late', ms < 0); e.classList.toggle('soon', ms >= 0 && ms < 12 * 3600000);
+      if (ntSet(e, relStr(ms), ms >= 0)) { var r = e.closest('.lrow'); if (r) changedRows.push(r); }
+      e.classList.toggle('late', ms < 0); e.classList.toggle('soon', ms >= 0 && ms < 12 * 3600000);
     });
     document.querySelectorAll('[data-meter]').forEach(function (e) {
       var due = Date.parse(e.getAttribute('data-due')), start = Date.parse(e.getAttribute('data-start')), ms = due - n;
@@ -453,7 +467,7 @@
       e.setAttribute('aria-label', text);
       var label = e.parentNode.querySelector('[data-meter-text]'); if (label) label.textContent = text;
     });
-    measureAll(false);
+    if (changedRows.length) remeasure(changedRows);
   }
   /* Tick just after each second boundary of the clock. A plain 1 s interval started at load fires right on the boundary, so
      timer jitter lands some ticks just before it and some just after: a second shown twice, then one skipped. */
@@ -473,6 +487,22 @@
   });
   document.addEventListener('pointerdown', function (e) {
     menus.forEach(function (m) { if (!m.menu.hidden && !e.target.closest('.menu-wrap')) setMenu(m.btn, m.menu, false); });
+  });
+
+  /* The account menu is a <details> (it works without JavaScript); close it on Escape and on a press outside */
+  var acct = $('acct');
+  if (acct) {
+    acct.addEventListener('keydown', function (e) { if (e.key === 'Escape' && acct.open) { acct.open = false; acct.querySelector('summary').focus(); } });
+    document.addEventListener('pointerdown', function (e) { if (acct.open && !acct.contains(e.target)) acct.open = false; });
+  }
+
+  /* A deadline chip opens its actions on focus; Return or Space moves into them, as a tap does */
+  document.addEventListener('keydown', function (e) {
+    var when = e.target.closest && e.target.closest('.lrow .when');
+    if (!when || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    var main = when.closest('.dl').querySelector('.act-main');
+    if (main) setTimeout(function () { main.focus(); }, 70);   /* the actions become hittable 60 ms after the chip engages */
   });
 
   /* ---------- Copy the ticket ID ---------- */
