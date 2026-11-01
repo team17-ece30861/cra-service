@@ -48,8 +48,8 @@ Team 21's tester now authenticates on Orbit: first full run 2026-11-01 01:51 to 
    - a sign-in lockout or rate limit;
    - `pod-k-shared` gray-areas table: `/console/` and `/static/` no longer return 401
      (after the next Orbit launch);
-   - unify the two sheet systems and the two toast mechanisms (`ledger.js` "Sheets (PR 2)" vs
-     `reports.js`);
+   - Phase 5 task 5.7: no page reloads after saving a sheet; unify the two sheet systems and
+     the two toast mechanisms (`ledger.js` "Sheets (PR 2)" vs `reports.js`) as part of it;
    - the Edit 409 sheet should show the other person's value, and sign `{id, values}`;
    - countdowns use `performance.now()` and can drift after a laptop sleeps (#94's Record
      sheet already takes the larger of the two time differences).

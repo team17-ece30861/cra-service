@@ -219,6 +219,7 @@ against Team 21 before each deadline.
 | 5.4 | Full suite (AC-01 to 18) runs in CI on every change, and against Team 21 before each deadline. | Richard | To do |
 | 5.5 | Short operations guide: deploy, roll back, rotate tokens, lift the spend cap, read logs. Mostly a trim of [platform.md](platform.md). | Quincy | To do |
 | 5.6 | Final spec version agreed with Team 21; final cross-team results recorded. | Ann (spec), Richard (results) | To do |
+| 5.7 | Console without page reloads (Quincy, 2026-11-01): saving a sheet (New/Edit Ticket, Triage, Record Submission, Close) updates the page in place, as the prototype does, instead of reloading the window to show the toast. Lists, the ticket page, the island and dock counts refresh in place. Keep the no-JavaScript fallback, one change per request, and Back/Forward working. Good moment to merge the two sheet systems and the two toast mechanisms (`ledger.js` "Sheets (PR 2)" and `reports.js`). | Quincy | To do |
 
 ### If we fall behind
 
