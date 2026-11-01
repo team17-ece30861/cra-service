@@ -67,7 +67,9 @@ TESTER_TARGET_TOKENS = env_tester_tokens(os.environ.get("TESTER_TARGET_TOKENS", 
 # course spec: "approved pod service URLs"). Anything else is rejected with 400.
 TESTER_ALLOWED_HOSTS = [
     h.strip().lower()
-    for h in os.environ.get("TESTER_ALLOWED_HOSTS", "cra-phase3.onrender.com").split(",")
+    for h in os.environ.get(
+        "TESTER_ALLOWED_HOSTS", "cra-phase3.onrender.com,team21-cra-reporting-service.onrender.com"
+    ).split(",")
     if h.strip()
 ]
 

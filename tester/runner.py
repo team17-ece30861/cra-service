@@ -26,7 +26,7 @@ ACCEPTANCE_INI = ROOT / "acceptance" / "pytest.ini"
 
 # Seconds. The request limits registered for the tester must cover these.
 SETUP_TIMEOUT = 60
-SUITE_TIMEOUT = 480
+SUITE_TIMEOUT = 1680
 REPORT_TIMEOUT = 30
 
 # Our own client name in settings.API_TOKENS, used when the tester targets this service.
