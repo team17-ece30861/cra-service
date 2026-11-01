@@ -92,7 +92,7 @@ jobs:
             --set-env-vars "DJANGO_DEBUG=false,ALLOWED_HOSTS=$ALLOWED_HOST" \
             --cpu 1 --memory 512Mi \
             --min-instances 0 --max-instances 1 \
-            --concurrency 80 --timeout 600 --cpu-throttling \
+            --concurrency 80 --timeout 1800 --cpu-throttling \
             --allow-unauthenticated --quiet
 
       - name: Smoke test /health
