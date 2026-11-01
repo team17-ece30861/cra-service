@@ -4,31 +4,43 @@
 
 ## Where things stand
 
-Feature drafts #77–81 are published, with all five PostgreSQL 18 CI runs passing.
-The complete #81 stack passed 1,143 tests with no skips. These are not deployed
-HTTP results or posted independent approval, and no PR has been merged by us.
+Feature drafts #77–81 remain unchanged and have passing PostgreSQL CI. Two additional
+one-task drafts are published: #82 (4.T6 audit failures), above #81, and #83 (4.T5
+operation reporting), above #82. Richard explicitly approved these stacked drafts
+and CI, not merges, deployment or shared reset tests.
 
 ## In progress
 
-- Task 4.T6 on codex/phase4-audit-failure-tests, stacked above #81 with Richard's
-  explicit draft/CI permission. Four shared portable cases: unknown UUID and
-  malformed ID audit 404, PUT/DELETE audit 405, all with unchanged ticket/list/audit.
-- No service endpoint, contract, workflow, model, helper or migration changes.
-  Old exact-title coupling is avoided; status and contract schema are authoritative.
-- Publication and PostgreSQL CI validation are authorized; merge/deployment or
-  shared reset tests are not. Posted independent PR review remains required.
+- #82 c4925ce: PostgreSQL 18 CI passed **1,147 tests, no skips**.
+- #83 application commit 7396445: PostgreSQL 18 CI passed **1,180 tests, no skips**.
+  These are the verified code-run results; current checks/evidence are linked in
+  each PR description. This handoff is a documentation-only follow-up.
+- All 14 operations are reported from safe Service.expect metadata and completed
+  outcomes. Auth-only/untested is not implementation/passing; failed, skipped and
+  unfinished/interrupted teardown is inconclusive. Setup/raw calls are excluded.
+- Local reporting/validator/interface: 65 passed (33 reporting tests). Actual Phase 4
+  hooks: 237 passed, four PostgreSQL-only skips, with real JSON/Markdown output.
+  The 188-case portable collection is not a deployed run.
+- Fresh independent local review found no actionable issues; reviewer reran 40
+  focused tests. That is not posted independent approval. No service, model,
+  helper, migration, workflow, contract or Ann/Quincy handoff changed.
 
 ## Next up
 
-Validate this task and CI, then integrate 4.T5 operation reporting as a separate
-one-task draft above it. Leave feature drafts and earlier local worktrees untouched.
-Ann's 4.A5 and wider privacy/contract work remain separate.
+Obtain required posted independent PR reviews and a separate merge go. Retarget
+through main as prerequisites land; do not merge the drafts into feature bases.
+Ann's 4.A5, wider privacy/contract work and actual deployed/cross-team validation
+remain separate. Refresh pod tester only through the agreed release process.
 
 ## Waiting on
 
-CI/posted review, owner integration, Quincy/pod coordination and a separate merge go.
+Posted approval, current CI checks, teammate/pod integration and Richard's separate
+merge/shared-reset permission. Only Quincy launches Orbit.
 
 ## Notes for the next session
 
-The prior localhost HTTP suite had one Windows 10053 abort, also reproduced without
-CRA/Django; do not hide it or infer a deployed regression. Only Quincy launches Orbit.
+The local table honestly leaves DELETE-clock success unobserved and audit 405
+untested because raw PUT/DELETE tests are not GET evidence. Supplied revision
+labels do not verify deployment, and observed status coverage is not full delivery.
+The prior Windows localhost transport failure remains visible; no swallowing or
+retry-until-green. PostgreSQL CI is not Linux/gunicorn/Cloud Run HTTP acceptance.
