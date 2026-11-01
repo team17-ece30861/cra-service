@@ -6,22 +6,29 @@ flowchart TB
     subgraph api["Django Ninja API"]
       direction LR
       health["<b>GET /health</b><br/>public"]
-      tickets["<b>Ticket routes</b><br/>schemas, X-Actor check,<br/>audit entries, responses"]
-      controls["<b>Test controls</b><br/>reset, clock"]
+      tickets["<b>Ticket routes</b><br/>tickets, list filters, triage, updates,<br/>drafts, record submission, close,<br/>audit log; X-Actor check, audit entries"]
+      controls["<b>Test controls</b><br/>reset, clock,<br/>course test setup and report"]
+      testerapi["<b>Deployed tester</b><br/>/tester/test: setup, run, report"]
     end
-    domain["<b>Domain rules</b> (pure)<br/>triage, deadlines, statuses"]
+    domain["<b>Domain rules</b> (pure)<br/>triage, deadlines, statuses, drafts (Model C),<br/>submission rule, close rule, listing order"]
     clock["<b>Service clock</b><br/>real or fixed test time"]
+    runner["<b>Tester subprocess</b><br/>our acceptance suite, run against a<br/>target with only that target's token"]
   end
-  db[("<b>Neon Postgres</b><br/>Ticket, AuditEntry,<br/>FixedClock tables")]
+  db[("<b>Neon Postgres</b><br/>Ticket, AuditEntry, ReportSubmission,<br/>FixedClock, SystemSession, TesterSession")]
+  target["<b>Target system</b><br/>a podmate's service, or this one"]
   client -->|"HTTPS request"| mw
   mw -->|"no token needed"| health
   mw -->|"token checked"| tickets
   mw -->|"token checked"| controls
+  mw -->|"token checked"| testerapi
   tickets -->|"inputs + current time"| domain
   domain -->|"result or 400/409/422"| tickets
   tickets -->|"current time"| clock
   controls -->|"fix or release time"| clock
   tickets -->|"read, lock, write"| db
-  controls -->|"clear tickets, audit entries"| db
+  controls -->|"clear tickets, reports, audit entries"| db
   clock -->|"fixed time"| db
+  testerapi -->|"start a run"| runner
+  testerapi -->|"session and report"| db
+  runner -->|"HTTPS requests"| target
   mw -.->|"JSON or problem+json response"| client
