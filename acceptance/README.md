@@ -8,7 +8,14 @@ test client (`tests/test_phase3_api.py`).
 **Covers (Phase 3):** AC-01 to AC-05, AC-14, AC-15, and AC-17, plus the Model D E6
 boundary. Every response is also checked against the response schemas in `openapi.yaml`.
 
+**Draft-read increment (4.A2):** `draft_cases.py` adds 32 portable live-draft
+cases shared with `tests/test_draft_api.py`; `test_drafts.py` is the HTTP entry
+point. The suite now collects 87 cases. Local stored-row fixtures cover locked
+reads but do not establish submission POST behavior. Q3/Q4 use documented plan
+proposals. No Phase 4 deployment run is claimed.
+
 ## Warning: it resets the target
+
 
 Every test starts with `POST /test/reset`, which deletes **all** tickets on the target
 deployment, for every client. Run it only against a deployment you're allowed to reset, at
@@ -40,8 +47,9 @@ Run it from the repository root.
 
 ## Results
 
-On an HTTPS deployment all 55 tests should pass. Against `http://localhost`, the plain-HTTP
-check (AC-15) is skipped, so expect 54 passed and 1 skipped.
+This increment collects 87 cases (55 original plus 32 draft-read cases). On
+localhost the plain-HTTP probe is skipped. These are collection/expected counts,
+not a new deployed result; earlier Phase 3 validation covered only the original 55.
 
 The first request after the service has been idle can take several seconds while it starts,
 and the client allows 30 seconds per request.
@@ -61,3 +69,5 @@ curl -X DELETE "$CRA_BASE_URL/test/clock" -H "Authorization: Bearer $CRA_API_TOK
 | `client.py` | HTTP transport, plus response checks against `openapi.yaml` |
 | `conftest.py` | Command-line options, safety checks, and the JSON report |
 | `test_phase3.py` | HTTP entry point, including the plain-HTTP (AC-15) probe |
+| `draft_cases.py` | Live-draft cases shared by local Django and HTTP runs |
+| `test_drafts.py` | HTTP entry point for draft-read checks |

@@ -9,7 +9,8 @@ from ninja.responses import Status
 
 from core import clock
 from core.domain.deadlines import calculate_deadlines
-from core.domain.statuses import unsubmitted_obligation_status
+from core.domain.drafts import DraftReportType, build_draft
+from core.domain.statuses import submitted_report_status, unsubmitted_obligation_status
 from core.domain.triage import triage_ticket
 from core.models import AuditEntry, Ticket
 from core.schemas import TicketCreate, TicketUpdate, TriageRequest
@@ -258,3 +259,52 @@ def get_audit(request, id: str):
         }
         for entry in ticket.audit_entries.all()
     ]
+
+
+@router.get("/{id}/reports/{type}", response=dict, operation_id="getDraft")
+def get_draft(request, id: str, type: DraftReportType):
+    ticket = _ticket(id)
+    if ticket.aware_at is None or not (
+        ticket.state == "reportable"
+        or (ticket.state == "closed" and ticket.resolution == "resolved")
+    ):
+        raise Conflict("Drafts are only available for tickets that became reportable.")
+
+    now = clock.now()
+    submission = (
+        ticket.submissions.filter(report_type=type).first() if type != "user_advisory" else None
+    )
+    if submission is None:
+        draft = build_draft(
+            report_type=type,
+            ticket_id=str(ticket.pk),
+            aware_at=ticket.aware_at,
+            ticket_fields=ticket.data,
+        )
+        content, missing_fields = draft.content, draft.missing_fields
+    else:
+        content, missing_fields = deepcopy(submission.content), []
+
+    status, due_at = None, None
+    if type != "user_advisory":
+        obligation = _render(ticket, now)["obligations"][type]
+        status, due_at = obligation["status"], obligation["due_at"]
+        if submission is not None:
+            status = submitted_report_status(
+                report_type=type,
+                submitted_at=submission.submitted_at,
+                due_at=parse_timestamp(due_at) if due_at is not None else None,
+            )
+
+    return {
+        "ticket_id": str(ticket.pk),
+        "type": type,
+        "status": status,
+        "due_at": due_at,
+        "submitted_at": format_timestamp(submission.submitted_at)
+        if submission is not None
+        else None,
+        "reference": submission.reference if submission is not None else None,
+        "content": content,
+        "missing_fields": missing_fields,
+    }
