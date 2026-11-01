@@ -18,7 +18,7 @@ section below, and update its status row in the same PR that finishes it.
 | Repository rules (clock, UTC, errors, X-Actor, logging, branches) | [`CLAUDE.md`](../CLAUDE.md) |
 | Hosting, deploys, rollback, cost, platform interpretations | [platform.md](platform.md), [`README.md`](../README.md) |
 | Why something was decided, and what's already settled | [decisions.md](decisions.md) |
-| The system as delivered (models, interfaces, limitations), domain helpers, triage rules | `docs/phase3.md`, `docs/domain.md`, `docs/triage.md` |
+| The system as delivered (models, interfaces, limitations), domain helpers, triage rules | `docs/system.md`, `docs/domain.md`, `docs/triage.md` |
 | What each teammate is in the middle of and waiting on | `docs/handoff/` (one file per person) |
 
 ## Team and ownership
