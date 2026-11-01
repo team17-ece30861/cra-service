@@ -6,8 +6,8 @@
 
 Phase 4 is due **Sunday 2026-11-01 at midnight**. Every Phase 4 operation is on `main`
 and Launchpad: drafts, recording a submission, closing, statuses in ticket responses,
-list filters and order, and the Q6 no-change rule (PRs #77 to #85, each with an agent
-review posted on the PR). Full suite: 1219 passed against local Postgres on `main`.
+list filters and order, the Q6 no-change rule, and the AC-16 privacy sweep (PRs #77 to
+#88, each with an agent review posted on the PR). Full suite: 1219 passed against local Postgres on `main`.
 **Orbit still runs Phase 3** (`262fedf`), so Team 21's tester gets 404 on the Phase 4
 operations. Task status is in [`docs/plan.md`](../plan.md); Team 21's answers are in
 [`docs/decisions.md`](../decisions.md) (2026-11-01).
@@ -17,8 +17,9 @@ Team 21's tester now authenticates on Orbit: first full run 2026-11-01 01:51 to 
 
 ## In progress
 
-- **cra-service #86:** review follow-ups (Q6 judged on the full ticket view, submission
-  rule type hint, two test gaps). Agent review running.
+- **pod-k-shared Phase 4 update** (branch `team17/phase4-release`): status chart,
+  `team17/TESTING.md`, tester copy (222 tests). Open it after the Launchpad run; merge
+  right after the Orbit launch.
 - **pod-k-shared #14:** contract freeze (`0.2.0`, `phase-3` frozen, agreed Q answers as
   wording). Needs Team 21's approval; agents never merge it. After it merges, mirror
   `openapi.yaml` into this repo (needs a human teammate's approval here).
@@ -30,8 +31,7 @@ Team 21's tester now authenticates on Orbit: first full run 2026-11-01 01:51 to 
 1. Run `acceptance/` against Launchpad (asks first: it resets Launchpad), including
    #81's oversized-body 401 cases, which may abort the connection on the real stack.
 2. 4.P2: Quincy launches Orbit from `main`.
-3. `pod-k-shared` update PR: status chart, `team17/TESTING.md`, and the tester copy (new
-   `acceptance/*_cases.py` and `test_*.py` files). Merge right after the Orbit launch.
+3. Open and then merge the `pod-k-shared` Phase 4 update (see In progress).
 4. 4.A6 Schemathesis, if time allows.
 5. Phase 4 report (`docs/reports/phase4.md`), using #83's operation table from a
    Launchpad or Orbit run, and noting that the cross-team run went one way.

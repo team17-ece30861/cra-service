@@ -151,7 +151,7 @@ Saturday, the report records a one-way run and says why.
 | 4.D3 | Submission rule: 409 if the ticket isn't `reportable`, the previous report isn't submitted, or this one is already submitted; 422 if required fields are missing or `submitted_at` isn't between `aware_at` and now. 409 is checked before 422. | REQ-08; AC-09 | Done (PR #78). |
 | 4.D4 | Close rule: 409 unless `reportable` with all three reports submitted. | REQ-09; AC-10 | Done (PR #80). |
 | 4.D5 | Listing helpers: `next_due_at` (earliest due time among unsubmitted, applicable reports; null if none) and the sort key (nulls last, tie-break per Q2). | REQ-10; AC-11 | Done (PR #84): `core/domain/listing.py`. |
-| 4.T1 | Acceptance cases for AC-06 to 12 and AC-16 in `acceptance/cases.py`, running both locally and over HTTP. | Cases for AC-06 to 12 are in `acceptance/` (`draft_cases`, `submission_cases`, `closure_cases`, `listing_cases`, `update_cases`; PRs #77 to #85), running locally and over HTTP. AC-16 waits on 4.A7. Not yet run against Launchpad. |
+| 4.T1 | Acceptance cases for AC-06 to 12 and AC-16 in `acceptance/cases.py`, running both locally and over HTTP. | Cases for AC-06 to 12 are in `acceptance/` (`draft_cases`, `submission_cases`, `closure_cases`, `listing_cases`, `update_cases`; PRs #77 to #85), running locally and over HTTP; AC-16 is `privacy_cases` (PR #88). Not yet run against Launchpad. |
 | 4.T2 | Add Phase 4 cases to the shared test file with Team 21, cross-checked. | | To do |
 | 4.T3 | Harness README: running needs `CRA_BASE_URL`, `CRA_API_TOKEN`, and `--allow-reset` (the explicit reset permission). Explain the reset-window etiquette. | Quincy's agent | Done 2026-10-18: `acceptance/README.md`, tested in a clean environment |
 | 4.T4 | First full cross-team run, both directions. Resolve disagreements in the spec, not by quietly changing tests. | Blocked on the Orbit launch (4.P2) and Team 21's Phase 4 endpoints. |
@@ -168,7 +168,7 @@ Saturday, the report records a one-way run and says why.
 | 4.A4 | `POST /tickets/{id}/close`: use 4.D4, set `closed`/`resolved`, add one `closed` audit entry. | REQ-09; AC-10 | Done (PR #81). |
 | 4.A5 | Ticket responses use submissions for `obligations.*.status`, `submitted_at`, `reference`, and `next_due_at`. `GET /tickets` supports `state` and `obligation_status` filters (bad values → 400) and the 4.D5 ordering. | REQ-05, 10; AC-06, 11 | Done (PR #84). |
 | 4.A6 | Schemathesis against `openapi.yaml`: at least 500 generated malformed requests, no 5xx, every error is problem+json, data unchanged afterward. Runs in CI against the local service and from `acceptance/` against a deployment. | REQ-12; AC-13 | To do |
-| 4.A7 | Reporter confidentiality sweep: a unique reporter string appears only in `GET /tickets/{id}`. Check lists, drafts, audit entries, error bodies, and logs. | REQ-15; AC-16 | To do |
+| 4.A7 | Reporter confidentiality sweep: a unique reporter string appears only in `GET /tickets/{id}`. Check lists, drafts, audit entries, error bodies, and logs. | REQ-15; AC-16 | Done (PR #88): `acceptance/privacy_cases.py`, plus a local log check. |
 | 4.A8 | Keep `openapi.yaml` in sync with Team 21: record every agreed change in the PR and in the file's `info.description`; freeze `phase-4` operations when both teams agree. | Ongoing. Freeze PR `pod-k-shared` #14 open (`phase-3` only; `phase-4` stays open). |
 
 ### Platform (Quincy)
