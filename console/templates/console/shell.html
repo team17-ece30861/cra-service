@@ -18,7 +18,8 @@
   {% endif %}
   <div class="app-scroll" id="app-scroll">
     <main class="screen" aria-label="{% block screen_label %}Tickets{% endblock %}">
-      <div class="screen-in{% block screen_class %}{% endblock %}">
+      <div class="screen-in">
+        {% include "console/_top.html" %}
         {% block screen %}{% endblock %}
       </div>
     </main>

@@ -1,0 +1,15 @@
+{# The app's top row on every signed-in page: wordmark, the service clock, and the account menu with Sign Out. #}
+<div class="app-top">
+  <span class="wordmark"><span class="mark" aria-hidden="true"></span>Ledger</span>
+  <span class="row app-top-end">
+    <span class="clock" data-clock>{{ now_utc }}</span>
+    <span class="menu-wrap">
+      <button class="avatar" type="button" id="acct-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="acct-menu" aria-label="Signed in as {{ username }}. Account menu" title="Signed in as {{ username }}">{{ initials }}</button>
+      <span class="menu acct-menu" role="menu" id="acct-menu" hidden>
+        <span class="menu-label">Signed in as <b>{{ username }}</b></span>
+        <hr>
+        <form method="post" action="{% url 'console:sign-out' %}">{% csrf_token %}<button role="menuitem" type="submit"><svg class="i" aria-hidden="true"><use href="#i-arrow-r"/></svg>Sign Out</button></form>
+      </span>
+    </span>
+  </span>
+</div>

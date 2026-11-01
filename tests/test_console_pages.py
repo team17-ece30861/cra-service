@@ -244,3 +244,17 @@ def test_audit_names_the_submitted_report_and_its_reference(api, console):
     assert "Early warning submitted</b> by j.berg" in html
     assert "Reference CSIRT-DE-2026-1044" in html
     assert "affected_versions" in html  # the update's change is listed
+
+
+def test_every_signed_in_page_has_the_account_menu_with_sign_out(api, console):
+    ticket_id = _create(api)
+    pages = [
+        console.get("/console/"),
+        console.get(f"/console/tickets/{ticket_id}"),
+        console.get("/console/tickets/00000000-0000-0000-0000-000000000000"),
+    ]
+    for page in pages:
+        html = page.content.decode()
+        assert 'id="acct-menu"' in html and "Signed in as <b>m.okafor</b>" in html
+        assert 'method="post" action="/console/sign-out"' in html
+        assert "csrfmiddlewaretoken" in html

@@ -410,6 +410,7 @@ button, .btn, [role="button"], [role="option"], .lrow, .island { -webkit-user-se
 
 /* ---------- Ticket page ---------- */
 .tk { position: relative; }
+.app-top + .tk, .app-top + .tk-back { margin-top: var(--s5); }
 .tk-back { display: inline-flex; align-items: center; gap: 2px; margin-left: -6px; padding: 6px 8px 6px 4px; border-radius: var(--r-sm); font: 400 15px/1 var(--font-ui); color: var(--accent-text); }
 .tk-back:hover { text-decoration: none; background: var(--fill-4); }
 .tk-head { margin-top: var(--s4); }
