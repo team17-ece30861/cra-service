@@ -1,10 +1,10 @@
-"""Phase 3 status rules from Model B, including the Model D E6 boundary."""
+"""Status rules from Model B, including the Model D E6 boundary."""
 
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
-from core.domain.statuses import unsubmitted_obligation_status
+from core.domain.statuses import submitted_report_status, unsubmitted_obligation_status
 
 DUE = datetime(2026, 10, 6, 9, tzinfo=UTC)
 REPORT_TYPES = ["early_warning", "notification", "final_report"]
@@ -122,3 +122,56 @@ def test_naive_datetimes_are_rejected(field):
 
     with pytest.raises(ValueError, match="timezone-aware"):
         unsubmitted_obligation_status(report_type="early_warning", applicable=True, **times)
+
+
+@pytest.mark.parametrize("report_type", REPORT_TYPES)
+@pytest.mark.parametrize(
+    "submitted_at,expected",
+    [
+        (DUE - timedelta(seconds=1), "submitted"),
+        (DUE, "submitted"),
+        (DUE + timedelta(seconds=1), "submitted_late"),
+    ],
+    ids=["one-second-before", "exactly-due", "one-second-after"],
+)
+def test_submitted_status_at_the_due_time_boundary(report_type, submitted_at, expected):
+    assert (
+        submitted_report_status(report_type=report_type, submitted_at=submitted_at, due_at=DUE)
+        == expected
+    )
+
+
+def test_submitted_status_compares_whole_seconds_in_utc():
+    # 04:00:00.9 at UTC-5 is 09:00:00 UTC once truncated to the second: on time.
+    submitted_at = datetime(2026, 10, 6, 4, 0, 0, 900000, tzinfo=timezone(timedelta(hours=-5)))
+
+    assert (
+        submitted_report_status(report_type="early_warning", submitted_at=submitted_at, due_at=DUE)
+        == "submitted"
+    )
+
+
+def test_a_deadline_moved_earlier_makes_a_recorded_report_late():
+    # Q4 proposal: status uses the deadline from the ticket's current data.
+    inputs = {"report_type": "notification", "submitted_at": DUE}
+
+    assert submitted_report_status(**inputs, due_at=DUE) == "submitted"
+    assert submitted_report_status(**inputs, due_at=DUE - timedelta(seconds=1)) == "submitted_late"
+
+
+def test_a_final_report_with_no_deadline_counts_as_on_time():
+    assert (
+        submitted_report_status(report_type="final_report", submitted_at=DUE, due_at=None)
+        == "submitted"
+    )
+
+
+@pytest.mark.parametrize("report_type", ["early_warning", "notification"])
+def test_a_recorded_report_other_than_the_final_report_needs_a_deadline(report_type):
+    with pytest.raises(ValueError):
+        submitted_report_status(report_type=report_type, submitted_at=DUE, due_at=None)
+
+
+def test_submitted_status_rejects_unknown_report_types():
+    with pytest.raises(ValueError):
+        submitted_report_status(report_type="user_advisory", submitted_at=DUE, due_at=DUE)

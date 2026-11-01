@@ -43,3 +43,28 @@ class AuditEntry(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["ticket", "seq"], name="unique_ticket_audit_seq")
         ]
+
+
+class ReportSubmission(models.Model):
+    """The locked snapshot of a recorded report (REQ-08): at most one per ticket and
+    report type. Its content never changes after it's recorded."""
+
+    REPORT_TYPES = [
+        ("early_warning", "early_warning"),
+        ("notification", "notification"),
+        ("final_report", "final_report"),
+    ]
+
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="submissions")
+    report_type = models.CharField(max_length=20, choices=REPORT_TYPES)
+    submitted_at = models.DateTimeField()
+    reference = models.CharField(max_length=200, null=True)
+    content = models.JSONField()
+    actor = models.CharField(max_length=200)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ticket", "report_type"], name="unique_ticket_submission_per_report_type"
+            )
+        ]

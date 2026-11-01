@@ -54,9 +54,11 @@ Validate client input at the API boundary before calling this helper. It reads
 no database or clock and does not store status. Repeating it with a changed
 clock or deadline immediately changes the derived result.
 
-The helper is explicitly for unsubmitted obligations. It cannot determine
-`submitted` or `submitted_late`; the later submission workflow must handle those
-reports separately. `user_advisory` has no reporting obligation and is not passed
+The helper is explicitly for unsubmitted obligations. Recorded reports use
+`submitted_report_status`: `submitted` if `submitted_at` <= `due_at` (UTC, whole
+seconds), otherwise `submitted_late`, against the deadline from the ticket's current
+data (Q4). It takes no clock. A final report whose deadline was cleared counts as on
+time; a missing early-warning or notification deadline raises `ValueError`. `user_advisory` has no reporting obligation and is not passed
 to this function.
 
 ## Shared example coverage

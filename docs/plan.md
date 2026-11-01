@@ -147,7 +147,7 @@ Saturday, the report records a one-way run and says why.
 | # | Task | Covers | Status |
 |---|---|---|---|
 | 4.D1 | `core/domain/drafts.py`: for a report type, ticket fields, ticket ID, and `aware_at`, return the draft `content` and `missing_fields` exactly as Model C says. Never include reporter fields. Unit tests that fill fields one at a time and check all four drafts at each step. | REQ-07, 15; AC-08 | Done (PR #75). The HTTP integration is 4.A2. |
-| 4.D2 | Extend statuses for submitted reports: `submitted` if `submitted_at` ≤ `due_at`, otherwise `submitted_late`. Include the E6 boundary and a clock moved backward. | REQ-05; AC-06 | To do |
+| 4.D2 | Extend statuses for submitted reports: `submitted` if `submitted_at` ≤ `due_at`, otherwise `submitted_late`. Include the E6 boundary and a clock moved backward. | REQ-05; AC-06 | Rule done (PR #76): `submitted_report_status`. It takes no clock, so a clock moved backward can't change a recorded report's status. Wiring into ticket responses is 4.A5. |
 | 4.D3 | Submission rule: 409 if the ticket isn't `reportable`, the previous report isn't submitted, or this one is already submitted; 422 if required fields are missing or `submitted_at` isn't between `aware_at` and now. 409 is checked before 422. | REQ-08; AC-09 | To do |
 | 4.D4 | Close rule: 409 unless `reportable` with all three reports submitted. | REQ-09; AC-10 | To do |
 | 4.D5 | Listing helpers: `next_due_at` (earliest due time among unsubmitted, applicable reports; null if none) and the sort key (nulls last, tie-break per Q2). | REQ-10; AC-11 | To do |
@@ -162,7 +162,7 @@ Saturday, the report records a one-way run and says why.
 
 | # | Task | Covers | Status |
 |---|---|---|---|
-| 4.A1 | Submission model and migration: one row per ticket and report type with `submitted_at`, `reference`, the locked `content` snapshot, and the actor. Reset must clear it (anything in the `core` app is cleared automatically). | REQ-08, 18 | To do |
+| 4.A1 | Submission model and migration: one row per ticket and report type with `submitted_at`, `reference`, the locked `content` snapshot, and the actor. Reset must clear it (anything in the `core` app is cleared automatically). | REQ-08, 18 | Done (PR #76): `ReportSubmission`, migration `0004`. |
 | 4.A2 | `GET /tickets/{id}/reports/{type}`: unknown type → 404. Before submission, build the draft live (4.D1). After submission, return the locked snapshot. | REQ-07, 08, 15; AC-08, 09 | To do (4.D1 done) |
 | 4.A3 | `POST /tickets/{id}/reports/{type}/submission`: `user_advisory` and unknown types → 404. Use 4.D3, store the snapshot, add one `report_submitted` audit entry, return the locked report as a `Draft`. | REQ-05, 08; AC-06, 09 | Blocked on 4.D3 |
 | 4.A4 | `POST /tickets/{id}/close`: use 4.D4, set `closed`/`resolved`, add one `closed` audit entry. | REQ-09; AC-10 | Blocked on 4.D4 |
@@ -240,7 +240,7 @@ contract changes.
 | Q1 | A `not_actively_exploited` or `invalid` triage that also sends `aware_at`: accept and ignore it, store it, or reject it with 400? | PR #7 accepts it and returns `aware_at: null`. | 3.3 |
 | Q2 | Listing tie-break when `next_due_at` is equal or null. | Propose `received_at` ascending, then `id`. | 4.D5 |
 | Q3 | Drafts for a ticket that never became reportable (`received`, or closed as not reportable): 409? And for a ticket closed as `resolved`, do drafts still read (closed tickets stay readable)? | Propose 409 only for never-reportable tickets; resolved tickets return their locked reports. | 4.A2 |
-| Q4 | After a report is submitted, can a later change to `aware_at` or `fix.available_at` move its `due_at`, and so flip `submitted` to `submitted_late`? | Propose yes: status is recalculated against the current `due_at`, so it can flip to `submitted_late`; the audit log shows the edit (Quincy, 2026-10-27). | 4.D2, 4.A5 |
+| Q4 | After a report is submitted, can a later change to `aware_at` or `fix.available_at` move its `due_at`, and so flip `submitted` to `submitted_late`? | Propose yes: status is recalculated against the current `due_at`, so it can flip to `submitted_late`; the audit log shows the edit (Quincy, 2026-10-27). If a later edit clears the fix time, a recorded final report has no deadline and counts as on time (assumed in PR #76; not yet agreed). | 4.D2, 4.A5 |
 | Q5 | Must `submitted_at` be no earlier than the previous report's `submitted_at`? | Spec only requires between `aware_at` and now. | 4.D3 |
 | Q7 | `POST /tickets` with `fix.available_at` later than now: accept it, or reject it? The field list says "not later than now", but the contract lists no 422 for submit. | Accepted (201). PATCH no longer re-checks a stored fix time (3.1a). Propose adding 422 to submit. | Phase 4 |
 | Q8 | Art. 14(2)(c) starts the final-report clock when a corrective **or mitigating** measure is available. We start it only at `fix.available_at` (a fix), so a workaround released first leaves our deadline too late. Redefine `fix.available_at` as the first corrective or mitigating measure? | Proposed: yes, as a wording change to `docs/spec.md` and `openapi.yaml` only. See `docs/reports/risk1-cra-review.md`, Finding 1. | Phase 4 (raise with Team 21 now) |
