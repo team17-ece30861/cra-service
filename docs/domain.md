@@ -141,7 +141,25 @@ the supplied now and changes no input. Q5 adds no timestamp ordering between
 reports beyond the inclusive aware-to-now interval. Sixty unit tests cover this;
 the actual recording endpoint/audit/transactions remain separate task 4.A3.
 
+## Submission recording endpoint (4.A3)
+`POST /tickets/{id}/reports/{type}/submission` (4.A3) records an external
+submission, not a report sent to a regulator. Only the three regulatory report
+types record; unknown/advisory types and unknown tickets return 404 before actor/
+schema errors. The strict optional body allows submitted_at/reference only;
+absent means an empty object, explicit null or unknown fields return 400.
+
+The route locks the ticket, calls 4.D3 with Model C missing paths and one explicit
+clock value, then stores generated content, normalized time/actor and reference
+in the merged model. One report_submitted audit records reports.<type> from null
+to the safe snapshot/time/reference/actor, at recording now. It returns the locked
+Draft. The outer POST transaction covers snapshot, audit and rendering; a nested
+savepoint permits uniqueness fallback without querying a broken transaction.
+Other IntegrityErrors are not disguised as conflicts. Failed writes/rendering
+roll back; duplicate/order 409 precede fields/time 422. PostgreSQL race CI remains
+needed. Ann's Ticket/list statuses/metadata/next_due_at (4.A5) remain separate.
+
 ## Contract documentation gap
+
 
 
 The current `openapi.yaml` references REQ-04 and exposes obligation deadlines,

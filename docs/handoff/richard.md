@@ -4,27 +4,32 @@
 
 ## Where things stand
 
-PR75/76 foundations are unchanged. Draft reads are PR77; this branch adds only
-pure submission validation (4.D3), with 60 tests, on that feature branch.
+Merged PR75/76 foundations are unchanged. PR77 adds draft reads; PR78 adds pure
+submission validation. This branch adds only 4.A3 submission recording on them.
 
 ## In progress
 
-- codex/phase4-validate-submission is stacked on codex/phase4-draft-reads.
-  Richard explicitly approved stacked draft bases; no merge/deployment authorized.
-- State/order/duplicate 409 precede missing fields/time 422. UTC-second output,
-  default caller-provided now, inclusive awareness-to-now and no input mutation.
-- Local rule tests: 60 passed. PostgreSQL CI and posted review pending.
+- codex/phase4-record-submission is stacked on codex/phase4-validate-submission.
+  Richard approved stacked drafts, not merge/deployment/shared reset.
+- Actual rows, safe report_submitted audits and locked Draft responses use one
+  clock value and a ticket lock. Existing transaction/savepoint protects rollback.
+- 63 portable recording cases and 12 local storage/fault/concurrency cases; genuine
+  duplicate race requires PostgreSQL CI. Combined local regression: 711 passed,
+  four PostgreSQL skips. CI/posted approval still required for this PR.
+- Combined localhost suite: 182 passed, one WinError 10053 transport failure,
+  one skip. Same abort reproduced without CRA/Django; do not hide it or claim a
+  green HTTP run. Investigate the real Linux stack with Quincy when authorized.
 
 ## Next up
 
-Review each one-task draft and CI; merge nothing without Richard's separate go.
-Submission POST and closure remain separate; Ann's 4.A5 remains separate.
+Check CI and obtain posted independent review. Closure is a later task; Ann's
+4.A5 Ticket/list status/metadata/next_due_at/filter wiring remains separate.
 
 ## Waiting on
 
-Posted independent approval and CI. Richard's permission for any merge/shared reset.
+PostgreSQL CI/review, owner integration and Richard's separate merge/reset go.
 
 ## Notes for the next session
 
-Q5 adds no chronology between different reports. No HTTP recording is added here.
-Only Quincy launches Orbit; expected test values come from spec/hand calculation.
+401/413/404/400/409/422 precedence, no partial writes; Q5 adds no cross-report
+chronology. Q3/Q4 remain proposals. Only Quincy launches Orbit.

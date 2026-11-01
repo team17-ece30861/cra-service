@@ -3,17 +3,19 @@
 from copy import deepcopy
 from uuid import UUID
 
+from django.db import IntegrityError, transaction
 from django.db.models import Max
 from ninja import Router
 from ninja.responses import Status
 
 from core import clock
 from core.domain.deadlines import calculate_deadlines
-from core.domain.drafts import DraftReportType, build_draft
-from core.domain.statuses import submitted_report_status, unsubmitted_obligation_status
+from core.domain.drafts import DraftReportType, DraftResult, build_draft
+from core.domain.statuses import ReportType, submitted_report_status, unsubmitted_obligation_status
+from core.domain.submissions import validate_submission
 from core.domain.triage import triage_ticket
-from core.models import AuditEntry, Ticket
-from core.schemas import TicketCreate, TicketUpdate, TriageRequest
+from core.models import AuditEntry, ReportSubmission, Ticket
+from core.schemas import SubmissionRequest, TicketCreate, TicketUpdate, TriageRequest
 from cra_service.errors import Conflict, NotFound, RuleViolation, field_error
 from cra_service.timestamps import format_timestamp, parse_timestamp
 from cra_service.validation import parse_body, require_actor
@@ -136,7 +138,7 @@ def _changes(before: dict, after: dict, prefix: str = "") -> list[dict]:
     return changes
 
 
-def _audit(ticket: Ticket, *, now, actor: str, action: str, before: dict, reason=None):
+def _audit(ticket: Ticket, *, now, actor: str, action: str, before: dict, reason=None, after=None):
     seq = (ticket.audit_entries.aggregate(last=Max("seq"))["last"] or 0) + 1
     AuditEntry.objects.create(
         ticket=ticket,
@@ -144,7 +146,7 @@ def _audit(ticket: Ticket, *, now, actor: str, action: str, before: dict, reason
         at=now,
         actor=actor,
         action=action,
-        changes=_changes(before, _snapshot(ticket)),
+        changes=_changes(before, _snapshot(ticket) if after is None else after),
         reason=reason,
     )
 
@@ -261,16 +263,7 @@ def get_audit(request, id: str):
     ]
 
 
-@router.get("/{id}/reports/{type}", response=dict, operation_id="getDraft")
-def get_draft(request, id: str, type: DraftReportType):
-    ticket = _ticket(id)
-    if ticket.aware_at is None or not (
-        ticket.state == "reportable"
-        or (ticket.state == "closed" and ticket.resolution == "resolved")
-    ):
-        raise Conflict("Drafts are only available for tickets that became reportable.")
-
-    now = clock.now()
+def _render_draft(ticket: Ticket, type: DraftReportType, now) -> dict:
     submission = (
         ticket.submissions.filter(report_type=type).first() if type != "user_advisory" else None
     )
@@ -308,3 +301,72 @@ def get_draft(request, id: str, type: DraftReportType):
         "content": content,
         "missing_fields": missing_fields,
     }
+
+
+@router.get("/{id}/reports/{type}", response=dict, operation_id="getDraft")
+def get_draft(request, id: str, type: DraftReportType):
+    ticket = _ticket(id)
+    if ticket.aware_at is None or not (
+        ticket.state == "reportable"
+        or (ticket.state == "closed" and ticket.resolution == "resolved")
+    ):
+        raise Conflict("Drafts are only available for tickets that became reportable.")
+    return _render_draft(ticket, type, clock.now())
+
+
+@router.post("/{id}/reports/{type}/submission", response=dict, operation_id="recordSubmission")
+def record_submission(request, id: str, type: ReportType):
+    ticket = _ticket(id, lock=True)
+    actor = require_actor(request)
+    payload = parse_body(request, SubmissionRequest, required=False)
+    now = clock.now()
+    submitted_reports = set(ticket.submissions.values_list("report_type", flat=True))
+    draft = DraftResult(content={}, missing_fields=[])
+    if ticket.aware_at is not None:
+        draft = build_draft(
+            report_type=type,
+            ticket_id=str(ticket.pk),
+            aware_at=ticket.aware_at,
+            ticket_fields=ticket.data,
+        )
+    submitted_at = validate_submission(
+        state=ticket.state,
+        report_type=type,
+        aware_at=ticket.aware_at,
+        now=now,
+        submitted_reports=submitted_reports,
+        missing_fields=draft.missing_fields,
+        submitted_at=payload.submitted_at,
+    )
+    try:
+        with transaction.atomic():
+            ReportSubmission.objects.create(
+                ticket=ticket,
+                report_type=type,
+                submitted_at=submitted_at,
+                reference=payload.reference,
+                content=draft.content,
+                actor=actor,
+            )
+    except IntegrityError:
+        if ticket.submissions.filter(report_type=type).exists():
+            raise Conflict("This report has already been submitted.") from None
+        raise
+    _audit(
+        ticket,
+        now=now,
+        actor=actor,
+        action="report_submitted",
+        before={"reports": {}},
+        after={
+            "reports": {
+                type: {
+                    "submitted_at": format_timestamp(submitted_at),
+                    "reference": payload.reference,
+                    "content": draft.content,
+                    "actor": actor,
+                }
+            }
+        },
+    )
+    return _render_draft(ticket, type, now)

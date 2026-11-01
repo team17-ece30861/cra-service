@@ -136,3 +136,8 @@ class TriageRequest(RequestSchema):
     decision: Literal["actively_exploited", "not_actively_exploited", "invalid"]
     reason: LongText
     aware_at: Timestamp = Field(default=None)
+
+
+class SubmissionRequest(RequestSchema):
+    submitted_at: Timestamp = Field(default=None)
+    reference: ShortText = Field(default=None)
