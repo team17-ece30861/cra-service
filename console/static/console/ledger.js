@@ -537,10 +537,10 @@
      A sheet slides up over the page it belongs to, with the scrim behind and the page inert; it leaves the same way.
      Each sheet has its own URL (data-url): opened from the page, it's pushed onto history, so Back closes it and the URL
      can be shared; opened by that URL, the server renders the page with the sheet already open. Esc, Cancel and the scrim
-     close it; focus stays inside while it's open and goes back to what opened it. Pages put their sheets in #sheet-layer
+     close it; focus stays inside while it's open and goes back to what opened it. Pages put these sheets in #form-sheets
      (console/templates/console/_sheets.html); a page without the sheet follows the link instead. Sheets announce
      'sheet:open' (detail.focus: a field to bring into view) for their own scripts (forms.js). */
-  var layer = $('sheet-layer'), sheetCard = null, sheetOpener = null, sheetPushed = false;
+  var layer = $('form-sheets'), sheetCard = null, sheetOpener = null, sheetPushed = false;
   var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
   function sheetFor(href) {
     if (!layer || !href) return null;

@@ -1,0 +1,161 @@
+/* Ledger report pages (4.U3): the Report Draft page, the Record Submission sheet and the Close Ticket dialog.
+   Ported from docs/design/ledger-screens.html with its class names unchanged, so the shared parts (segmented control,
+   forms, alerts, buttons, sheets) can be merged with PR 2's copies by deleting one of them. */
+
+/* ---------- Buttons the shell doesn't use (prototype) ---------- */
+.btn.plain { background: transparent; color: var(--accent-text); padding: 0 8px; }
+.btn.plain:hover { background: var(--fill-4); }
+.btn.plain.is-pressed { background: var(--fill-3); }
+.btn.destructive { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+.btn.destructive:hover { background: color-mix(in srgb, var(--red) 24%, transparent); }
+.btn.destructive.is-pressed { background: color-mix(in srgb, var(--red) 30%, transparent); }
+.btn.destructive.solid { background: var(--red); color: #fff; }
+.btn.destructive.solid:hover { background: color-mix(in srgb, var(--red) 88%, #fff); }
+.btn.destructive.solid.is-pressed { background: color-mix(in srgb, var(--red) 82%, #000); }
+.btn .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: rp-spin 700ms linear infinite; }
+@keyframes rp-spin { to { transform: rotate(360deg); } }
+.btn.busy { pointer-events: none; }
+
+/* ---------- Alerts (the shell has the base and .error) ---------- */
+.alert.warning { --c: var(--yellow); } .alert.success { --c: var(--green); } .alert.info { --c: var(--cyan); }
+
+/* ---------- Segmented control: a sliding indicator behind the selected segment. The report tabs are links. ---------- */
+.seg { position: relative; display: inline-flex; padding: 2px; background: var(--fill-3); border-radius: var(--r-md); isolation: isolate; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.seg::-webkit-scrollbar { display: none; }
+.seg > button, .seg > a { position: relative; z-index: 1; border: 0; background: none; color: var(--label-2); font: 500 13px/1 var(--font-ui); height: 28px; padding: 0 12px; border-radius: calc(var(--r-md) - 2px); cursor: pointer; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; justify-content: center; text-decoration: none; transition: color var(--dur-hover) ease, transform 220ms var(--spring-smooth); }
+.seg > a:hover { text-decoration: none; color: var(--label); }
+.seg > [aria-pressed="true"], .seg > [aria-current="page"] { color: var(--label); }
+.seg > .is-pressed { transform: scale(0.95); }
+.seg .ind { position: absolute; z-index: 0; top: 2px; left: 0; height: 28px; width: 0; background: var(--surface-3); border-radius: calc(var(--r-md) - 2px); box-shadow: 0 1px 2px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06); transition: transform var(--spring-smooth-dur) var(--spring-smooth), width var(--spring-smooth-dur) var(--spring-smooth); }
+/* Before the script places it, the selected segment carries its own fill */
+.seg:not(.ind-ready) > [aria-current="page"] { background: var(--surface-3); }
+
+/* ---------- Forms ---------- */
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field > label, .field > .lbl { font: 500 13px/1.2 var(--font-ui); color: var(--label); }
+.field .help { font-size: 12px; color: var(--label-2); line-height: 1.4; }
+.field .err { font-size: 12px; color: var(--red); display: flex; gap: 6px; align-items: flex-start; line-height: 1.4; }
+.field .err svg { width: 14px; height: 14px; margin-top: 1px; flex: none; }
+.input { width: 100%; height: var(--h-md); padding: 0 12px; background: var(--fill-4); color: var(--label); border: 1px solid var(--separator); border-radius: var(--r-md); font: 400 14px/1.2 var(--font-ui); transition: border-color var(--dur-hover) ease, box-shadow var(--dur-hover) ease, background var(--dur-hover) ease; appearance: none; }
+.input::placeholder { color: var(--label-3); }
+.input:hover { border-color: var(--separator-strong); }
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); background: var(--fill-3); }
+.input.invalid { border-color: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent); }
+.input.mono { font-family: var(--font-mono); font-size: 13px; }
+.input-group { position: relative; display: flex; align-items: center; }
+.input-group .input { padding-right: 48px; }
+.input-group .suffix { position: absolute; right: 12px; font: 500 12px/1 var(--font-ui); color: var(--label-2); pointer-events: none; }
+@media (pointer: coarse) { .sheet-card { --h-sm: 36px; --h-md: 44px; --h-lg: 50px; } }
+
+/* ================= Sheets: tasks slide up over the current screen and leave the same way ================= */
+.sheet-layer { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top, 0px)) 24px max(24px, env(safe-area-inset-bottom, 0px)); }
+.sheet-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); opacity: 0; transition: opacity 240ms ease; }
+.sheet-layer.open .sheet-scrim { opacity: 1; }
+.sheet-card { position: relative; width: min(640px, 100%); max-height: min(860px, calc(100dvh - 48px)); display: flex; flex-direction: column; border-radius: 24px; background: var(--surface-1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), inset 0 0 0 1px rgba(255,255,255,0.06), 0 40px 120px rgba(0,0,0,0.7); overflow: hidden;
+  opacity: 0; transform: translateY(28px) scale(0.98); transition: opacity 180ms ease, transform 200ms cubic-bezier(0.4, 0, 1, 1); }
+.sheet-layer.open .sheet-card { opacity: 1; transform: none; transition: opacity 200ms ease, transform var(--spring-smooth-dur) var(--spring-smooth); }
+
+/* Modals (Quincy, 2026-11-01): big sheets (forms) stay solid; dialogs (short, no text fields) are glass, the dock's material
+   but thicker so what's behind can't read as a second control. */
+.sheet-card.dialog { background: rgba(44, 44, 48, 0.6); -webkit-backdrop-filter: blur(14px) saturate(190%) brightness(1.08); backdrop-filter: blur(14px) saturate(190%) brightness(1.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), inset 0 -1px 0 rgba(255,255,255,0.05), inset 0 0 20px rgba(255,255,255,0.035), 0 40px 120px rgba(0,0,0,0.7); }
+.sh-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--s3); padding: 12px 14px; border-bottom: 1px solid var(--hairline); flex: none; }
+.sh-bar > :first-child { justify-self: start; } .sh-bar > :last-child { justify-self: end; }
+.sh-title { margin: 0; font: 600 16px/1.3 var(--font-ui); letter-spacing: -0.005em; text-align: center; white-space: nowrap; }
+.sh-body { overflow-y: auto; padding: var(--s5); display: flex; flex-direction: column; gap: var(--s5); overscroll-behavior: contain; }
+.sh-note { margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.5; color: var(--label-2); }
+.sh-note svg { margin-top: 2px; flex: none; color: var(--label-3); }
+.sh-context { display: flex; gap: var(--s3); align-items: center; padding: var(--s3) var(--s4); border-radius: var(--r-lg); background: var(--surface-2); }
+.sh-context > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sh-context b { font: 600 14px/1.35 var(--font-ui); }
+.sh-context > div > span { font-size: 12px; color: var(--label-2); }
+
+/* Phones: sheets come up from the bottom edge and fill most of the screen */
+@media (max-width: 640px) {
+  .sheet-layer { place-items: end stretch; padding: 0; padding-top: max(12px, env(safe-area-inset-top, 0px)); }
+  .sheet-card { width: 100%; max-height: calc(100dvh - 12px - env(safe-area-inset-top, 0px)); border-radius: 22px 22px 0 0; transform: translateY(100%); transition: opacity 120ms ease 80ms, transform 220ms cubic-bezier(0.4, 0, 1, 1); }
+  .sheet-layer.open .sheet-card { transform: none; transition: opacity 120ms ease, transform var(--spring-smooth-dur) var(--spring-smooth); }
+  .sh-body { padding: var(--s4) var(--s4) calc(var(--s6) + env(safe-area-inset-bottom, 0px)); }
+  .sh-bar::before { content: ""; position: absolute; top: 6px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: var(--fill-1); }
+  .sh-bar { position: relative; padding-top: 18px; }
+}
+
+/* ---------- Record Submission ---------- */
+.rs-at-row { gap: var(--s2); flex-wrap: nowrap; }
+.rs-at-row .input-group { flex: 1; min-width: 0; }
+.rs-outcome { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border-radius: var(--r-lg); background: var(--surface-2); font-size: 13px; line-height: 1.45; min-height: 48px; }
+.rs-outcome:empty { display: none; }
+.rs-outcome .rs-warn { color: var(--yellow); flex: none; }
+.rs-outcome .badge { flex: none; }
+.rs-outcome.enter > * { animation: rs-in 260ms var(--spring-smooth) both; }
+@keyframes rs-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Close Ticket dialog ---------- */
+.sheet-card.dialog { width: min(400px, calc(100% - 32px)); padding: var(--s5); align-items: center; text-align: center; gap: var(--s3); border-radius: 24px; transform: scale(1.06); }
+.sheet-layer.open .sheet-card.dialog { transform: none; }
+@media (max-width: 640px) { .sheet-layer:has(.dialog:not([hidden])) { place-items: center; padding: 16px; } .sheet-card.dialog { border-radius: 22px; transform: scale(1.06); } }
+.dlg-icon { width: 48px; height: 48px; border-radius: var(--r-lg); display: grid; place-items: center; background: var(--surface-2); color: var(--label-2); }
+.dlg-icon.warn { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 12%, transparent); }
+.dlg-icon.danger { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+.dlg-title { margin: 0; font: 600 19px/1.3 var(--font-display); letter-spacing: -0.006em; }
+.dlg-body { margin: 0; font-size: 14px; line-height: 1.5; color: var(--label-2); max-width: 34ch; }
+.dlg-err { margin: 0; display: flex; gap: 6px; align-items: flex-start; text-align: left; font-size: 13px; line-height: 1.45; color: var(--red); }
+.dlg-err svg { margin-top: 2px; flex: none; }
+.dlg-list { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: 6px; text-align: left; }
+.dlg-list:empty { display: none; }
+.dlg-list li { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; }
+.dlg-actions { display: flex; gap: var(--s2); width: 100%; margin: var(--s2) 0 0; }
+.dlg-actions .btn { flex: 1; }
+
+/* ---------- Report Draft page ---------- */
+.rp-tabs { display: flex; width: max-content; max-width: 100%; margin-top: var(--s5); }
+.rp-tabs .sm { display: none; }
+.rp-alert { margin-top: var(--s5); }
+.rp-head { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--s4); flex-wrap: wrap; margin-top: var(--s6); }
+.rp-headmain { gap: var(--s2); min-width: 0; }
+.rp-titlerow { gap: var(--s3); }
+.rp-due { margin: 0; }
+.rp-actions { gap: var(--s2); }
+.rp-banner { margin-top: var(--s5); }
+.rp-doc { margin-top: var(--s5); border-radius: var(--r-xl); background: var(--surface-1); padding: var(--s5) var(--s6); }
+.rp-docmeta { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); font-size: 12px; color: var(--label-2); padding-bottom: var(--s4); border-bottom: 1px solid var(--hairline); }
+.rp-fields { margin: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr); }
+.rp-fields dt, .rp-fields dd { padding: 14px 0; border-bottom: 1px solid var(--hairline); margin: 0; font-size: 14px; line-height: 1.5; }
+.rp-fields dt { color: var(--label-2); padding-right: var(--s4); }
+.rp-fields dt small { display: block; font: 400 11px/1.4 var(--font-mono); color: var(--label-3); }
+.rp-fields dd { min-width: 0; overflow-wrap: anywhere; }
+.rp-fields .missing { color: var(--yellow); }
+.rp-fields dt.missing, .rp-fields dd.missing { background: color-mix(in srgb, var(--yellow) 6%, transparent); }
+.rp-fields dt.missing { padding-left: 12px; margin-left: -12px; border-radius: var(--r-md) 0 0 var(--r-md); }
+.rp-fields dd.missing { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; padding-right: 12px; margin-right: -12px; border-radius: 0 var(--r-md) var(--r-md) 0; }
+.rp-fields dd.missing .tag { display: inline-flex; gap: 6px; align-items: center; font: 500 13px/1 var(--font-ui); }
+.rp-foot { margin: var(--s4) 0 0; display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--label-3); }
+@media (max-width: 640px) {
+  .rp-tabs .lg { display: none; } .rp-tabs .sm { display: inline; } .rp-tabs > a { padding: 0 10px; flex: 1; }
+  .rp-doc { padding: var(--s4); } .rp-fields { grid-template-columns: minmax(0, 1fr); } .rp-fields dt { border-bottom: 0; padding-bottom: 2px; } .rp-fields dd { padding-top: 0; }
+  .rp-fields dt.missing, .rp-fields dd.missing { margin-left: -12px; margin-right: -12px; padding-left: 12px; padding-right: 12px; border-radius: 0; }
+  .rp-fields dt.missing { border-radius: var(--r-md) var(--r-md) 0 0; } .rp-fields dd.missing { border-radius: 0 0 var(--r-md) var(--r-md); }
+  .rp-actions { width: 100%; } .rp-actions .btn { flex: 1; } .rp-tabs { width: 100%; }
+}
+/* Switching report type: the old draft leaves first and visibly, then the new one rises in */
+#rp-swap { transition: opacity 120ms ease, transform 160ms cubic-bezier(0.4, 0, 1, 1), filter 120ms ease; }
+#rp-swap.leaving { opacity: 0; transform: translateY(-6px); filter: blur(3px); }
+#rp-swap.entering { animation: rp-in 380ms var(--spring-smooth) both; }
+@keyframes rp-in { from { opacity: 0.001; transform: translateY(10px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* ---------- Accessibility preferences ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .sheet-card, .sheet-layer.open .sheet-card, .sheet-card.dialog, .sheet-layer.open .sheet-card.dialog { transform: none !important; transition: opacity 150ms ease !important; }
+  .seg .ind { transition: opacity 150ms ease !important; }
+  .seg > .is-pressed { transform: none; }
+  #rp-swap, #rp-swap.leaving { transform: none; filter: none; transition: opacity 150ms ease; }
+  #rp-swap.entering { animation: rp-fade 150ms ease both; }
+  .rs-outcome.enter > * { animation: none; }
+}
+@keyframes rp-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-transparency: reduce) { .sheet-card.dialog { background: var(--surface-1); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@media (forced-colors: active) {
+  .sheet-card, .seg .ind { border: 1px solid CanvasText; }
+  .seg > [aria-current="page"] { outline: 1px solid Highlight; }
+  .rp-fields dt.missing, .rp-fields dd.missing { border: 1px solid CanvasText; }
+}

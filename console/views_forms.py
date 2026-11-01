@@ -21,7 +21,6 @@ OUT_OF_DATE = "This form is out of date. Your changes weren't saved; make them a
 CHANGED_MEANWHILE = (
     "Someone else changed this since you opened the sheet. Save again to replace it."
 )
-PAGE_ONLY = ("console/not_found.html", "console/error.html")
 READ_FAILED = (
     "This ticket couldn't be loaded, so nothing was changed. Reload the page to try again."
 )
@@ -32,10 +31,19 @@ def _toast(request, title: str, body: str) -> None:
     messages.success(request, json.dumps({"title": title, "body": body}), extra_tags=TOAST_TAG)
 
 
+def _ticket_page(request, ticket_id: str):
+    """The Ticket page (views.ticket_context) as (template, context, status), or
+    (None, response, status) when another page goes instead: not found, or a failed read."""
+    context, instead = views.ticket_context(request, ticket_id, clock.now())
+    if instead is not None:
+        return None, instead, instead.status_code
+    return "console/ticket.html", context, 200
+
+
 def _read_failed(request, ticket_id: str, found):
     """The ticket read before a change failed: not found, or PR 1's error page."""
     if found.status == 404:
-        return _over(request, views.ticket_page(request, ticket_id), "", {})
+        return _over(request, _ticket_page(request, ticket_id), "", {})
     now = clock.now()
     _, rows, groups, upcoming = views._everything(request, now)
     context = {
@@ -49,8 +57,8 @@ def _over(request, page, sheet: str, extra: dict, *, status=None, enter=False):
     """The page with one of its sheets open. ``enter``: the sheet rises in (a fresh GET);
     otherwise it's simply there (the answer to a POST)."""
     template, context, page_status = page
-    if template in PAGE_ONLY:  # the ticket wasn't found or couldn't be read: PR 1's pages
-        return render(request, template, context, status=page_status)
+    if template is None:  # the ticket wasn't found or couldn't be read: that page instead
+        return context
     context.update(extra)
     context["open_sheet"] = sheet
     context["sheet_enter"] = enter
@@ -84,9 +92,9 @@ def new_ticket(request):
 @require_http_methods(["GET", "HEAD", "POST"])
 def edit_ticket(request, ticket_id: str):
     if request.method != "POST":
-        page = views.ticket_page(request, ticket_id)
+        page = _ticket_page(request, ticket_id)
         extra = {}
-        if page[0] not in PAGE_ONLY:
+        if page[0] is not None:
             ticket = page[1]["t"]
             current = forms.values_from_ticket(ticket)
             extra["tf_edit"] = forms.ticket_form(
@@ -109,7 +117,7 @@ def edit_ticket(request, ticket_id: str):
             "edit", values=current, initial=current, problems=problems, ticket=ticket
         )
         return _over(
-            request, views.ticket_page(request, ticket_id), "edit", {"tf_edit": sheet}, status=400
+            request, _ticket_page(request, ticket_id), "edit", {"tf_edit": sheet}, status=400
         )
     values = forms.values_from_post(request.POST)
     values["change_reason"] = forms.clean(request.POST.get("change_reason", ""))
@@ -144,7 +152,7 @@ def edit_ticket(request, ticket_id: str):
     sheet = forms.ticket_form(
         "edit", values=values, initial=current, problems=problems, ticket=ticket
     )
-    page = views.ticket_page(request, ticket_id)
+    page = _ticket_page(request, ticket_id)
     return _over(request, page, "edit", {"tf_edit": sheet}, status=status)
 
 
@@ -153,7 +161,7 @@ def edit_ticket(request, ticket_id: str):
 @require_http_methods(["GET", "HEAD", "POST"])
 def triage(request, ticket_id: str):
     if request.method != "POST":
-        return _over(request, views.ticket_page(request, ticket_id), "triage", {}, enter=True)
+        return _over(request, _ticket_page(request, ticket_id), "triage", {}, enter=True)
     found = call_api(request, "GET", f"/tickets/{ticket_id}")
     if not found.ok:
         return _read_failed(request, ticket_id, found)
@@ -175,5 +183,5 @@ def triage(request, ticket_id: str):
         return redirect("console:ticket", ticket_id)
     problems = forms.problems(result, forms.TRIAGE_FIELDS, clock.now())
     sheet = forms.triage_form(found.data, post=request.POST, problems=problems)
-    page = views.ticket_page(request, ticket_id)
+    page = _ticket_page(request, ticket_id)
     return _over(request, page, "triage", {"tr": sheet}, status=result.status)

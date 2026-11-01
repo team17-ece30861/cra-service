@@ -199,6 +199,8 @@ def test_edit_page_is_the_ticket_with_the_sheet_open_and_focus(api, console):
     html = console.get(f"/console/tickets/{ticket_id}/edit?focus=member_states").content.decode()
     assert 'id="sheet-edit"' in html and "Edit Ticket" in html
     assert 'class="field wanted" data-field="member_states"' in html
+    assert "console/forms.css" in html and "console/forms.js" in html
+    assert 'id="form-sheets"' in html and 'id="sheet-layer"' in html  # with PR 3's own sheets
     assert 'value="Reporter Person"' in html  # reporter details: the ticket page and its sheet
 
 

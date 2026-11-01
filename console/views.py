@@ -12,8 +12,9 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods, require_POST
 
-from console import forms, present
+from console import forms, present, present_reports
 from console.api_calls import call_api
+from console.flash import take as take_flash
 from console.mark import MARK_PATH, MARK_VIEWBOX
 from core import clock
 from core.models import FixedClock
@@ -131,6 +132,7 @@ def _shell(request, route: str, rows: list[dict], groups: list[dict], upcoming: 
         "clock_fixed": FixedClock.objects.exists(),
         "username": username,
         "initials": present.initials(username),
+        "flash": take_flash(request),
         **present.shell(rows, groups, upcoming),
     }
 
@@ -202,23 +204,15 @@ def tickets_page(request) -> tuple[str, dict, int]:
     return "console/tickets.html", context, status
 
 
-@never_cache
-@signed_in_required
-@require_http_methods(["GET", "HEAD"])
-def ticket(request, ticket_id: str):
-    template, context, status = ticket_page(request, ticket_id)
-    return render(request, template, context, status=status)
-
-
-def ticket_page(request, ticket_id: str) -> tuple[str, dict, int]:
-    """The Ticket page's template, context and status. Its sheets (New Ticket, Edit
-    Ticket, Triage; console/views_forms.py) open over it."""
-    now = clock.now()
+def ticket_context(request, ticket_id: str, now):
+    """The ticket page's context, and None; or the shell and the response to send instead
+    (not found, or a read that failed). The report views render this page too, under the
+    Close Ticket dialog and the Record Submission sheet."""
     _, rows, groups, upcoming = _everything(request, now)
     shell = _shell(request, "ticket", rows, groups, upcoming, now)
     found = call_api(request, "GET", f"/tickets/{ticket_id}")
     if found.status == 404:
-        return "console/not_found.html", shell, 404
+        return shell, render(request, "console/not_found.html", shell, status=404)
     trail = call_api(request, "GET", f"/tickets/{ticket_id}/audit") if found.ok else found
     if not found.ok or not trail.ok:
         failed = found if not found.ok else trail
@@ -226,11 +220,11 @@ def ticket_page(request, ticket_id: str) -> tuple[str, dict, int]:
             **shell,
             "message": "This ticket couldn't be loaded. Reload the page to try again.",
         }
-        return "console/error.html", context, _failed_status(failed)
+        return shell, render(request, "console/error.html", context, status=_failed_status(failed))
     data = found.data
     cards = present.report_cards(data, now)
     report = present.next_report(data)
-    context = {
+    return {
         **shell,
         "t": data,
         "state_label": present.STATE_LABEL.get(data["state"], data["state"]),
@@ -243,6 +237,16 @@ def ticket_page(request, ticket_id: str) -> tuple[str, dict, int]:
         "next": next((c for c in cards if c["type"] == report), None),
         "cards": cards,
         "audit": present.audit(trail.data),
+        "close": present_reports.close_view(data),
         **forms.ticket_sheets(data),
-    }
-    return "console/ticket.html", context, 200
+    }, None
+
+
+@never_cache
+@signed_in_required
+@require_http_methods(["GET", "HEAD"])
+def ticket(request, ticket_id: str):
+    context, instead = ticket_context(request, ticket_id, clock.now())
+    if instead is not None:
+        return instead
+    return render(request, "console/ticket.html", context)

@@ -1,0 +1,51 @@
+{% extends "console/shell.html" %}
+{% load static %}
+{% block title %}{{ kind_label }} · {{ ticket.title }} · Ledger{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'console/reports.css' %}">{% endblock %}
+{% block screen_label %}Report{% endblock %}
+{% block screen_class %} rp{% endblock %}
+{% block screen %}
+<a class="tk-back" href="{% url 'console:ticket' ticket.id %}"><svg class="i" aria-hidden="true"><use href="#i-chev-l"/></svg>{{ ticket.title }}</a>
+<nav class="seg rp-tabs" aria-label="Report type" id="rp-tabs">
+  {% for tab in tabs %}<a href="{% url 'console:report' ticket.id tab.type %}" data-v="{{ tab.type }}" aria-label="{{ tab.title }}"{% if tab.on %} aria-current="page"{% endif %}><span class="lg">{{ tab.title }}</span><span class="sm">{{ tab.short }}</span></a>{% endfor %}<span class="ind" aria-hidden="true"></span>
+</nav>
+<div id="rp-swap" data-kind="{{ kind }}">
+{% if not d %}
+<div class="alert info rp-alert"><svg class="i" aria-hidden="true"><use href="#i-hourglass"/></svg><div><div class="a-title">There's no draft for this ticket</div><div class="a-body">{{ no_draft }} Reports start once the ticket is triaged as actively exploited.</div></div><span></span></div>
+{% else %}
+<header class="rp-head">
+  <div class="stack rp-headmain">
+    <div class="row rp-titlerow"><h1 class="t-title1" id="rp-title">{{ d.label }}</h1>{% if d.badge %}<span class="badge {{ d.badge.cls }}"><svg class="i" aria-hidden="true"><use href="#{{ d.badge.icon }}"/></svg>{{ d.badge.label }}</span>{% endif %}</div>
+    <p class="t-footnote muted mono rp-due">{% if d.due %}Due {{ d.due }}{% if not d.locked %} · <span class="rl num" data-rl="{{ d.due_at }}">{{ d.rel }}</span>{% endif %}{% elif d.awaiting_fix %}Due 14 days after a fix is available{% else %}No deadline{% endif %}</p>
+  </div>
+  <div class="row rp-actions">
+    <button class="btn secondary" type="button" id="rp-copy" data-copy-report="{{ d.copy }}"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy Report</button>
+    {% if d.recordable %}{% if d.record_blocked %}<button class="btn primary" type="button" id="rp-record" disabled aria-describedby="rp-record-why">Record Submission</button>{% else %}<a class="btn primary" id="rp-record" href="{% url 'console:record' ticket.id kind %}" data-sheet-open>Record Submission</a>{% endif %}{% endif %}
+  </div>
+</header>
+{% if d.recordable and d.record_blocked %}<p class="sr-only" id="rp-record-why">{% if d.awaiting_fix %}The final report can be recorded once a fix is available.{% else %}Add the missing fields first.{% endif %}</p>{% endif %}
+<div class="rp-banner">
+{% if d.banner == "locked" %}<div class="alert success"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg><div><div class="a-title">Submitted {{ d.submitted }}{% if d.reference %} · {{ d.reference }}{% endif %}</div><div class="a-body">This is the locked copy that was recorded. Later edits to the ticket don't change it.</div></div><span></span></div>
+{% elif d.banner == "advisory" %}<div class="alert info"><svg class="i" aria-hidden="true"><use href="#i-person"/></svg><div><div class="a-title">For your users, not the authority</div><div class="a-body">There's no deadline and nothing to record. Share it once a fix or mitigation is ready.</div></div><span></span></div>
+{% elif d.banner == "missing" %}<div class="alert warning"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><div><div class="a-title">{{ d.missing|length }} required {% if d.missing|length == 1 %}field is{% else %}fields are{% endif %} missing</div><div class="a-body">Add {% if d.missing|length == 1 %}it{% else %}them{% endif %} to the ticket before recording this report. {% if d.missing|length == 1 %}It's{% else %}They're{% endif %} highlighted below.</div></div><span></span></div>
+{% else %}<div class="alert success"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg><div><div class="a-title">Ready to send</div><div class="a-body">Every required field is filled. Copy the report, send it to the authority, then record the submission.</div></div><span></span></div>{% endif %}
+</div>
+<article class="rp-doc" aria-label="{% if d.locked %}Recorded report{% else %}Draft content{% endif %}">
+  <div class="rp-docmeta"><span>Ticket <span class="mono">{{ ticket.id }}</span></span>{% if d.aware %}<span>Aware since <span class="mono">{{ d.aware }}</span></span>{% endif %}</div>
+  <dl class="rp-fields">
+    {% for f in d.rows %}{% if f.missing %}<dt class="missing">{{ f.label }}<small>{{ f.path }}</small></dt><dd class="missing"><span class="tag"><svg class="i sm" aria-hidden="true"><use href="#i-alert"/></svg>Missing</span><a class="btn tinted sm" href="{% url 'console:ticket' ticket.id %}/edit?focus={{ f.path|urlencode }}" aria-label="Add {{ f.label|lower }} in Edit Ticket">Add</a></dd>
+    {% else %}<dt>{{ f.label }}<small>{{ f.path }}</small></dt><dd>{{ f.value }}</dd>
+    {% endif %}{% empty %}<dt class="rp-none">No fields</dt><dd></dd>{% endfor %}
+  </dl>
+  <p class="rp-foot"><svg class="i sm" aria-hidden="true"><use href="#i-lock"/></svg>Reporter details are never included in a report.</p>
+</article>
+{% endif %}
+</div>
+{% endblock %}
+{% block sheets %}
+<div class="sheet-layer{% if sheet %} open{% endif %}" id="sheet-layer" data-base="{% url 'console:report' ticket.id kind %}"{% if not sheet %} hidden{% endif %}>
+  <div class="sheet-scrim" data-close></div>
+  {% if rs %}{% include "console/_record_sheet.html" %}{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'console/reports.js' %}"></script>{% endblock %}

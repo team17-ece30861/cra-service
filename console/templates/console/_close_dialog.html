@@ -1,0 +1,13 @@
+{# Close Ticket: a short dialog, so glass (docs/design.md, "Materials"). Ready, not ready (what's still to record, by the API's report statuses) or already closed. #}
+<section class="sheet-card dialog" data-sheet="close" data-sheet-url="{% url 'console:close' t.id %}" role="alertdialog" aria-modal="true" aria-labelledby="cl-title" aria-describedby="cl-body"{% if sheet != "close" %} hidden{% endif %}>
+  <div class="dlg-icon{% if close.variant == 'ready' %} danger{% elif close.variant == 'blocked' %} warn{% endif %}" aria-hidden="true"><svg class="i lg"><use href="#i-archive"/></svg></div>
+  <h2 class="dlg-title" id="cl-title">{% if close.variant == "ready" %}Close this ticket?{% elif close.variant == "closed" %}Ticket closed{% else %}Not ready to close{% endif %}</h2>
+  <p class="dlg-body" id="cl-body">{{ close.body }}</p>
+  {% if close_problem %}<p class="dlg-err" role="alert"><svg class="i sm" aria-hidden="true"><use href="#i-alert"/></svg><span>{{ close_problem }}</span></p>{% endif %}
+  <ul class="dlg-list">{% for r in close.left %}<li><span>{{ r.label }}</span>{% if r.badge %}<span class="badge {{ r.badge.cls }}"><svg class="i" aria-hidden="true"><use href="#{{ r.badge.icon }}"/></svg>{{ r.badge.label }}</span>{% endif %}</li>{% endfor %}</ul>
+  {% if close.variant == "ready" %}
+  <form class="dlg-actions" method="post" action="{% url 'console:close' t.id %}" id="cl-form" data-done="{% url 'console:ticket' t.id %}">{% csrf_token %}<a class="btn secondary" href="{% url 'console:ticket' t.id %}" data-close>Cancel</a><button class="btn destructive solid" type="submit" id="cl-go">Close Ticket</button></form>
+  {% else %}
+  <div class="dlg-actions"><a class="btn secondary" href="{% url 'console:ticket' t.id %}" data-close>OK</a></div>
+  {% endif %}
+</section>
