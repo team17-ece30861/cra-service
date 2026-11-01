@@ -18,7 +18,7 @@ def validate_submission(
     *,
     state: str,
     report_type: ReportType,
-    aware_at: datetime,
+    aware_at: datetime | None,
     now: datetime,
     submitted_reports: Collection[ReportType],
     missing_fields: Collection[str],
@@ -26,15 +26,18 @@ def validate_submission(
 ) -> datetime:
     """Return the effective submission time, or reject without changing inputs.
 
+    aware_at is None only for a ticket that never became reportable, which the state
+    check rejects (409) before any time is read.
+
     The caller validates auth, resource/type existence and request syntax first.
     It supplies stored report types, the draft builder's Model C missing fields,
     and core.clock.now(). Unknown report types are internal integration errors;
     the route must reject unknown types and user_advisory with 404 beforehand.
 
     Success does not store or lock content, calculate statuses, or write audit.
-    The caller must do those atomically after these checks. Q5 is still open:
-    only the published aware_at-to-now interval is checked, not chronology
-    relative to a previous report's submitted_at.
+    The caller must do those atomically after these checks. Q5 (agreed with
+    Team 21, 2026-11-01): only the aware_at-to-now interval is checked, not
+    chronology relative to a previous report's submitted_at.
     """
     if report_type not in PREVIOUS_REPORT:
         raise ValueError("unknown Article 14 report type")

@@ -49,6 +49,15 @@ def test_report_order_and_duplicates_for_every_stored_report_subset(report_type,
 
 @pytest.mark.parametrize("state", ["received", "closed"])
 @pytest.mark.parametrize("report_type", REPORTS)
+def test_a_ticket_with_no_awareness_is_rejected_by_state_not_by_time(state, report_type):
+    # A received ticket, or one closed as not reportable, has aware_at None.
+    with pytest.raises(Conflict) as excinfo:
+        submit(state=state, report_type=report_type, aware_at=None)
+    assert excinfo.value.status == 409
+
+
+@pytest.mark.parametrize("state", ["received", "closed"])
+@pytest.mark.parametrize("report_type", REPORTS)
 def test_non_reportable_states_reject_each_report_before_rule_checks(state, report_type):
     with pytest.raises(Conflict) as excinfo:
         submit(

@@ -100,6 +100,11 @@ class TestStoredDrafts:
         draft = read_draft(service, ticket_id, report_type)
         assert draft["content"] == original
         assert draft["missing_fields"] == []
+        if report_type == "final_report":
+            # The fix time was cleared, so the recorded final report has no deadline and
+            # counts as on time (our assumption since PR #76).
+            assert draft["due_at"] is None
+            assert draft["status"] == "submitted"
         assert draft["content"]["aware_at"] == FIXED
         assert REPORTER not in json.dumps(draft)
         submission.refresh_from_db()

@@ -44,6 +44,22 @@ class UpdateAuditChecks:
         assert audit_log(service, ticket["id"]) == before
         assert service.get(ticket["id"])["title"] == ticket["title"]
 
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"member_states": []},
+            {"member_states": None},
+            {"product": {"affected_versions": None}},
+            {"product": {"affected_versions": []}},
+        ],
+        ids=["empty-list", "null-list", "null-nested-list", "empty-nested-list"],
+    )
+    def test_q6_an_empty_or_null_list_never_set_is_no_change(self, service, body):
+        ticket = service.create(product={"manufacturer": "Acme", "name": "Router OS"})
+        before = audit_log(service, ticket["id"])
+        assert patch(service, ticket["id"], body) == ticket
+        assert audit_log(service, ticket["id"]) == before
+
     def test_q6_same_awareness_with_a_reason_adds_no_audit_entry(self, service):
         ticket_id = create_reportable(service, **deepcopy(NO_FIX))
         before = audit_log(service, ticket_id)
