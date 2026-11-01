@@ -4,33 +4,31 @@
 
 ## Where things stand
 
-PR75/76 foundations unchanged. Authorized stack: #77 draft reads, #78 submission
-rule, #79 recording, #80 closure rule, then this 4.A4 close endpoint. Each diff
-is one task with companion docs. No merge/deployment/shared reset authorized.
+Feature drafts #77–81 are published, with all five PostgreSQL 18 CI runs passing.
+The complete #81 stack passed 1,143 tests with no skips. These are not deployed
+HTTP results or posted independent approval, and no PR has been merged by us.
 
 ## In progress
 
-- codex/phase4-close-ticket stacks above codex/phase4-validate-closure; Richard
-  explicitly approved stacked draft bases, not merging into those bases.
-- Three reports required; atomic closed/resolved plus one audit. Existing writers
-  reject closed tickets; resolved reads and snapshots stay available/unchanged.
-- 34 portable and 11 local closure checks. Focused combined SQLite: 711 passed,
-  four PostgreSQL skips. Full localhost HTTP: 182 passed, one Windows 10053 abort,
-  one skip. Minimal WSGI without CRA/Django reproduces it; not hidden or rerun to green.
-- PostgreSQL CI and posted PR approval are required, separate from local review.
+- Task 4.T6 on codex/phase4-audit-failure-tests, stacked above #81 with Richard's
+  explicit draft/CI permission. Four shared portable cases: unknown UUID and
+  malformed ID audit 404, PUT/DELETE audit 405, all with unchanged ticket/list/audit.
+- No service endpoint, contract, workflow, model, helper or migration changes.
+  Old exact-title coupling is avoided; status and contract schema are authoritative.
+- Publication and PostgreSQL CI validation are authorized; merge/deployment or
+  shared reset tests are not. Posted independent PR review remains required.
 
 ## Next up
 
-Check CI, especially duplicate submission/closure and final-recording/close races.
-Obtain posted review and a new merge go. Retarget through main as prerequisites
-land; never merge these drafts into feature bases. Ann's 4.A5 remains separate.
+Validate this task and CI, then integrate 4.T5 operation reporting as a separate
+one-task draft above it. Leave feature drafts and earlier local worktrees untouched.
+Ann's 4.A5 and wider privacy/contract work remain separate.
 
 ## Waiting on
 
-CI/review, Ann's response/list/filter/privacy work, Quincy/pod coordination and
-Richard's separate merge or shared reset permission.
+CI/posted review, owner integration, Quincy/pod coordination and a separate merge go.
 
 ## Notes for the next session
 
-Q3/Q4 proposals/assumptions; Q5 only published awareness-to-now, Q9 strict.
-AC-12 uses an actual title update, not Q6 no-op. Only Quincy launches Orbit.
+The prior localhost HTTP suite had one Windows 10053 abort, also reproduced without
+CRA/Django; do not hide it or infer a deployed regression. Only Quincy launches Orbit.

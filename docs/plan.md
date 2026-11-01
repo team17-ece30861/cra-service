@@ -156,7 +156,7 @@ Saturday, the report records a one-way run and says why.
 | 4.T3 | Harness README: running needs `CRA_BASE_URL`, `CRA_API_TOKEN`, and `--allow-reset` (the explicit reset permission). Explain the reset-window etiquette. | Quincy's agent | Done 2026-10-18: `acceptance/README.md`, tested in a clean environment |
 | 4.T4 | First full cross-team run, both directions. Resolve disagreements in the spec, not by quietly changing tests. | | Blocked on 4.A1 to 4.A5 |
 | 4.T5 | Make the acceptance runner print the report's operation-status table (method and path, requirements, implemented, success and error conformance) from its own results, for the Phase 4 and 5 reports (Q3.1 asks for it each phase). Hand-filled for Phase 3 in `docs/reports/phase3.md`. | Richard | To do |
-| 4.T6 | Add automated tests for `GET /tickets/{id}/audit` failure paths: 404 for an unknown ticket and 405 for other methods (`PUT`, `DELETE`). Both checked by hand on 2026-10-17 but not covered by a test. | Richard | To do |
+| 4.T6 | Add automated tests for `GET /tickets/{id}/audit` failure paths: 404 for an unknown ticket and 405 for other methods (`PUT`, `DELETE`). Both checked by hand on 2026-10-17 but not covered by a test. | Richard | Prepared on codex/phase4-audit-failure-tests above draft #81 with Richard's permission. Four portable cases preserve ticket/list/audit on 404/405, validate problem schemas without exact-title coupling. CI/posted review pending; no deployed run |
 
 ### API and Data (Ann)
 

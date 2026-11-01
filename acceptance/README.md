@@ -27,6 +27,11 @@ one audit and AC-12 audit sequencing/405s are checked. Local storage/fault/race
 tests supplement these. The combined local HTTP run had one Windows connection
 abort; it is not a passing deployed result. Ann's 4.A5 remains separate.
 
+**Audit failure increment (4.T6):** four additional shared `Phase3Checks` cases
+cover unknown UUID/malformed-ID 404 and audit PUT/DELETE 405. They check problem
+schemas and unchanged ticket/list/audit data, without requiring example title
+wording. These complement the complete lifecycle cases; service behavior is unchanged.
+
 ## Warning: it resets the target
 
 
@@ -61,7 +66,7 @@ Run it from the repository root.
 
 ## Results
 
-This increment collects 184 cases (55 original, 32 drafts, 63 submissions, 34 closure). On
+This increment collects 188 cases (59 Phase 3/audit, 32 drafts, 63 submissions, 34 closure). On
 localhost the plain-HTTP probe is skipped. These are collection/expected counts,
 not a new deployed result; earlier Phase 3 validation covered only the original 55.
 
