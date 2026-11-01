@@ -190,7 +190,7 @@ def test_pages_take_now_from_the_service_clock(api, console):
     later = console.get("/console/").content.decode()
     assert 'data-now="2026-10-30T11:40:00Z"' in later
     assert "1 h 0 m overdue" in later
-    assert "Overdue" in later
+    assert 'id="g-overdue"' in later
 
 
 def test_pages_never_read_the_browser_clock():

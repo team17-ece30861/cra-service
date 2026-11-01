@@ -236,7 +236,8 @@ button.avatar.is-pressed { transform: scale(0.94); }
 .app-hero .count { font: 600 clamp(60px, 10.5vw, 128px)/1 var(--font-display); letter-spacing: -0.045em; font-variant-numeric: tabular-nums; margin: 20px 0 0; }
 .app-hero .count small { font-size: 0.22em; letter-spacing: -0.01em; color: var(--label-2); font-weight: 500; margin-left: 12px; vertical-align: 0.6em; }
 .app-hero .act { margin-top: 24px; display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap; }
-.view-head { padding: 56px 0 8px; display: flex; align-items: baseline; gap: var(--s3); }
+.view-head { padding: 56px 0 8px; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s3); }
+.view-head p { white-space: nowrap; }
 .view-alert { margin-top: var(--s4); }
 .list-foot { margin-top: var(--s5); }
 .list-foot a { color: var(--accent-text); }

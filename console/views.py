@@ -141,7 +141,9 @@ def tickets(request):
     if view:
         title, query = VIEWS[view][0], {**VIEWS[view][1], **query}
     elif query:
-        title = "Filtered"
+        labels = [present.STATE_LABEL.get(query.get("state", ""), "")]
+        labels.append(present.STATUS.get(query.get("obligation_status", ""), ("", "", ""))[2])
+        title = " · ".join(label for label in labels if label) or "Filtered"
     listed, problem = all_tickets, None
     if query:
         result = call_api(request, "GET", "/tickets", query=query)
