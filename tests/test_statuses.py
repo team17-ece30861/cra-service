@@ -166,6 +166,12 @@ def test_a_final_report_with_no_deadline_counts_as_on_time():
     )
 
 
+@pytest.mark.parametrize("report_type", ["early_warning", "notification"])
+def test_a_recorded_report_other_than_the_final_report_needs_a_deadline(report_type):
+    with pytest.raises(ValueError):
+        submitted_report_status(report_type=report_type, submitted_at=DUE, due_at=None)
+
+
 def test_submitted_status_rejects_unknown_report_types():
     with pytest.raises(ValueError):
         submitted_report_status(report_type="user_advisory", submitted_at=DUE, due_at=DUE)

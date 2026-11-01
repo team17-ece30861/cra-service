@@ -48,10 +48,15 @@ def submitted_report_status(
 
     The caller passes the deadline calculated from the ticket's current data, so a
     later edit that moves the deadline earlier can make a report late (Q4 proposal).
-    A final report with no deadline yet (no fix recorded) counts as on time.
+    A final report with no deadline (its fix time was cleared) counts as on time; a
+    missing early-warning or notification deadline is an integration error. Takes no
+    clock, so moving the clock never changes a recorded report's status.
     """
     if report_type not in ("early_warning", "notification", "final_report"):
         raise ValueError("unknown Article 14 report type")
+    submitted_at = to_utc_second(submitted_at)
     if due_at is None:
-        return "submitted"
-    return "submitted" if to_utc_second(submitted_at) <= to_utc_second(due_at) else "submitted_late"
+        if report_type == "final_report":
+            return "submitted"
+        raise ValueError("a recorded early warning or notification must have a deadline")
+    return "submitted" if submitted_at <= to_utc_second(due_at) else "submitted_late"
