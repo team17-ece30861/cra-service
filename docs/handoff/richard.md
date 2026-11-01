@@ -4,40 +4,43 @@
 
 ## Where things stand
 
-Feature drafts #77–81 are published; their full cumulative PostgreSQL 18 CI passed
-1,143 tests with no skips. Audit draft #82 adds four failure/immutability cases.
-This branch adds only 4.T5 runner evidence reporting, not service/API behavior.
+Feature drafts #77–81 remain unchanged and have passing PostgreSQL CI. Two additional
+one-task drafts are published: #82 (4.T6 audit failures), above #81, and #83 (4.T5
+operation reporting), above #82. Richard explicitly approved these stacked drafts
+and CI, not merges, deployment or shared reset tests.
 
 ## In progress
 
-- codex/phase4-operation-reporting stacks above codex/phase4-audit-failure-tests.
-  Richard approved these two drafts/CI, not merges/deployments/shared reset tests.
-- Reports all 14 contract operations from actual Service.expect checks and completed
-  test outcomes: terminal, optional --operation-report Markdown and additive JSON.
-- Auth-only is not implementation; untested is not passed; failed/skipped/unfinished
-  or failed/interrupted teardown makes valid observations inconclusive. Setup/raw
-  transport is excluded; evidence contains no token/actor/ID/request/response body.
-- Reused 33 reporting tests. Reporting/validator/interface focused run: 65 passed.
-  Hooks across actual Phase 4 Django tests: 237 passed, four PostgreSQL concurrency
-  skips. Generated table has 14 rows, including honest untested DELETE-clock success
-  and audit 405 (raw PUT/DELETE tests are not GET observations).
-- Lint/format (99 files), Django and migration checks pass. Portable collection:
-  188 cases only; no deployed target contacted. Posted review/CI remain required.
+- #82 c4925ce: PostgreSQL 18 CI passed **1,147 tests, no skips**.
+- #83 application commit 7396445: PostgreSQL 18 CI passed **1,180 tests, no skips**.
+  These are the verified code-run results; current checks/evidence are linked in
+  each PR description. This handoff is a documentation-only follow-up.
+- All 14 operations are reported from safe Service.expect metadata and completed
+  outcomes. Auth-only/untested is not implementation/passing; failed, skipped and
+  unfinished/interrupted teardown is inconclusive. Setup/raw calls are excluded.
+- Local reporting/validator/interface: 65 passed (33 reporting tests). Actual Phase 4
+  hooks: 237 passed, four PostgreSQL-only skips, with real JSON/Markdown output.
+  The 188-case portable collection is not a deployed run.
+- Fresh independent local review found no actionable issues; reviewer reran 40
+  focused tests. That is not posted independent approval. No service, model,
+  helper, migration, workflow, contract or Ann/Quincy handoff changed.
 
 ## Next up
 
-Finish fresh independent local review, publish this one-task draft and inspect
-PostgreSQL CI. Do not equate the observation table with full feature/requirement
-coverage or a supplied version label with deployed identity. Ann's 4.A5 remains separate.
+Obtain required posted independent PR reviews and a separate merge go. Retarget
+through main as prerequisites land; do not merge the drafts into feature bases.
+Ann's 4.A5, wider privacy/contract work and actual deployed/cross-team validation
+remain separate. Refresh pod tester only through the agreed release process.
 
 ## Waiting on
 
-Posted independent approval, CI, teammate/pod integration and Richard's separate
-merge/shared-reset go. Only Quincy launches Orbit.
+Posted approval, current CI checks, teammate/pod integration and Richard's separate
+merge/shared-reset permission. Only Quincy launches Orbit.
 
 ## Notes for the next session
 
-Prior raw localhost WSGI run retains its one Windows 10053 transport failure,
-also reproduced without CRA/Django; it was not hidden/retried away. These new
-in-process results do not replace actual Linux/gunicorn/deployed HTTP validation.
-Do not change the deployed /tester/test/report schema or publish pod copies early.
+The local table honestly leaves DELETE-clock success unobserved and audit 405
+untested because raw PUT/DELETE tests are not GET evidence. Supplied revision
+labels do not verify deployment, and observed status coverage is not full delivery.
+The prior Windows localhost transport failure remains visible; no swallowing or
+retry-until-green. PostgreSQL CI is not Linux/gunicorn/Cloud Run HTTP acceptance.
