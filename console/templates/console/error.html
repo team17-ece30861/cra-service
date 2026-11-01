@@ -1,0 +1,11 @@
+{% extends "console/shell.html" %}
+{% block title %}Couldn't Load · Ledger{% endblock %}
+{% block screen_label %}Couldn't load{% endblock %}
+{% block screen %}
+<a class="tk-back" href="{% url 'console:tickets' %}"><svg class="i" aria-hidden="true"><use href="#i-chev-l"/></svg>Tickets</a>
+<div class="empty not-found" role="alert">
+  <span class="glyph"><svg class="i lg" aria-hidden="true"><use href="#i-alert"/></svg></span>
+  <h1 class="t-title2">Something went wrong</h1>
+  <p>{{ message }}</p>
+</div>
+{% endblock %}

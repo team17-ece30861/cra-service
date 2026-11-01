@@ -175,6 +175,24 @@ def test_unknown_tickets_and_report_types_are_not_found(api, console, path):
     assert console.get(path.format(id=ticket_id)).status_code == 404
 
 
+def test_a_failed_draft_read_shows_an_error_page(api, console, monkeypatch):
+    from console import views_reports
+    from console.api_calls import ApiResult
+
+    ticket_id = _complete_ticket(api)
+    real = views_reports.call_api
+
+    def fake(request, method, path, **kwargs):
+        if path.endswith("/reports/notification"):
+            return ApiResult(503, {"title": "Service Unavailable", "status": 503})
+        return real(request, method, path, **kwargs)
+
+    monkeypatch.setattr(views_reports, "call_api", fake)
+    response = console.get(f"/console/tickets/{ticket_id}/reports/notification")
+    assert response.status_code == 503
+    assert "This report couldn&#x27;t be loaded." in response.content.decode()
+
+
 # --- Record Submission ---
 
 

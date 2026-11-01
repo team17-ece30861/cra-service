@@ -13,34 +13,49 @@ from console import present
 from console import present_reports as rp
 from console.api_calls import call_api
 from console.flash import flash
-from console.views import _shell, signed_in_required, ticket_context
+from console.views import (
+    _everything,
+    _failed_status,
+    _shell,
+    signed_in_required,
+    ticket_context,
+)
 from core import clock
 
 
-def _not_found(request, now):
-    everything = call_api(request, "GET", "/tickets")
-    context = _shell(request, "ticket", everything.data if everything.ok else [], now)
-    return render(request, "console/not_found.html", context, status=404)
+def _instead(request, now, *, failed=None):
+    """The page to send instead of a report page: not found, or a read that failed (as the
+    ticket page does)."""
+    _, rows, groups, upcoming = _everything(request, now)
+    context = _shell(request, "ticket", rows, groups, upcoming, now)
+    if failed is None:
+        return render(request, "console/not_found.html", context, status=404)
+    context["message"] = "This report couldn't be loaded. Reload the page to try again."
+    return render(request, "console/error.html", context, status=_failed_status(failed))
 
 
-def _report_context(request, ticket_id: str, kind: str, now) -> dict | None:
-    """The Report Draft page for one report type, or None when there's no such ticket or
-    type. A ticket that never became reportable has no drafts (the API's 409): the page
+def _report_context(request, ticket_id: str, kind: str, now):
+    """The Report Draft page for one report type, and None; or None and the response to send
+    instead. A ticket that never became reportable has no drafts (the API's 409): the page
     says so instead of showing one."""
     if kind not in rp.REPORT_TYPES:
-        return None
+        return None, _instead(request, now)
     found = call_api(request, "GET", f"/tickets/{ticket_id}")
     if found.status == 404:
-        return None
+        return None, _instead(request, now)
+    if not found.ok:
+        return None, _instead(request, now, failed=found)
     t = found.data
     draft = call_api(request, "GET", f"/tickets/{ticket_id}/reports/{kind}")
     if draft.status == 404:
-        return None
-    everything = call_api(request, "GET", "/tickets")
+        return None, _instead(request, now)
+    if not draft.ok and draft.status != 409:
+        return None, _instead(request, now, failed=draft)
+    _, rows, groups, upcoming = _everything(request, now)
     # Only what the report pages show: the reporter stays on the ticket page.
     ticket = {"id": t["id"], "title": t["title"], "state": t["state"]}
     return {
-        **_shell(request, "report", everything.data if everything.ok else [], now),
+        **_shell(request, "report", rows, groups, upcoming, now),
         "ticket": ticket,
         "kind": kind,
         "tabs": rp.tabs(ticket_id, kind),
@@ -48,7 +63,7 @@ def _report_context(request, ticket_id: str, kind: str, now) -> dict | None:
         "no_draft": (draft.data or {}).get("detail") if not draft.ok else "",
         "kind_label": rp.LABEL[kind],
         "kind_title": rp.TITLE[kind],
-    }
+    }, None
 
 
 @never_cache
@@ -56,9 +71,9 @@ def _report_context(request, ticket_id: str, kind: str, now) -> dict | None:
 @require_http_methods(["GET", "HEAD"])
 def report(request, ticket_id: str, kind: str):
     now = clock.now()
-    context = _report_context(request, ticket_id, kind, now)
-    if context is None:
-        return _not_found(request, now)
+    context, instead = _report_context(request, ticket_id, kind, now)
+    if instead is not None:
+        return instead
     if context["d"] and context["d"]["recordable"]:
         # Ready to open in place from Record Submission.
         context["rs"] = _record_sheet(context, ticket_id, kind, False, now)
@@ -107,13 +122,13 @@ def _record_sheet(context: dict, ticket_id: str, kind: str, from_ticket: bool, n
 def record(request, ticket_id: str, kind: str):
     now = clock.now()
     if kind == "user_advisory":
-        return _not_found(request, now)  # nothing to record: the API's 404 too
+        return _instead(request, now)  # nothing to record: the API's 404 too
     from_ticket = (request.POST if request.method == "POST" else request.GET).get(
         "from"
     ) == "ticket"
-    context = _report_context(request, ticket_id, kind, now)
-    if context is None:
-        return _not_found(request, now)
+    context, instead = _report_context(request, ticket_id, kind, now)
+    if instead is not None:
+        return instead
     sheet = _record_sheet(context, ticket_id, kind, from_ticket, now)
     status = 200
     if request.method == "POST":
@@ -139,7 +154,7 @@ def record(request, ticket_id: str, kind: str):
             )
             return redirect("console:ticket", ticket_id)
         if result.status == 404:
-            return _not_found(request, now)
+            return _instead(request, now)
         errors, missing, problem = rp.record_errors(result.data, sheet["aware"])
         sheet.update(values=values, errors=errors, problem=problem)
         if missing:
@@ -147,9 +162,9 @@ def record(request, ticket_id: str, kind: str):
             sheet["missing_first"] = missing[0]
         status = result.status
     if from_ticket:
-        page, found = ticket_context(request, ticket_id, now)
-        if not found:
-            return _not_found(request, now)
+        page, instead = ticket_context(request, ticket_id, now)
+        if instead is not None:
+            return instead
         page["sheet"] = "record"
         return render(request, "console/ticket_record.html", {**page, "rs": sheet}, status=status)
     context["sheet"] = "record"
@@ -174,8 +189,8 @@ def close(request, ticket_id: str):
         if result.status != 404:
             problem = (result.data or {}).get("detail") or "The ticket couldn't be closed."
             status = result.status
-    page, found = ticket_context(request, ticket_id, now)
-    if not found:
-        return render(request, "console/not_found.html", page, status=404)
+    page, instead = ticket_context(request, ticket_id, now)
+    if instead is not None:
+        return instead
     page.update(sheet="close", close_problem=problem)
     return render(request, "console/ticket.html", page, status=status)
