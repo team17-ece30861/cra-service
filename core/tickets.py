@@ -9,6 +9,7 @@ from ninja import Router
 from ninja.responses import Status
 
 from core import clock
+from core.domain.closure import close_ticket
 from core.domain.deadlines import calculate_deadlines
 from core.domain.drafts import DraftReportType, DraftResult, build_draft
 from core.domain.statuses import ReportType, submitted_report_status, unsubmitted_obligation_status
@@ -245,6 +246,22 @@ def update_ticket(request, id: str):
         ticket, now=now, actor=actor, action="updated", before=before, reason=payload.change_reason
     )
     return response
+
+
+@router.post("/{id}/close", response=dict, operation_id="closeTicket")
+def close(request, id: str):
+    ticket = _ticket(id, lock=True)
+    actor = require_actor(request)
+    result = close_ticket(
+        state=ticket.state,
+        submitted_reports=set(ticket.submissions.values_list("report_type", flat=True)),
+    )
+    now = clock.now()
+    before = _snapshot(ticket)
+    ticket.state, ticket.resolution = result.state, result.resolution
+    ticket.save(update_fields=["state", "resolution"])
+    _audit(ticket, now=now, actor=actor, action="closed", before=before)
+    return _render(ticket, now)
 
 
 @router.get("/{id}/audit", response=list[dict], operation_id="getAuditLog")

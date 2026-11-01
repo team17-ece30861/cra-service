@@ -20,6 +20,13 @@ one audit, failures, schema/time/order/duplicates, auth/size precedence and rese
 Local persistence/fault tests supplement them; a genuine race requires PostgreSQL.
 This is not closure or Ann's full Ticket/list status integration.
 
+**Closure increment (4.A4):** `closure_cases.py` adds 34 portable closure/lifecycle
+cases shared with `tests/test_closure_api.py`; `test_closures.py` is the HTTP entry.
+Closed reads, rejection of changes, locked snapshots, auth/size/actor precedence,
+one audit and AC-12 audit sequencing/405s are checked. Local storage/fault/race
+tests supplement these. The combined local HTTP run had one Windows connection
+abort; it is not a passing deployed result. Ann's 4.A5 remains separate.
+
 ## Warning: it resets the target
 
 
@@ -54,7 +61,7 @@ Run it from the repository root.
 
 ## Results
 
-This increment collects 150 cases (55 original, 32 drafts, 63 submissions). On
+This increment collects 184 cases (55 original, 32 drafts, 63 submissions, 34 closure). On
 localhost the plain-HTTP probe is skipped. These are collection/expected counts,
 not a new deployed result; earlier Phase 3 validation covered only the original 55.
 
@@ -80,3 +87,5 @@ curl -X DELETE "$CRA_BASE_URL/test/clock" -H "Authorization: Bearer $CRA_API_TOK
 | `test_drafts.py` | HTTP entry point for draft-read checks |
 | `submission_cases.py` | Actual recording cases shared by Django and HTTP |
 | `test_submissions.py` | HTTP recording entry point |
+| `closure_cases.py` | Portable closure and append-only lifecycle cases |
+| `test_closures.py` | HTTP closure/lifecycle entry point |

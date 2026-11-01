@@ -167,6 +167,27 @@ Current time or subsequently incomplete drafts add no closure condition. Advisor
 cannot replace a required report. Thirty tests cover all report subsets, states
 and input/result safety. Actual HTTP persistence/audit remain separate task 4.A4.
 
+## Closure endpoint and lifecycle (4.A4)
+
+The bodyless `POST /tickets/{id}/close` locks/looks up the ticket (404), validates
+X-Actor (400), then calls 4.D4 (state/report-set 409). It saves closed/resolved and
+one closed audit: old/new state/resolution, normalized actor, one clock and null
+reason. Existing middleware makes state/audit/response atomic; injected failures
+roll back without sequence gaps. Shared ticket locking serializes existing writers.
+
+Closed tickets reject edits, triage, submissions and repeat closure. Ticket/list/
+audit and all four resolved draft reads stay available; snapshots are unchanged.
+Close/audit omit reporter fields. Thirty-four portable closure/AC-12 cases and
+eleven local storage/fault/concurrency cases supplement the rule. Genuine duplicate
+close and final-recording/close races require PostgreSQL. AC-12 changes a real
+title, not unsettled Q6 no-op behavior, and checks actors/times/seq and audit 405s.
+
+Combined focused local regression: 711 passed/four PostgreSQL skips. Complete
+localhost HTTP: 182 passed, one Windows 10053 connection abort reading an early
+oversized-request 401, one skip. The same abort reproduced in minimal unframed
+WSGI without CRA/Django; no swallowing/retry-until-green hides it. CI/review and
+actual-stack validation remain gates; Ann's 4.A5 is not implemented by this task.
+
 ## Contract documentation gap
 
 
