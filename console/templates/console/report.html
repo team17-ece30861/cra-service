@@ -7,7 +7,7 @@
 {% block screen %}
 <a class="tk-back" href="{% url 'console:ticket' ticket.id %}"><svg class="i" aria-hidden="true"><use href="#i-chev-l"/></svg>{{ ticket.title }}</a>
 <nav class="seg rp-tabs" aria-label="Report type" id="rp-tabs">
-  {% for tab in tabs %}<a href="{% url 'console:report' ticket.id tab.type %}" data-v="{{ tab.type }}"{% if tab.on %} aria-current="page"{% endif %}><span class="lg">{{ tab.title }}</span><span class="sm" aria-hidden="true">{{ tab.short }}</span></a>{% endfor %}<span class="ind" aria-hidden="true"></span>
+  {% for tab in tabs %}<a href="{% url 'console:report' ticket.id tab.type %}" data-v="{{ tab.type }}" aria-label="{{ tab.title }}"{% if tab.on %} aria-current="page"{% endif %}><span class="lg">{{ tab.title }}</span><span class="sm">{{ tab.short }}</span></a>{% endfor %}<span class="ind" aria-hidden="true"></span>
 </nav>
 <div id="rp-swap" data-kind="{{ kind }}">
 {% if not d %}

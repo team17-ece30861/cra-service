@@ -12,14 +12,21 @@
 
   /* The service clock: the page carries the service's "now" (core.clock, which follows a fixed test clock); the browser's
      clock is never read. Time moves forward from it with performance.now(), as in ledger.js. */
-  var T0 = Date.parse(app.getAttribute('data-now')), P0 = performance.now();
+  var T0 = Date.parse(app.getAttribute('data-now')), P0 = performance.now(), W0 = Date.now();
   if (isNaN(T0)) T0 = 0;
-  function nowMs() { return T0 + (performance.now() - P0); }
+  /* Elapsed time is a difference of the browser's clocks, never its absolute time. performance.now() can stall while a laptop
+     sleeps, so the larger of the two differences wins and "now" never falls behind. */
+  function nowMs() { return T0 + Math.max(performance.now() - P0, Date.now() - W0); }
   /* A fixed test clock (PUT /test/clock) doesn't move in the service, so "now" doesn't move here either */
   function formNow(form) { var f = form && form.hasAttribute('data-clock-fixed') && Date.parse(form.getAttribute('data-now')); return f || nowMs(); }
 
   /* Times as people type them: "YYYY-MM-DD HH:MM[:SS]" in UTC */
-  function parseUtc(s) { var m = /^\s*(\d{4})-(\d{2})-(\d{2})[ Tt](\d{2}):(\d{2})(?::(\d{2}))?\s*(?:UTC|Z)?\s*$/i.exec(s || ''); if (!m) return NaN; return Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)); }
+  /* A time that doesn't exist (2026-02-30, 25:00) is NaN, not the date it would roll over to */
+  function parseUtc(s) {
+    var m = /^\s*(\d{4})-(\d{2})-(\d{2})[ Tt](\d{2}):(\d{2})(?::(\d{2}))?\s*(?:UTC|Z)?\s*$/i.exec(s || ''); if (!m) return NaN;
+    var t = Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)), d = new Date(t);
+    return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === m[2] - 1 && d.getUTCDate() === +m[3] && d.getUTCHours() === +m[4] && d.getUTCMinutes() === +m[5] && d.getUTCSeconds() === +(m[6] || 0) ? t : NaN;
+  }
   function fmtUtc(ms) { return new Date(Math.floor(ms / 1000) * 1000).toISOString().replace('T', ' ').slice(0, 19); }
   function span(ms) { var m = Math.round(Math.abs(ms) / 60000), d = Math.floor(m / 1440), h = Math.floor(m / 60) % 24; return d ? d + ' d ' + h + ' h' : Math.floor(m / 60) + ' h ' + (m % 60) + ' m'; }
   var BADGE = { submitted: ['submitted', 'Submitted'], late: ['late', 'Submitted late'] };
@@ -124,7 +131,8 @@
       if (!src) throw new Error('no sheet');
       var c = cardFor(url); if (c) c.remove();
       c = document.importNode(src, true); c.hidden = true; layer.appendChild(c);
-      openSheet(c, { push: true, opener: opener });
+      delete pages[urlKey(url)];   /* a sheet is read fresh each time it's loaded */
+      openSheet(c, { push: true, opener: opener, fresh: true });
     }).catch(function () { location.assign(url); });
   }
   /* A sheet opened again in place starts fresh, as in the prototype: the time is now, nothing typed, no old errors */
@@ -210,28 +218,49 @@
     if (on) { btn.dataset.label = btn.textContent; btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true'); btn.innerHTML = '<span class="spin" aria-hidden="true"></span><span class="sr-only">' + btn.dataset.label + '</span>'; }
     else { btn.classList.remove('busy'); btn.removeAttribute('aria-busy'); btn.textContent = btn.dataset.label || btn.textContent; }
   }
+  /* One line in the sheet when the answer isn't one we can show: the input stays, nothing is lost */
+  var FAILED = { record: "Couldn't record this. Reload the page and try again.", close: "Couldn't close this ticket. Reload the page and try again." };
+  function sayFailed(card, msg) {
+    var old = card.querySelector('[data-failed]'); if (old) old.remove();
+    var el;
+    if (card.getAttribute('data-sheet') === 'record') {
+      el = document.createElement('div'); el.className = 'alert error'; el.setAttribute('role', 'alert');
+      el.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><div><div class="a-title"></div></div><span></span>';
+      el.querySelector('.a-title').textContent = msg;
+      var form = card.querySelector('#rs-form'); form.insertBefore(el, form.querySelector('.sh-context'));
+    } else {
+      el = document.createElement('p'); el.className = 'dlg-err'; el.setAttribute('role', 'alert');
+      el.innerHTML = '<svg class="i sm" aria-hidden="true"><use href="#i-alert"/></svg><span></span>';
+      el.querySelector('span').textContent = msg;
+      card.querySelector('#cl-body').insertAdjacentElement('afterend', el);
+    }
+    el.setAttribute('data-failed', '');
+  }
   function post(form, btn, card) {
     if (form.dataset.sending) return;
     form.dataset.sending = '1'; busy(btn, true);
-    fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin', redirect: 'manual', headers: { Accept: 'text/html' } }).then(function (res) {
-      if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+    var kind = card.getAttribute('data-sheet');
+    function again(msg) { delete form.dataset.sending; busy(btn, false); sayFailed(card, msg); }
+    fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: { Accept: 'text/html', 'X-Ledger-Sheet': '1' } }).then(function (res) {
+      var done = res.headers.get('X-Ledger-Done');
+      if (done && urlKey(done) === urlKey(form.getAttribute('data-done'))) {
         /* Done: the sheet leaves, then the ticket page arrives with the toast (the sheet's address leaves history) */
         closeSheet({ navigating: true });
-        setTimeout(function () { location.replace(form.getAttribute('data-done')); }, reduceMotion.matches ? 0 : 200);
+        setTimeout(function () { location.replace(done); }, reduceMotion.matches ? 0 : 200);
         return;
       }
+      /* The session ended: the person signs in again (and comes back to this sheet) */
+      if (res.redirected && /\/console\/sign-in(\?|$)/.test(new URL(res.url).pathname + new URL(res.url).search)) { location.assign(res.url); return; }
       return res.text().then(function (html) {
-        var doc = new DOMParser().parseFromString(html, 'text/html');
-        var fresh = doc.querySelector('.sheet-card[data-sheet="' + card.getAttribute('data-sheet') + '"]');
-        if (!fresh) { location.assign(form.getAttribute('data-done')); return; }
+        var fresh = res.status >= 400 && res.status < 500 && res.status !== 403 ? new DOMParser().parseFromString(html, 'text/html').querySelector('.sheet-card[data-sheet="' + kind + '"]') : null;
+        if (!fresh) { again(FAILED[kind]); return; }
+        /* The API said no: the sheet again, with what was typed and the API's errors */
         card.replaceChildren.apply(card, [].map.call(fresh.childNodes, function (n) { return document.importNode(n, true); }));
         setup(card); focusFirst(card);
       });
-    }).catch(function () {
-      delete form.dataset.sending; busy(btn, false);
-      toast("Couldn't reach Ledger", 'Check your connection and try again.');
-    });
+    }).catch(function () { again("Couldn't reach Ledger. Check your connection and try again."); });
   }
+
 
   function setup(card) {
     if (card.getAttribute('data-sheet') === 'record') setupRecord(card);
@@ -260,7 +289,11 @@
       shown = key;
     }
     at.addEventListener('input', function () { setErr(at.closest('.field'), ''); update(); });
-    at.addEventListener('blur', function () { if (at.value.trim() && isNaN(parseUtc(at.value))) setErr(at.closest('.field'), 'Use the format 2026-10-29 14:00:00.'); });
+    at.addEventListener('blur', function () {
+      if (!at.value.trim() || !isNaN(parseUtc(at.value))) return;
+      var shaped = /^\s*\d{4}-\d{2}-\d{2}[ Tt]\d{2}:\d{2}(:\d{2})?\s*(UTC|Z)?\s*$/i.test(at.value);
+      setErr(at.closest('.field'), shaped ? "That isn't a real date and time." : 'Use the format 2026-10-29 14:00:00.');
+    });
     var ref = form.querySelector('#rs-ref');
     ref.addEventListener('input', function () { setErr(ref.closest('.field'), ''); });
     form.querySelector('#rs-now').addEventListener('click', function () { at.value = fmtUtc(formNow(form)); setErr(at.closest('.field'), ''); update(); });

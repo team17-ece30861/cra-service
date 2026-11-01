@@ -4,6 +4,7 @@ renders the page it belongs to with the sheet open, and ledger's reports.js open
 it in place when it's clicked from that page. A POST makes exactly one change through the
 API, as the signed-in person; a failure re-renders the sheet with the API's errors."""
 
+from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
@@ -22,6 +23,10 @@ from console.views import (
 )
 from core import clock
 
+# reports.js sends SHEET_HEADER with a sheet's POST; success answers with DONE_HEADER.
+SHEET_HEADER = "X-Ledger-Sheet"
+DONE_HEADER = "X-Ledger-Done"
+
 
 def _instead(request, now, *, failed=None):
     """The page to send instead of a report page: not found, or a read that failed (as the
@@ -34,10 +39,22 @@ def _instead(request, now, *, failed=None):
     return render(request, "console/error.html", context, status=_failed_status(failed))
 
 
+def _read_draft(request, ticket_id: str, kind: str, now):
+    """The draft as the page shows it, why there's none (the API's 409 for a ticket that
+    never became reportable), and the response to send instead when the read failed."""
+    draft = call_api(request, "GET", f"/tickets/{ticket_id}/reports/{kind}")
+    if draft.status == 404:
+        return None, "", _instead(request, now)
+    if not draft.ok and draft.status != 409:
+        return None, "", _instead(request, now, failed=draft)
+    if not draft.ok:
+        return None, (draft.data or {}).get("detail") or "", None
+    return rp.draft_view(draft.data, now), "", None
+
+
 def _report_context(request, ticket_id: str, kind: str, now):
-    """The Report Draft page for one report type, and None; or None and the response to send
-    instead. A ticket that never became reportable has no drafts (the API's 409): the page
-    says so instead of showing one."""
+    """The Report Draft page for one report type, and None; or None and the response to
+    send instead (no such ticket or type, or a read that failed)."""
     if kind not in rp.REPORT_TYPES:
         return None, _instead(request, now)
     found = call_api(request, "GET", f"/tickets/{ticket_id}")
@@ -45,22 +62,21 @@ def _report_context(request, ticket_id: str, kind: str, now):
         return None, _instead(request, now)
     if not found.ok:
         return None, _instead(request, now, failed=found)
+    d, no_draft, instead = _read_draft(request, ticket_id, kind, now)
+    if instead is not None:
+        return None, instead
     t = found.data
-    draft = call_api(request, "GET", f"/tickets/{ticket_id}/reports/{kind}")
-    if draft.status == 404:
-        return None, _instead(request, now)
-    if not draft.ok and draft.status != 409:
-        return None, _instead(request, now, failed=draft)
     _, rows, groups, upcoming = _everything(request, now)
     # Only what the report pages show: the reporter stays on the ticket page.
     ticket = {"id": t["id"], "title": t["title"], "state": t["state"]}
     return {
         **_shell(request, "report", rows, groups, upcoming, now),
         "ticket": ticket,
+        "ticket_title": ticket["title"],
         "kind": kind,
         "tabs": rp.tabs(ticket_id, kind),
-        "d": rp.draft_view(draft.data, now) if draft.ok else None,
-        "no_draft": (draft.data or {}).get("detail") if not draft.ok else "",
+        "d": d,
+        "no_draft": no_draft,
         "kind_label": rp.LABEL[kind],
         "kind_title": rp.TITLE[kind],
     }, None
@@ -81,7 +97,8 @@ def report(request, ticket_id: str, kind: str):
 
 
 def _record_sheet(context: dict, ticket_id: str, kind: str, from_ticket: bool, now) -> dict:
-    """The Record Submission sheet over the page it was opened from."""
+    """The Record Submission sheet over the page it was opened from. `context` has the
+    draft (`d`, `no_draft`) and the ticket's title."""
     d = context.get("d") or {}
     if from_ticket:
         base = reverse("console:ticket", args=[ticket_id])
@@ -91,7 +108,7 @@ def _record_sheet(context: dict, ticket_id: str, kind: str, from_ticket: bool, n
         "type": kind,
         "label": rp.LABEL[kind],
         "title": rp.TITLE[kind],
-        "ticket_title": context["ticket"]["title"],
+        "ticket_title": context["ticket_title"],
         "due": d.get("due"),
         "due_at": d.get("due_at") or "",
         "aware": d.get("aware"),
@@ -109,11 +126,22 @@ def _record_sheet(context: dict, ticket_id: str, kind: str, from_ticket: bool, n
         # Edit Ticket arrives with PR 2 (4.U2): /console/tickets/<id>/edit?focus=<field>
         "edit": reverse("console:ticket", args=[ticket_id]) + "/edit",
         "from_ticket": from_ticket,
-        "now": rp.ui_time(present.iso(now)),
         "values": {"submitted_at": rp.ui_time(present.iso(now)), "reference": ""},
         "errors": {},
         "problem": "",
     }
+
+
+def _done(request, ticket_id: str):
+    """After a change: the ticket page, where the toast waits. The page's own script asks
+    with X-Ledger-Sheet and gets the address in a header instead of a redirect it can't
+    read, so it can tell success from a redirect to sign-in (reports.js)."""
+    url = reverse("console:ticket", args=[ticket_id])
+    if request.headers.get(SHEET_HEADER):
+        response = HttpResponse(status=204)
+        response[DONE_HEADER] = url
+        return response
+    return redirect(url)
 
 
 @never_cache
@@ -121,16 +149,11 @@ def _record_sheet(context: dict, ticket_id: str, kind: str, from_ticket: bool, n
 @require_http_methods(["GET", "HEAD", "POST"])
 def record(request, ticket_id: str, kind: str):
     now = clock.now()
-    if kind == "user_advisory":
+    if kind not in rp.REPORT_TYPES or kind == "user_advisory":
         return _instead(request, now)  # nothing to record: the API's 404 too
-    from_ticket = (request.POST if request.method == "POST" else request.GET).get(
-        "from"
-    ) == "ticket"
-    context, instead = _report_context(request, ticket_id, kind, now)
-    if instead is not None:
-        return instead
-    sheet = _record_sheet(context, ticket_id, kind, from_ticket, now)
-    status = 200
+    asked = request.POST if request.method == "POST" else request.GET
+    from_ticket = asked.get("from") == "ticket"
+    status, values, errors, problem, missing = 200, None, {}, "", []
     if request.method == "POST":
         values = {
             "submitted_at": request.POST.get("submitted_at", "").strip(),
@@ -152,23 +175,34 @@ def record(request, ticket_id: str, kind: str):
                 ("Submitted late." if late else "Submitted on time.")
                 + " The report is locked as it read now.",
             )
-            return redirect("console:ticket", ticket_id)
+            return _done(request, ticket_id)
         if result.status == 404:
             return _instead(request, now)
-        errors, missing, problem = rp.record_errors(result.data, sheet["aware"])
-        sheet.update(values=values, errors=errors, problem=problem)
-        if missing:
-            sheet["missing"] = [rp.field_label(f) for f in missing]
-            sheet["missing_first"] = missing[0]
-        status = result.status
+        status, failed = result.status, result.data
+    # The page under the sheet, read once (a failed change changed nothing).
     if from_ticket:
         page, instead = ticket_context(request, ticket_id, now)
         if instead is not None:
             return instead
-        page["sheet"] = "record"
-        return render(request, "console/ticket_record.html", {**page, "rs": sheet}, status=status)
-    context["sheet"] = "record"
-    return render(request, "console/report.html", {**context, "rs": sheet}, status=status)
+        d, no_draft, instead = _read_draft(request, ticket_id, kind, now)
+        if instead is not None:
+            return instead
+        page.update(d=d, no_draft=no_draft, ticket_title=page["t"]["title"])
+        template = "console/ticket_record.html"
+    else:
+        page, instead = _report_context(request, ticket_id, kind, now)
+        if instead is not None:
+            return instead
+        template = "console/report.html"
+    sheet = _record_sheet(page, ticket_id, kind, from_ticket, now)
+    if values is not None:
+        errors, missing, problem = rp.record_errors(failed, sheet["aware"])
+        sheet.update(values=values, errors=errors, problem=problem)
+        if missing:
+            sheet["missing"] = [rp.field_label(f) for f in missing]
+            sheet["missing_first"] = missing[0]
+    page["sheet"] = "record"
+    return render(request, template, {**page, "rs": sheet}, status=status)
 
 
 @never_cache
@@ -185,7 +219,7 @@ def close(request, ticket_id: str):
                 "Ticket closed",
                 f"{result.data['title']} is resolved. The audit trail records it.",
             )
-            return redirect("console:ticket", ticket_id)
+            return _done(request, ticket_id)
         if result.status != 404:
             problem = (result.data or {}).get("detail") or "The ticket couldn't be closed."
             status = result.status

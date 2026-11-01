@@ -10,7 +10,9 @@ from django.test import Client
 
 from acceptance.draft_cases import FIELDS
 from console import present_reports
+from core.domain.closure import close_ticket
 from core.models import AuditEntry, ReportSubmission, Ticket
+from cra_service.errors import Conflict
 from cra_service.validation import ACTOR_HEADER
 
 pytestmark = pytest.mark.django_db
@@ -100,6 +102,11 @@ def _ready_to_close(api):
 
 def _record(console, ticket_id, kind="early_warning", **data):
     return console.post(f"/console/tickets/{ticket_id}/reports/{kind}/record", data)
+
+
+def _close(api, ticket_id):
+    response = api.post(f"/tickets/{ticket_id}/close", headers={ACTOR_HEADER: "intake"})
+    assert response.status_code == 200, response.content
 
 
 # --- Signed out ---
@@ -378,3 +385,139 @@ def test_changes_need_the_csrf_token(api):
 )
 def test_typed_times_go_to_the_api_in_its_form(typed, sent):
     assert present_reports.api_time(typed) == sent
+
+
+# --- Review follow-ups (PR #94) ---
+
+
+def test_report_tabs_have_a_name_at_every_width(api, console):
+    ticket_id = _complete_ticket(api)
+    html = console.get(f"/console/tickets/{ticket_id}/reports/early_warning").content.decode()
+    tabs = html[html.index('id="rp-tabs"') : html.index('<span class="ind"')]
+    for title in ("Early Warning", "Notification", "Final Report", "User Advisory"):
+        assert f'aria-label="{title}"' in tabs
+    assert "aria-hidden" not in tabs
+
+
+def test_the_page_script_learns_where_a_change_landed_from_a_header(api, console):
+    ticket_id = _ready_to_close(api)
+    response = console.post(f"/console/tickets/{ticket_id}/close", headers={"X-Ledger-Sheet": "1"})
+    assert response.status_code == 204
+    assert response["X-Ledger-Done"] == f"/console/tickets/{ticket_id}"
+    assert Ticket.objects.get(pk=ticket_id).state == "closed"
+    landed = console.get(f"/console/tickets/{ticket_id}").content.decode()
+    assert 'data-flash-title="Ticket closed"' in landed
+    other = _complete_ticket(api)
+    response = console.post(
+        f"/console/tickets/{other}/reports/early_warning/record",
+        {"submitted_at": "2026-10-29 12:00:00"},
+        headers={"X-Ledger-Sheet": "1"},
+    )
+    assert response.status_code == 204
+    assert response["X-Ledger-Done"] == f"/console/tickets/{other}"
+
+
+def _obligations(statuses):
+    return {
+        kind: {"status": status}
+        for kind, status in zip(
+            ("early_warning", "notification", "final_report"), statuses, strict=True
+        )
+    }
+
+
+@pytest.mark.parametrize(
+    ("state", "statuses"),
+    [
+        ("reportable", ("submitted", "submitted", "submitted")),
+        ("reportable", ("submitted_late", "submitted", "submitted_late")),
+        ("reportable", ("submitted", "submitted", "pending")),
+        ("reportable", ("submitted", "overdue", "awaiting_fix")),
+        ("reportable", ("submitted", "submitted", "awaiting_fix")),
+        ("reportable", ("pending", "pending", "awaiting_fix")),
+        ("received", ("not_applicable", "not_applicable", "not_applicable")),
+        ("closed", ("submitted", "submitted", "submitted")),
+        ("closed", ("not_applicable", "not_applicable", "not_applicable")),
+    ],
+)
+def test_close_dialog_agrees_with_the_closure_rule(state, statuses):
+    """The dialog's ready / not ready mirrors core/domain/closure.py; a rule change breaks
+    this test instead of silently hiding Close Ticket."""
+    submitted = {
+        kind
+        for kind, ob in _obligations(statuses).items()
+        if ob["status"] in ("submitted", "submitted_late")
+    }
+    try:
+        close_ticket(state=state, submitted_reports=submitted)
+        allowed = True
+    except Conflict:
+        allowed = False
+    view = present_reports.close_view(
+        {"state": state, "resolution": None, "obligations": _obligations(statuses)}
+    )
+    assert (view["variant"] == "ready") == allowed
+
+
+def test_a_resolved_ticket_shows_its_locked_copies_and_nothing_to_record(api, console):
+    ticket_id = _ready_to_close(api)
+    _close(api, ticket_id)
+    for kind in ("early_warning", "notification", "final_report"):
+        html = console.get(f"/console/tickets/{ticket_id}/reports/{kind}").content.decode()
+        assert "This is the locked copy that was recorded" in html
+        assert 'id="rp-record"' not in html
+
+
+def test_a_final_report_waiting_on_a_fix_cannot_be_recorded(api, console):
+    fields = deepcopy(FIELDS)
+    del fields["fix"]
+    ticket_id = _create(api, **fields)
+    _triage(api, ticket_id)
+    html = console.get(f"/console/tickets/{ticket_id}/reports/final_report").content.decode()
+    assert "Waiting on fix" in html
+    assert "Due 14 days after a fix is available" in html
+    assert 'id="rp-record" disabled' in html
+
+
+def test_close_on_a_closed_ticket_says_so(api, console):
+    ticket_id = _ready_to_close(api)
+    _close(api, ticket_id)
+    html = console.get(f"/console/tickets/{ticket_id}/close").content.decode()
+    assert "Ticket closed" in html and "already closed as resolved." in html
+    assert 'id="cl-go"' not in html
+
+
+@pytest.mark.parametrize(
+    ("typed", "status", "message"),
+    [
+        ("yesterday", 400, "Use the format 2026-10-29 14:00:00."),
+        ("2026-10-29 09:00:00", 422, "Enter a time between when your team became aware"),
+    ],
+)
+def test_errors_over_the_ticket_page_keep_the_ticket_page(api, console, typed, status, message):
+    ticket_id = _complete_ticket(api)
+    response = _record(console, ticket_id, submitted_at=typed, **{"from": "ticket"})
+    assert response.status_code == status
+    html = response.content.decode()
+    assert message in html and "Audit trail" in html
+    assert f'value="{typed}"' in html
+    assert not ReportSubmission.objects.exists()
+
+
+def test_over_the_ticket_page_each_thing_is_read_once(api, console, monkeypatch):
+    from console import api_calls, views, views_reports
+
+    ticket_id = _complete_ticket(api)
+    calls = []
+
+    def counting(request, method, path, **kwargs):
+        calls.append((method, path))
+        return api_calls.call_api(request, method, path, **kwargs)
+
+    monkeypatch.setattr(views, "call_api", counting)
+    monkeypatch.setattr(views_reports, "call_api", counting)
+    page = console.get(f"/console/tickets/{ticket_id}/reports/early_warning/record?from=ticket")
+    assert page.status_code == 200
+    assert calls.count(("GET", "/tickets")) == 1
+    assert calls.count(("GET", f"/tickets/{ticket_id}")) == 1
+    assert calls.count(("GET", f"/tickets/{ticket_id}/reports/early_warning")) == 1

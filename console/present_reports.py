@@ -211,6 +211,7 @@ def record_errors(problem: dict | None, aware: str) -> tuple[dict, list[str], st
 def close_view(ticket: dict) -> dict:
     """The Close Ticket dialog for a ticket as the API returned it: ready, not ready (with the
     reports still to record, by their API status), or already closed."""
+    # Mirrors the closure rule in core/domain/closure.py; tests/test_console_reports checks it.
     state = ticket.get("state")
     obligations = ticket.get("obligations") or {}
     left = []
