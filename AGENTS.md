@@ -97,11 +97,14 @@ Read these before starting any task:
 
 ## Handoffs
 
-At the end of a session, update your owner's file in [`docs/handoff/`](docs/handoff/) and
-only that file. It's how the next session, and the other teammates' agents, pick up
-where you left off.
+At the end of a session, update your owner's file in [`docs/handoff/`](docs/handoff/). It's how
+the next session, and the other teammates' agents, pick up where you left off.
 
-- **Rewrite it to the current state**, don't append. Sections: last updated (date and
+- **Handing work to a teammate:** any agent may also update another teammate's file to
+  hand them something: new tasks, what they're now waiting on, or a change that affects
+  their work. Change only what the handoff needs, keep their own notes, and say who
+  updated it and when (Quincy, 2026-11-01).
+- **Rewrite your owner's file to the current state**, don't append. Sections: last updated (date and
   agent), where things stand, in progress (branches, half-done work), next up (plan task
   numbers), waiting on (who and what), notes for the next session.
 - **Keep it short.** Task status belongs in `docs/plan.md`, settled questions in

@@ -49,19 +49,17 @@ same spec. We test their deployment and they test ours.
 - Changing someone else's area is fine when it unblocks you. Say so in the PR description
   and ask that owner to review.
 
-## Where we are (2026-10-26)
+## Where we are (2026-11-01)
 
 | Item | Status |
 |---|---|
 | Platform layer: auth, errors, timestamps, clock, reset, logging, CI, deploys | Done, live on Launchpad and Orbit |
-| Phase 3 ticket API: intake, get, list (unfiltered), update, triage, audit read, deadlines, unsubmitted statuses | Done. Acceptance suite 55/55 on Launchpad and Orbit (`262fedf`) |
-| Course testing interface: `/test/setup`, `/test/report`, and our deployed tester at `/tester` (PR #63) | Done 2026-10-18 |
-| Phase 3 report | Was due 2026-10-18. Answers in [reports/phase3.md](reports/phase3.md) |
-| Phase 3 pod items carried into Phase 4 | Team 21's tester now runs against Orbit (3.8; first full run 2026-11-01 01:51 UTC). Team 21 checked the shared test file by email (3.10; PR #8 awaits their GitHub approval). Freeze PR `pod-k-shared` #14 awaits their approval (3.9). |
-| Phase 4 reporting workflow | Not started. No Phase 4 code on `main` as of 2026-10-26 |
-| Console (4.U0 to U4) | Built 2026-11-01 and live on Launchpad: design standards (4.U0, [design.md](design.md)), sign-in (4.U1, #91), ticket list, ticket page, New/Edit Ticket and Triage (4.U2, #93 and #95), Report Draft, Record Submission and Close (4.U3, #94). 4.U4 (report notes) to do |
-| **Phase 4 due date** | **Sunday 2026-11-01** (time of day to confirm) |
-| Phase 4 report questions | Not received yet (2026-10-26) |
+| Phase 3 ticket API | Done |
+| Phase 4 reporting workflow: drafts, recording submissions, closing, statuses, list filters and order, audit log, reporter confidentiality | Done (PRs #75 to #89). Orbit runs `be9572b` (launched 2026-11-01 20:48 UTC): tester 222/222 against it the same day |
+| Console (4.U0 to U3) | Done and live on Orbit since the `be9572b` launch. 4.U4 (report notes) not done |
+| Cross-team runs (4.T4) | Both directions on 2026-11-01: our suite 222/222 against Team 21's new deployment; Team 21's suite 17/17 against Orbit. Recorded in `pod-k-shared` (#17) |
+| Pod items | Freeze PR `pod-k-shared` #14 awaits Team 21's approval. Q7 and Q9 need contract PRs; Q8 unanswered (see Open questions) |
+| Phase 4 report | Due 2026-11-01 at midnight. Final text in [reports/phase4.md](reports/phase4.md) |
 | Phase 5 due date | Not announced yet |
 
 ## Phase 3: deployed service with intake, triage, and deadlines
@@ -152,9 +150,9 @@ Saturday, the report records a one-way run and says why.
 | 4.D4 | Close rule: 409 unless `reportable` with all three reports submitted. | REQ-09; AC-10 | Done (PR #80). |
 | 4.D5 | Listing helpers: `next_due_at` (earliest due time among unsubmitted, applicable reports; null if none) and the sort key (nulls last, tie-break per Q2). | REQ-10; AC-11 | Done (PR #84): `core/domain/listing.py`. |
 | 4.T1 | Acceptance cases for AC-06 to 12 and AC-16 in `acceptance/cases.py`, running both locally and over HTTP. | Cases for AC-06 to 12 are in `acceptance/` (`draft_cases`, `submission_cases`, `closure_cases`, `listing_cases`, `update_cases`; PRs #77 to #85), running locally and over HTTP; AC-16 is `privacy_cases` (PR #88). Not yet run against Launchpad. |
-| 4.T2 | Add Phase 4 cases to the shared test file with Team 21, cross-checked. | | To do |
+| 4.T2 | Add Phase 4 cases to the shared test file with Team 21, cross-checked. | Not done in Phase 4; carried to Phase 5 (5.10). |
 | 4.T3 | Harness README: running needs `CRA_BASE_URL`, `CRA_API_TOKEN`, and `--allow-reset` (the explicit reset permission). Explain the reset-window etiquette. | Quincy's agent | Done 2026-10-18: `acceptance/README.md`, tested in a clean environment |
-| 4.T4 | First full cross-team run, both directions. Resolve disagreements in the spec, not by quietly changing tests. | Blocked on the Orbit launch (4.P2) and Team 21's Phase 4 endpoints. |
+| 4.T4 | First full cross-team run, both directions. Resolve disagreements in the spec, not by quietly changing tests. | Done 2026-11-01, both directions: our suite 222/222 against Team 21's new deployment (after 202/222 that morning against their earlier one); Team 21's suite 17/17 against Orbit. |
 | 4.T5 | Make the acceptance runner print the report's operation-status table (method and path, requirements, implemented, success and error conformance) from its own results, for the Phase 4 and 5 reports (Q3.1 asks for it each phase). Hand-filled for Phase 3 in `docs/reports/phase3.md`. | Richard | Done (PR #83). Review follow-ups left: the header says "finished" for partial runs, and setup-phase failures drop out of the table. |
 | 4.T6 | Add automated tests for `GET /tickets/{id}/audit` failure paths: 404 for an unknown ticket and 405 for other methods (`PUT`, `DELETE`). Both checked by hand on 2026-10-17 but not covered by a test. | Richard | Done (PR #82). |
 
@@ -167,7 +165,7 @@ Saturday, the report records a one-way run and says why.
 | 4.A3 | `POST /tickets/{id}/reports/{type}/submission`: `user_advisory` and unknown types → 404. Use 4.D3, store the snapshot, add one `report_submitted` audit entry, return the locked report as a `Draft`. | REQ-05, 08; AC-06, 09 | Done (PR #79). |
 | 4.A4 | `POST /tickets/{id}/close`: use 4.D4, set `closed`/`resolved`, add one `closed` audit entry. | REQ-09; AC-10 | Done (PR #81). |
 | 4.A5 | Ticket responses use submissions for `obligations.*.status`, `submitted_at`, `reference`, and `next_due_at`. `GET /tickets` supports `state` and `obligation_status` filters (bad values → 400) and the 4.D5 ordering. | REQ-05, 10; AC-06, 11 | Done (PR #84). |
-| 4.A6 | Schemathesis against `openapi.yaml`: at least 500 generated malformed requests, no 5xx, every error is problem+json, data unchanged afterward. Runs in CI against the local service and from `acceptance/` against a deployment. | REQ-12; AC-13 | To do |
+| 4.A6 | Schemathesis against `openapi.yaml`: at least 500 generated malformed requests, no 5xx, every error is problem+json, data unchanged afterward. Runs in CI against the local service and from `acceptance/` against a deployment. | REQ-12; AC-13 | Moved to Phase 5 (5.9) on 2026-11-01. Team 21's tester sent 500 malformed requests to Orbit on 2026-11-01 with no server errors (their AC-13 check). |
 | 4.A7 | Reporter confidentiality sweep: a unique reporter string appears only in `GET /tickets/{id}`. Check lists, drafts, audit entries, error bodies, and logs. | REQ-15; AC-16 | Done (PR #88): `acceptance/privacy_cases.py`, plus a local log check. |
 | 4.A8 | Keep `openapi.yaml` in sync with Team 21: record every agreed change in the PR and in the file's `info.description`; freeze `phase-4` operations when both teams agree. | Ongoing. Freeze PR `pod-k-shared` #14 open (`phase-3` only; `phase-4` stays open). |
 
@@ -176,10 +174,10 @@ Saturday, the report records a one-way run and says why.
 | # | Task | Status |
 |---|---|---|
 | 4.P1 | Review Phase 4 PRs for platform rules: clock, one transaction per request, rollback on failure, no request bodies in logs, error precedence. | Ongoing |
-| 4.P2 | Release each merged increment to Orbit before cross-team runs, and record the image SHA used. | Ongoing |
+| 4.P2 | Release each merged increment to Orbit before cross-team runs, and record the image SHA used. | Done: Orbit launched `c1133ac` (17:24 UTC) and `be9572b` (20:48 UTC) on 2026-11-01; tester 222/222 against `be9572b`. |
 | 4.P3 | Share the "Open interpretations" table in [platform.md](platform.md#known-limitations) with Team 21 so both services agree on edge cases (reset keeps the clock, 405 precedence, 413 on bodyless routes, and so on). | Done 2026-10-18: covered by the gray-areas tables in `pod-k-shared/team17/TESTING.md` |
-| 4.P4 | Automated alerting, promised in Phase 2 (Q7.3) but missing: a Cloud Monitoring alert on 5xx responses (from the request logs) for both deployments. Weigh an uptime check against cost and its effect on spin-up times. | Quincy | To do |
-| 4.P5 | Measure AC-18 early: load 1,000 tickets on Launchpad and time 200 mixed requests one at a time (p95 must be at most 1 s), with warm-up handled per `team17/TESTING.md`. Promised in the Phase 3 report (Q7.3) as an early check of the Phase 5 target; the formal run stays task 5.1. | Quincy (hosting), Richard (load script) | To do |
+| 4.P4 | Automated alerting, promised in Phase 2 (Q7.3) but missing: a Cloud Monitoring alert on 5xx responses (from the request logs) for both deployments. Weigh an uptime check against cost and its effect on spin-up times. | Quincy | Moved to Phase 5 (5.8) on 2026-11-01. |
+| 4.P5 | Measure AC-18 early: load 1,000 tickets on Launchpad and time 200 mixed requests one at a time (p95 must be at most 1 s), with warm-up handled per `team17/TESTING.md`. Promised in the Phase 3 report (Q7.3) as an early check of the Phase 5 target; the formal run stays task 5.1. | Quincy (hosting), Richard (load script) | Not done; moved to Phase 5, ahead of 5.1. |
 
 ### Console (Quincy)
 
@@ -203,7 +201,7 @@ the shared spec, so it doesn't change the contract or need Team 21's approval. D
 | 4.U1 | Sign-in with Django's built-in accounts: one account per person, Django's login page, and the signed-in username sent as `X-Actor` on every change (decided 2026-10-27; Google sign-in not needed for now). | Done 2026-11-01: `/console/` with session sign-in; pages call the API's own views in-process as the signed-in person |
 | 4.U2 | Pages on the existing endpoints: ticket list (state, report statuses, time until the next deadline), single ticket with audit trail, submit a ticket, triage. | Done 2026-11-01: #93 (list, ticket page), #95 (New/Edit Ticket, Triage) |
 | 4.U3 | Report pages: each draft with its missing fields highlighted, record a submission, close a ticket. Show "not available yet" until 4.A2 to A4 are live. | Done 2026-11-01: #94 |
-| 4.U4 | UX notes and screenshots for the Phase 4 report: who it's for, the main flows, and the design decisions. | To do |
+| 4.U4 | UX notes and screenshots for the Phase 4 report: who it's for, the main flows, and the design decisions. | Not done in Phase 4. |
 
 ## Phase 5: performance, persistence, intake, final version
 
@@ -213,13 +211,16 @@ against Team 21 before each deadline.
 
 | # | Task | Owner | Status |
 |---|---|---|---|
-| 5.1 | AC-18 performance on Orbit: load 1,000 tickets, then 200 mixed requests one at a time, p95 ≤ 1 s. Orbit scales to zero and Neon suspends when idle, so warm both with a few requests before measuring and report cold-start numbers separately. If p95 still fails, check query counts on `GET /tickets` first, then consider a temporary minimum instance for the evaluation window. | Quincy (hosting), Richard (load script) | To do |
+| 5.1 | AC-18 performance on Orbit: load 1,000 tickets, then 200 mixed requests one at a time, p95 ≤ 1 s. Orbit scales to zero and Neon suspends when idle, so warm both with a few requests before measuring and report cold-start numbers separately. If p95 still fails, check query counts on `GET /tickets` first, then consider a temporary minimum instance for the evaluation window. | Quincy (stress testing), Richard (load script) | To do |
 | 5.2 | AC-19 restart demo: create a ticket with a recorded report, force a new revision (redeploy, or `gcloud run services update` with a harmless env change), read the ticket, report, and audit log back unchanged. Screen-record it. | Quincy | To do |
 | 5.3 | Our own intake channel (team's choice, outside the shared spec). If behind, cut it to "clients call `POST /tickets` directly" (Q6.4). | Quincy | Moved up to Phase 4 as the console (4.U1 to U4) on 2026-10-26. Phase 5 finishes it. |
 | 5.4 | Full suite (AC-01 to 18) runs in CI on every change, and against Team 21 before each deadline. | Richard | To do |
-| 5.5 | Short operations guide: deploy, roll back, rotate tokens, lift the spend cap, read logs. Mostly a trim of [platform.md](platform.md). | Quincy | To do |
+| 5.5 | Short operations guide: deploy, roll back, rotate tokens, lift the spend cap, read logs. Mostly a trim of [platform.md](platform.md). | Ann | To do |
 | 5.6 | Final spec version agreed with Team 21; final cross-team results recorded. | Ann (spec), Richard (results) | To do |
 | 5.7 | Console without page reloads (Quincy, 2026-11-01): saving a sheet (New/Edit Ticket, Triage, Record Submission, Close) updates the page in place, as the prototype does, instead of reloading the window to show the toast. Lists, the ticket page, the island and dock counts refresh in place. Keep the no-JavaScript fallback, one change per request, and Back/Forward working. Good moment to merge the two sheet systems and the two toast mechanisms (`ledger.js` "Sheets (PR 2)" and `reports.js`). | Quincy | To do |
+| 5.8 | Carried over from Phase 4, platform and console: the early performance check (4.P5) before 5.1; the 5xx alert (4.P4); refusing a second deployed-tester run while one is going (two runs now hold both workers for up to 30 minutes), and returning before a long run ends so a dropped connection can't lose it; a lockout after repeated failed console sign-ins (LIM-12); make the deployed tester reset the target and release its clock after each run (LIM-13). | Quincy | To do |
+| 5.9 | Carried over from Phase 4, contract and API: contract PRs for Q7 (422 for a future fix time on submit) and Q9 (allow "unknown" for an early warning; settle the exact form first) with Team 21's approval, then the code and the Model C table; raise Q8 with Team 21 and word the answer into the spec; mirror the frozen contract into this repo once `pod-k-shared` #14 merges; our own AC-13 run with Schemathesis (4.A6). | Ann | To do |
+| 5.10 | Carried over from Phase 4, testing: Phase 4 cases in the shared test file with Team 21 (4.T2); the pod decision on whether a 422 must list every problem, then loosen or keep our test; HTTP tester cases for AC-07 and for PATCH/triage 404 and 413 and `DELETE /test/clock` (LIM-11); the two fixes to the generated operation table (PR #83). | Richard | To do |
 
 ### If we fall behind
 

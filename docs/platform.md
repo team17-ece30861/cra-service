@@ -35,7 +35,7 @@ Cloud, and its own Neon project.
 
 | Component | What it does here |
 |---|---|
-| **Cloud Run** | Runs the Django container (gunicorn, 2 workers) as `team17-dev` and `team17-prod`. 1 vCPU, 512 MiB, request timeout 30 s, concurrency 80. Min 0 and max 1 instances. CPU is allocated only while a request is in flight (`--cpu-throttling`). Cloud Run terminates HTTPS. Ingress is public (`--allow-unauthenticated`) and the app itself enforces the bearer token. Each service runs as its own `ENV-runtime@` service account. |
+| **Cloud Run** | Runs the Django container (gunicorn, 2 workers) as `team17-dev` and `team17-prod`. 1 vCPU, 512 MiB, request timeout 1800 s (raised from 600 s on 2026-11-01 so a full deployed-tester run fits), concurrency 80. Min 0 and max 1 instances. CPU is allocated only while a request is in flight (`--cpu-throttling`). Cloud Run terminates HTTPS. Ingress is public (`--allow-unauthenticated`) and the app itself enforces the bearer token. Each service runs as its own `ENV-runtime@` service account. |
 | **Neon** | Postgres, one Neon project per environment. `DATABASE_URL` is the **pooled** connection string with `sslmode=require`. The pooler runs in transaction mode, so Django opens a connection per request (`conn_max_age=0`) and disables server-side cursors (`cra_service/settings.py`). Reads skip the request transaction, and `GET /health` never opens a connection. |
 | **Secret Manager** | Holds `ENV-database-url`, `ENV-django-secret-key`, and one API token secret per client (see [API tokens](#api-tokens)). The deploy passes them to the service (the migrate job gets only the first two) with `--set-secrets ...:latest`. Cloud Run reads the value when an instance starts, so redeploy after rotating a secret. Nothing secret lives in the repo or in GitHub. |
 | **Artifact Registry** | Docker repository `team17`. Images are `cra-service-dev` and `cra-service-prod`, each tagged with the commit SHA. The cleanup policy in [`deploy/cleanup.json`](../deploy/cleanup.json) keeps the 2 most recent images per environment and deletes any others older than 7 days. |
@@ -110,7 +110,7 @@ SECRET=prod-api-token-team21    # the client's secret, from the table above
 # 1. Add a new version. printf adds no trailing newline (the service strips one anyway).
 printf '%s' "$(openssl rand -hex 32)" | gcloud secrets versions add "$SECRET" --data-file=-
 
-# 2. Note the previous version's number, to disable in step 5.
+# 2. Note the previous version's number, to destroy in step 5.
 gcloud secrets versions list "$SECRET"
 ```
 
@@ -120,15 +120,18 @@ gcloud secrets versions list "$SECRET"
    pinned revision picks up the new token only as its instances restart.
 4. **Send the client the new token** privately, never in an issue, PR, or shared
    channel: `gcloud secrets versions access latest --secret="$SECRET"`.
-5. **Confirm it works, then disable the old version:**
+5. **Confirm it works, then destroy the old version:**
 
    ```bash
    curl -fsS -H "Authorization: Bearer $NEW_TOKEN" "https://$HOST/test/clock"
-   gcloud secrets versions disable OLD_VERSION --secret="$SECRET"
+   gcloud secrets versions destroy OLD_VERSION --secret="$SECRET"
    ```
 
-   Disable only the old version. If a mapped secret has no version the service can
-   read, new instances fail to start.
+   Destroy only the old version. If a mapped secret has no version the service can
+   read, new instances fail to start. Destroy rather than disable: Secret Manager bills
+   disabled versions the same as enabled ones (only 6 active versions are free per
+   billing account), and a destroyed version can't come back. Disable first and destroy
+   a day later if you want a way back.
 
 ### Adding or removing a client
 
@@ -252,6 +255,54 @@ Before you rely on a rollback, check the following.
   `--to-latest` if traffic was pinned. For Orbit, the usual sequence is: pin traffic
   first (fast), then revert, redeploy, and unpin.
 
+## Deployed tester
+
+Our tester runs inside the service at `/tester/test/*` (the course's cross-team testing
+interface), as a pytest subprocess that sees only the target's token.
+
+- **Allowed targets:** this service itself, plus the hosts in `TESTER_ALLOWED_HOSTS`
+  (default in `cra_service/settings.py`: Team 21's old and new hosts). Hosts match
+  exactly; anything else gets 400, so the tester can't send requests or tokens elsewhere.
+- **Tokens for other teams:** the `tester-target-tokens` secret, a JSON object mapping a
+  target hostname to the bearer token that team issued us. When a team moves to a new
+  host, add a key for it (same token if theirs didn't change) in a new secret version,
+  then destroy the old version. Running services read it when an instance starts.
+- **Time limits:** a run happens inside one HTTP request. The suite gets 1,680 s
+  (`tester/runner.py`), inside Cloud Run's and gunicorn's 1,800 s request timeouts. A full
+  run took about 12 minutes on Launchpad on 2026-11-01. A run holds one of the two
+  gunicorn workers for its whole length, so two runs at once hold both. A caller whose
+  connection drops (some networks cut a connection that's been silent for minutes) can
+  still fetch the report with `GET /tester/test/report?session_id=...` once the run ends.
+
+## Console accounts
+
+The console at `/console/` signs people in with Django's built-in accounts and sessions,
+not the API token. Each person gets their own account in each environment's database
+(Launchpad and Orbit have separate databases), created with `python manage.py createsuperuser` (or
+`User.objects.create_user` in `python manage.py shell`) run with that environment's
+`DATABASE_URL`. The signed-in username becomes
+`X-Actor` in the audit log. Sessions last 12 hours, and the session and CSRF cookies are
+only sent to `/console/`.
+
+## Container images
+
+Every deploy pushes one image to Artifact Registry (`team17`, packages `cra-service-dev`
+and `cra-service-prod`), tagged with its commit. Each push is an index plus two parts (the
+platform image and a build attestation) that show up as untagged entries. The cleanup
+policy in `deploy/cleanup.json` keeps the 2 newest images per package and deletes the rest
+once they're 7 days old, so storage stays small without manual work. If you ever prune by
+hand, delete the tagged index and its two parts together, and never the parts of an image
+you keep (the running revisions use them). The reported repository size updates slowly
+and counts layers shared between images once.
+
+## End of the course
+
+When the project is over and grading no longer needs the services (ask the course staff
+first), delete the billable resources so nothing keeps charging: all Secret Manager
+secrets (deleting a secret removes its versions), the `team17` Artifact Registry repository,
+the Cloud Run services `team17-dev` and `team17-prod` and their migrate jobs, and the Neon
+project (billed separately by Neon). Then check Billing → Reports for anything left.
+
 ## Cost controls
 
 | Control | Setting |
@@ -260,7 +311,7 @@ Before you rely on a rollback, check the following.
 | **Scale to zero** | `--min-instances 0` and `--cpu-throttling`: no instance runs while idle, and CPU is billed only while a request is in flight. |
 | **$10 Cloud Run spend cap** | If Cloud Run spend reaches $10, the cap stops serving. It does not reset on its own, so someone has to lift it manually (see [Known limitations](#known-limitations)). |
 | **$1 alert budget** | A budget alert fires at $1 of spend, long before the cap. |
-| **Image cleanup** | Artifact Registry keeps 2 images per environment and deletes others after 7 days. |
+| **Image cleanup** | Artifact Registry policy (`deploy/cleanup.json`): keep the 2 newest images per environment, delete the rest once they're 7 days old. See [Container images](#container-images). |
 | **Neon stays asleep** | `GET /health` and the deploy smoke test never touch the database, so health checks don't keep Neon's compute running. |
 
 ## Known limitations
@@ -276,8 +327,9 @@ Before you rely on a rollback, check the following.
     every client. It does **not** release a fixed clock. Call `DELETE /test/clock` for
     real time.
   - Throughput is low: 2 gunicorn workers on one instance handle 2 requests at a time,
-    and the rest wait in a queue. Any request that takes longer than 30 seconds times
-    out.
+    and the rest wait in a queue. Any request that takes longer than 30 minutes times
+    out. A deployed-tester run holds one worker for its whole length (up to about 28
+    minutes), and two runs at once hold both.
 - **`/health` doesn't check the database.** A 200 means the container is up and Django
   loaded. It doesn't mean Neon is reachable or migrations are applied. The deploy smoke
   test has the same limit.
