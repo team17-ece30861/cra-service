@@ -158,6 +158,15 @@ Other IntegrityErrors are not disguised as conflicts. Failed writes/rendering
 roll back; duplicate/order 409 precede fields/time 422. PostgreSQL race CI remains
 needed. Ann's Ticket/list statuses/metadata/next_due_at (4.A5) remain separate.
 
+## Closure validation rule (4.D4)
+
+`core.domain.closure.close_ticket` requires reportable state and actual early
+warning, notification and final report identities, otherwise 409. It returns
+immutable closed/resolved changes, reads no clock/database and mutates no input.
+Current time or subsequently incomplete drafts add no closure condition. Advisory
+cannot replace a required report. Thirty tests cover all report subsets, states
+and input/result safety. Actual HTTP persistence/audit remain separate task 4.A4.
+
 ## Contract documentation gap
 
 
