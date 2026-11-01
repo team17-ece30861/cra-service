@@ -1,6 +1,6 @@
 # Handoff: Quincy (Platform and Hosting)
 
-**Last updated:** 2026-11-01 by Claude Code (Quincy's agent), after the console design review (4.U0).
+**Last updated:** 2026-11-01 by Claude Code (Quincy's agent), after building console sign-in (4.U1).
 
 ## Where things stand
 
@@ -13,8 +13,10 @@ operations. Task status is in [`docs/plan.md`](../plan.md); Team 21's answers ar
 [`docs/decisions.md`](../decisions.md) (2026-11-01).
 
 **Console:** design standards are done ([`docs/design.md`](../design.md), 4.U0), with every
-screen prototyped in `docs/design/ledger-screens.html` and approved by Quincy. No console
-pages exist yet (4.U1 to U4).
+screen prototyped in `docs/design/ledger-screens.html` and approved by Quincy. Sign-in
+(4.U1) is PR #91: `/console/` with session sign-in, and `console.api_calls.call_api` running
+the API's own views in-process as the signed-in person. The console has no accounts yet on
+Launchpad or Orbit: Quincy creates them with Django's create-user command against each database.
 
 Team 21's tester now authenticates on Orbit: first full run 2026-11-01 01:51 to 01:58 UTC
 (client `team21`).
@@ -39,8 +41,12 @@ Team 21's tester now authenticates on Orbit: first full run 2026-11-01 01:51 to 
 4. 4.A6 Schemathesis, if time allows.
 5. Phase 4 report (`docs/reports/phase4.md`), using #83's operation table from a
    Launchpad or Orbit run, and noting that the cross-team run went one way.
-6. Console pages: 4.U1 sign-in (auth, so guide it with Quincy), then 4.U2 and 4.U3, built
-   to `docs/design.md`. 4.U4 (UX notes and screenshots for the report) can use the prototype.
+6. After #91 merges: first check on Launchpad is a POST sign-in (a 403 would mean the CSRF
+   origin check and Google's front end disagree). Then 4.U2 pages, then 4.U3. Each page makes
+   at most one `call_api` change per request, with a fixed `/tickets` path. 4.U4 (UX notes
+   and screenshots) can use `docs/reports/console/` and the prototype.
+7. Console follow-ups: a sign-in lockout or rate limit; the `pod-k-shared` gray-areas table
+   noting `/console/` and `/static/` no longer return 401 (after the next Orbit launch).
 
 ## Waiting on
 

@@ -1,5 +1,6 @@
+import posixpath
 from functools import wraps
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode, urlsplit
 
 from django.conf import settings
 from django.contrib.auth import login, logout
@@ -25,11 +26,14 @@ def _home() -> str:
 
 
 def _safe_next(request, value: str) -> str:
-    """Only console pages on this host; anything else goes to Tickets."""
+    """Only console pages on this host; anything else goes to Tickets. Dot segments
+    are resolved first, so /console/../admin/ doesn't count as a console page."""
     allowed = url_has_allowed_host_and_scheme(
         value, allowed_hosts={request.get_host()}, require_https=request.is_secure()
     )
-    return value if value and allowed and value.startswith("/console/") else _home()
+    path = posixpath.normpath(unquote(urlsplit(value).path)) if value else ""
+    in_console = value.startswith("/console/") and (path + "/").startswith("/console/")
+    return value if allowed and in_console else _home()
 
 
 def signed_in_required(view):

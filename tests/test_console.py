@@ -13,6 +13,7 @@ from tests.conftest import TOKEN
 pytestmark = pytest.mark.django_db
 
 PASSWORD = "correct horse battery"
+PARTIAL = "00000000-0000-0000-0000-00000000beef"
 TICKET = {
     "source": "external_researcher",
     "title": "Authentication bypass",
@@ -83,7 +84,15 @@ def test_sign_in_returns_to_the_page_asked_for(person):
 
 
 @pytest.mark.parametrize(
-    "next_url", ["https://evil.example/", "//evil.example/", "/tickets", "/admin/"]
+    "next_url",
+    [
+        "https://evil.example/",
+        "//evil.example/",
+        "/tickets",
+        "/admin/",
+        "/console/../admin/",
+        "/console/%2e%2e/tickets",
+    ],
 )
 def test_sign_in_never_redirects_outside_the_console(person, next_url):
     response = _sign_in(Client(), next=next_url)
@@ -199,6 +208,31 @@ def test_a_failed_console_change_changes_nothing(person):
     assert result.data["errors"]
     assert not Ticket.objects.exists()
     assert not AuditEntry.objects.exists()
+
+
+def test_a_change_that_fails_after_writing_is_rolled_back(person, monkeypatch):
+    """The savepoint itself: a view that writes and then answers with an error leaves
+    nothing behind, even inside the request's own transaction."""
+    from django.http import HttpResponse
+    from django.urls import ResolverMatch
+    from django.utils import timezone  # test data only; the API's own clock isn't involved
+
+    from console import api_calls
+
+    def writes_then_fails(request):
+        Ticket.objects.create(id=PARTIAL, received_at=timezone.now(), data={})
+        return HttpResponse(status=422)
+
+    monkeypatch.setattr(api_calls, "resolve", lambda path: ResolverMatch(writes_then_fails, (), {}))
+    result = call_api(_console_request(person), "POST", "/tickets", body=TICKET)
+    assert result.status == 422
+    assert not Ticket.objects.filter(id=PARTIAL).exists()
+
+
+@pytest.mark.parametrize("path", ["/test/reset", "/tester/test/run", "/health", "/ticketsx"])
+def test_console_only_calls_ticket_operations(person, path):
+    with pytest.raises(ValueError):
+        call_api(_console_request(person), "POST", path)
 
 
 def test_console_reads_match_the_api(person):

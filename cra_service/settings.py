@@ -150,6 +150,8 @@ LOGIN_URL = "/console/sign-in"
 SESSION_COOKIE_AGE = 12 * 3600
 SESSION_COOKIE_PATH = "/console/"
 CSRF_COOKIE_PATH = "/console/"
+# Nothing reads the CSRF token from JavaScript; forms carry it in a hidden field.
+CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_HSTS_SECONDS = 0 if DEBUG else 3600
 # Cloud Run only serves HTTPS on *.run.app, so Django doesn't need to redirect.

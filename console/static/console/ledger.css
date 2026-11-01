@@ -125,6 +125,8 @@ svg.i.sm { width: 14px; height: 14px; stroke-width: 1.8; }
 .si-row-pass > * { transition: opacity 220ms ease 90ms, filter 260ms ease 90ms, translate 420ms var(--spring-smooth) 90ms; }
 .si-group[data-step="1"] .si-row-pass > * { opacity: 0; filter: blur(4px); translate: 0 -6px; transition: opacity 120ms ease, filter 120ms ease, translate 200ms ease; }
 .si-group[data-step="1"] .si-row-pass::before { opacity: 0; }
+/* Hidden rows are out of the accessibility tree too, once the fade has finished */
+.si-group[data-step="1"] .si-row-pass { visibility: hidden; transition: visibility 0s linear 200ms; }
 .si-go { position: absolute; right: 12px; top: 12px; width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--label-3); background: transparent; color: var(--label-3); display: grid; place-items: center; cursor: pointer; padding: 0;
   transform: translateY(57px);
   transition: transform var(--spring-smooth-dur) var(--spring-smooth), background 160ms ease, border-color 160ms ease, color 160ms ease; }

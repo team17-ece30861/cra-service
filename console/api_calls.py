@@ -15,6 +15,7 @@ from django.urls import resolve
 from cra_service.validation import ACTOR_HEADER
 
 _factory = RequestFactory()
+TICKETS = "/tickets"
 
 
 @dataclass(frozen=True)
@@ -28,8 +29,12 @@ class ApiResult:
 
 
 def call_api(request: HttpRequest, method: str, path: str, *, body=None, query=None) -> ApiResult:
-    """Runs one API operation as the signed-in person. A failed call changes nothing:
-    it runs in its own savepoint, rolled back when the API answers with an error."""
+    """Runs one ticket operation as the signed-in person. A failed call changes
+    nothing: it runs in its own savepoint, rolled back when the API answers with an
+    error. Only /tickets operations: the console never reaches /test/* or /tester/*.
+    Each call is its own savepoint, so a page should make at most one change per request."""
+    if not (path == TICKETS or path.startswith(TICKETS + "/")):
+        raise ValueError(f"The console only calls ticket operations, not {path!r}")
     url = path + ("?" + urlencode(query, doseq=True) if query else "")
     headers = {ACTOR_HEADER: request.user.get_username()}
     inner = _factory.generic(
