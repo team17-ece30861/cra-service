@@ -68,6 +68,9 @@ def test_deleting_a_ticket_deletes_its_recorded_reports():
     assert not ReportSubmission.objects.exists()
 
 
+# transaction=True commits the row first. Inside one transaction, Postgres refuses to
+# TRUNCATE a table with pending foreign-key checks; a real reset is its own request.
+@pytest.mark.django_db(transaction=True)
 def test_reset_clears_recorded_reports(authed):
     _record(_ticket())
 
