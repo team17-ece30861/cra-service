@@ -28,6 +28,7 @@
     [].forEach.call(form.querySelectorAll('.field'), function (f) { setErr(f, null); f.classList.remove('wanted', 'changed'); });
     [].forEach.call(form.querySelectorAll('.sh-alert'), function (a) { a.remove(); });
     var go = form.closest('.sheet-card').querySelector('[data-go]'); go.classList.remove('busy'); go.removeAttribute('aria-busy');
+    form._sent = false;
   }
   function hasErr(form) { return !!form.querySelector('.field:not(:has([data-chips])) .err:not([hidden])'); }
 
@@ -158,7 +159,8 @@
     form.addEventListener('submit', function (e) {
       [].forEach.call(form.querySelectorAll('[data-chips]'), function (b) { b._commit(); });
       update();
-      if (go.disabled) { e.preventDefault(); return; }
+      if (go.disabled || form._sent) { e.preventDefault(); return; }
+      form._sent = true; /* one change per submit: a second Enter or tap waits for the answer */
       go.classList.add('busy'); go.setAttribute('aria-busy', 'true');
     });
     update();
@@ -211,7 +213,7 @@
       o.addEventListener('pointerdown', function (e) { if (e.button === 0) o.classList.add('is-pressed'); });
       ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) { o.addEventListener(ev, function () { o.classList.remove('is-pressed'); }); });
     });
-    form.addEventListener('submit', function (e) { update(); if (go.disabled) { e.preventDefault(); return; } go.classList.add('busy'); go.setAttribute('aria-busy', 'true'); });
+    form.addEventListener('submit', function (e) { update(); if (go.disabled || form._sent) { e.preventDefault(); return; } form._sent = true; go.classList.add('busy'); go.setAttribute('aria-busy', 'true'); });
     card.addEventListener('sheet:open', update);
     card.addEventListener('sheet:closed', function () {
       [].forEach.call(form.querySelectorAll('input[name="decision"]'), function (r) { r.checked = false; });
@@ -225,6 +227,8 @@
   [].forEach.call(document.querySelectorAll('form.tr-form'), initTriage);
   /* Coming back to a page from the browser's cache: the action button is ready again */
   window.addEventListener('pageshow', function (e) {
-    if (e.persisted) [].forEach.call(document.querySelectorAll('[data-go].busy'), function (b) { b.classList.remove('busy'); b.removeAttribute('aria-busy'); });
+    if (!e.persisted) return;
+    [].forEach.call(document.querySelectorAll('[data-go].busy'), function (b) { b.classList.remove('busy'); b.removeAttribute('aria-busy'); });
+    [].forEach.call(document.querySelectorAll('form.tf-form, form.tr-form'), function (f) { f._sent = false; });
   });
 })();
