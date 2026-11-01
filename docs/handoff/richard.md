@@ -1,5 +1,30 @@
 # Handoff: Richard (Domain Logic and Testing)
 
+## Handed over 2026-11-01 by Quincy's agent (Claude Code)
+
+**Current state:** PRs #77 to #83 are merged (each with an independent agent review posted
+on the PR) and released to Orbit with the rest of Phase 4 on 2026-11-01. The tester (222
+tests) passed 222/222 against Orbit and against Team 21's new deployment; Team 21's suite
+passed 17/17 against Orbit. The notes below are from Richard's last session and predate
+the merges.
+
+**Next up (Phase 5, split agreed 2026-11-01; owners in [`docs/plan.md`](../plan.md)):**
+
+1. **5.4:** the full suite in CI on every change, and against Team 21 before the deadline.
+2. **5.10:**
+   - Phase 4 cases in the shared test file with Team 21 (4.T2).
+   - The pod decision on whether a 422 must list every problem (AC-09, see Q6.2 in the
+     Phase 4 report). Until then a 422 naming at least one problem counts as passing in
+     cross-team runs; loosen or keep our test once the pod decides.
+   - HTTP tester cases for AC-07 and for PATCH/triage 404 and 413 and `DELETE /test/clock`
+     (LIM-11).
+   - The two should-fixes on the generated operation table from PR #83's review (partial
+     runs labeled "finished"; setup-phase failures dropped from the table).
+3. **5.1:** the load script for Quincy's AC-18 run on Orbit.
+4. **5.6 (results part):** the final cross-team results.
+
+---
+
 **Last updated:** 2026-11-01 by Codex (Richard's session).
 
 ## Where things stand

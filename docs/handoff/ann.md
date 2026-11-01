@@ -1,7 +1,7 @@
 # Handoff: Ann (API and Data)
 
-**Last updated:** 2026-10-26 by Quincy's agent (Claude Code), from the Phase 4 kickoff with
-Quincy. Ann's agent: rewrite this file in your own words at the end of your first session.
+**Last updated:** 2026-11-01 by Quincy's agent (Claude Code), handing over Ann's Phase 5
+tasks. Ann's agent: rewrite this file in your own words at the end of your next session.
 
 **For Ann's agent (Codex or other):** you're working for Ann, who owns API and Data on
 Team 17. Read [`AGENTS.md`](../../AGENTS.md) and [`docs/plan.md`](../plan.md) before starting.
@@ -9,70 +9,43 @@ Restate the task to Ann before acting, and agree on behavior with Ann before wri
 
 ## Where things stand
 
-Phase 4 is due **Sunday 2026-11-01**. Phase 3 is done: the ticket API (intake, get, list,
-update, triage, audit) is live on Launchpad and Orbit and passes 55/55. None of the Phase
-4 code exists yet.
+Phase 4 is delivered and released to Orbit (2026-11-01). The API and Data pieces are done:
+the recorded-report table and submitted statuses (PR #76), statuses in ticket responses
+plus list filters and order (PR #84), and the reporter confidentiality sweep (PR #88). The
+contract freeze PR is open in `pod-k-shared` (#14) and waiting on Team 21's approval.
+Team 21 agreed to Q1 to Q6 and Q10 on 2026-11-01; Q7 and Q9 are agreed in principle but
+need contract changes; Q8 is unanswered (see [`docs/decisions.md`](../decisions.md)).
 
-**Phase 4 is split by feature** (Quincy, 2026-10-26): each person writes the rule in
-`core/domain/`, the endpoint, and the tests for their own features. Richard has drafts,
-recording submissions, and closing tickets. Ann has the pieces below. See
-[Who builds what in Phase 4](../plan.md#who-builds-what-in-phase-4) and the day-by-day
-[schedule](../plan.md#proposed-schedule). Quincy is building a web console on top of the
-API and reviews every PR.
+## In progress
 
-## Next up
+- Nothing of Ann's. `pod-k-shared` #14 (the freeze) is open; see Waiting on.
 
-1. **Mon 10-26: post the submission model's fields** in a PR description (one row per
-   ticket and report type: `submitted_at`, `reference`, the locked `content` snapshot, the
-   actor). Richard builds submission recording against it, so post it first.
-2. **4.A1 (merged Tue 10-27):** the submission model and migration. Reset clears it
-   automatically (it's in the `core` app). Quincy reviews the migration the same day.
-3. **Statuses (4.D2, response part of 4.A5; Tue to Wed):** `submitted` if `submitted_at` ≤
-   `due_at`, otherwise `submitted_late`, including the E6 boundary and a clock moved
-   backward. Ticket responses show these, plus `submitted_at`, `reference`, and
-   `next_due_at`.
-4. **List filters and order (4.D5, filter part of 4.A5; Wed to Thu):** `state` and
-   `obligation_status` filters on `GET /tickets` (bad values → 400). Order by
-   `next_due_at` (the earliest unmet deadline), nulls last, ties per Q2.
-5. **Acceptance cases for these features (Thu):** AC-06 and AC-11 in `acceptance/cases.py`.
-   **Target: everything above merged by Thu 10-29**, so Launchpad can be tested Friday.
-6. **4.A7 (Fri):** reporter confidentiality sweep (AC-16) across lists, drafts, audit
-   entries, error bodies, and logs.
-7. **3.9: contract freeze PR in `pod-k-shared`.** Bump `openapi.yaml`'s `info.version` from
-   `0.1.0-draft`, record the agreed date in `info.description`, and get one approval from
-   Team 21. Then mirror it into this repo's `openapi.yaml` and
-   `pod-k-shared/team17/tester/openapi.yaml`. Quincy's email to Team 21 tells them the PR
-   is coming.
+## Next up (Phase 5, split agreed 2026-11-01)
 
-## Alignment with Team 21 (as of 2026-10-26)
-
-- The contract is still `0.1.0-draft`; nothing is frozen and Phase 4 operations aren't
-  agreed.
-- Quincy is sending Team 21 an email on 2026-10-27 with open questions Q1 to Q10
-  (`docs/plan.md`), asking for answers by **noon Thu 10-29**. For any still open, build the
-  proposal listed in the plan and note it in the PR. Q2 (list tie-break), Q4 (whether a
-  later date change can flip a submitted report to late), and Q6 affect Ann's features
-  directly. Q4's proposal (2026-10-27): yes, recalculate, so a later date edit can flip a
-  report to `submitted_late`.
-- **Q6 changed on 2026-10-27** (Quincy and the team): a PATCH that changes nothing should
-  succeed but add **no** audit entry. Today's code (`_audit` in `core/tickets.py`) adds one
-  with an empty `changes` list, so the PATCH path needs to skip the entry when nothing
-  changed. This changes the AC-12 counts.
-- When a question is answered, log it in `docs/decisions.md`, remove it from the plan's
-  table, and update `openapi.yaml` (all three copies) if the contract changes.
+1. **5.9, contract and API:**
+   - Q7: a `pod-k-shared` PR adding a 422 to submit for a future `fix.available_at`,
+     approved by Team 21, then the code and tests here.
+   - Q9: settle the exact form of "unknown" member states (and whether affected versions
+     too) with Team 21, then the contract PR, the code, and the Model C table in the spec.
+   - Q8: raise it with Team 21 and word the answer into the spec.
+   - Once #14 merges: mirror the frozen `openapi.yaml` into this repo and
+     `pod-k-shared/team17/tester/openapi.yaml` (the three copies must match).
+   - Our own AC-13 run: Schemathesis against `openapi.yaml`, at least 500 generated
+     malformed requests, no 5xx, data unchanged.
+2. **5.5:** a short operations guide, mostly a trim of [`docs/platform.md`](../platform.md).
+3. **5.6 (spec part):** the final spec version agreed with Team 21.
 
 ## Waiting on
 
-- **Team 21:** answers to Q1 to Q10 and approval of the freeze PR.
+- **Team 21:** approval of `pod-k-shared` #14, and an answer to Q8.
 - **Ann:** accept the invite to `team17-ece30861/pod-k-shared` (`zuo30`, still pending on
-  2026-10-26). The freeze PR needs it.
+  2026-11-01). Contract PRs need it.
 
 ## Notes for the next session
 
-- Richard edits `core/tickets.py` too. Keep PRs small and merge often to limit conflicts.
-- Set up locally with Python 3.12 and `docker compose up -d` (see `README.md`). Check
-  with `pytest -q`, `ruff check . && ruff format --check .`, and
+- Contract changes go through `pod-k-shared` first (a PR Team 21 approves), then get
+  mirrored here. Changes to `openapi.yaml` here also need a human teammate's approval.
+- Set up locally with Python 3.12 and `docker compose up -d` (see `README.md`). Check with
+  `pytest -q`, `ruff check . && ruff format --check .`, and
   `python manage.py makemigrations --check --dry-run`.
-- 3.1 (reviewing the Phase 3 code Ann inherited) is lower priority than Phase 4 now.
-- Never run `acceptance/` against Orbit. Team 17 tests on Launchpad; Orbit is for Team 21
-  and the course staff.
+- Team 17 tests on Launchpad; Orbit is for Team 21 and the course staff.
