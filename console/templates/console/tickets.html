@@ -1,0 +1,18 @@
+{% extends "console/base.html" %}
+{% block title %}Tickets · Ledger{% endblock %}
+{% block body %}
+<header class="bar">
+  <span class="wordmark"><span class="mark" aria-hidden="true"></span>Ledger</span>
+  <div class="bar-end">
+    <span class="bar-user">Signed in as {{ user.get_username }}</span>
+    <form method="post" action="{% url 'console:sign-out' %}">{% csrf_token %}<button class="btn secondary sm" type="submit">Sign Out</button></form>
+  </div>
+</header>
+<main class="page">
+  <h1>Tickets</h1>
+  <div class="empty">
+    <h2>Ticket pages are on their way</h2>
+    <p>You're signed in. The ticket list, ticket pages and triage arrive in the next update.</p>
+  </div>
+</main>
+{% endblock %}

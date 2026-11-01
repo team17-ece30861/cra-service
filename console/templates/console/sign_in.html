@@ -1,0 +1,38 @@
+{% extends "console/base.html" %}
+{% load static %}
+{% block title %}Sign In · Ledger{% endblock %}
+{% block body %}
+<main class="signin draw" id="signin" aria-label="Sign in">
+  <svg class="si-mark" viewBox="{{ mark_viewbox }}" aria-hidden="true">
+    <defs>
+      <!-- The one mark shape (console/mark.py). Every treatment reads it. -->
+      <path id="mk-shape" d="{{ mark_path }}" pathLength="1"/>
+      <clipPath id="mk-clip"><use href="#mk-shape"/></clipPath>
+      <clipPath id="mk-clip-box" clipPathUnits="objectBoundingBox"><use href="#mk-shape"/></clipPath>
+      <radialGradient id="mk-fadeg" cx="50" cy="70" r="95" gradientUnits="userSpaceOnUse"><stop offset="0.45" stop-color="#fff"/><stop offset="1" stop-color="#000"/></radialGradient>
+      <mask id="mk-fade" maskUnits="userSpaceOnUse" x="-60" y="-40" width="220" height="220"><rect x="-60" y="-40" width="220" height="220" fill="url(#mk-fadeg)"/></mask>
+    </defs>
+    <g class="mk-lines" clip-path="url(#mk-clip)"></g>
+    <g class="mk-blueprint"><g class="mk-grid" mask="url(#mk-fade)"></g><use class="mk-outline" href="#mk-shape" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="0.4"/><path class="mk-ticks" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="0.35"/></g>
+  </svg>
+  <div class="si-mark si-window" aria-hidden="true"><div class="si-window-fx"></div></div>
+  {% if signed_out %}
+  <div class="si-island" role="status"><svg class="i sm"><use href="#i-lock"/></svg><span><b>Signed out.</b> Sign in again to continue.</span></div>
+  {% endif %}
+  <div class="si-wrap">
+    <h1 class="si-head">Sign in</h1>
+    <form class="si-form" id="si-form" method="post" action="{% url 'console:sign-in' %}" novalidate{% if error %} data-error="1"{% endif %}>
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="si-group{% if error %} bad{% endif %}" id="si-group" data-step="2">
+        <div class="si-row si-row-user"><input id="si-user" name="username" value="{{ username }}" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="150" placeholder=" " required aria-describedby="si-msg"{% if error %} aria-invalid="true"{% endif %}><label for="si-user">Username</label></div>
+        <div class="si-row si-row-pass"><input id="si-pass" name="password" type="password" autocomplete="current-password" placeholder=" " required aria-describedby="si-msg"{% if error %} aria-invalid="true"{% endif %}><label for="si-pass">Password</label></div>
+        <button class="si-go" id="si-go" type="submit" aria-label="Sign In"><svg class="i"><use href="#i-arrow-r"/></svg><span class="spin" aria-hidden="true"></span></button>
+      </div>
+      <p class="si-msg{% if error %} show{% endif %}" id="si-msg" role="alert">{{ error }}</p>
+    </form>
+  </div>
+  <p class="si-foot">Your administrator creates accounts.</p>
+</main>
+<script src="{% static 'console/sign-in.js' %}"></script>
+{% endblock %}
