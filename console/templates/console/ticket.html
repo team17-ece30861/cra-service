@@ -19,7 +19,7 @@
       </div>
     </div>
     <div class="row tk-actions">
-      <button class="btn secondary" type="button" data-soon="Edit Ticket">Edit Ticket</button>
+      <a class="btn secondary" href="{% url 'console:edit-ticket' t.id %}" data-sheet-href="{% url 'console:edit-ticket' t.id %}">Edit Ticket</a>
       <div class="tk-more-wrap menu-wrap">
         <button class="btn secondary icon" type="button" id="tk-more" aria-haspopup="menu" aria-expanded="false" aria-controls="tk-menu" aria-label="More actions"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>
         <div class="menu tk-menu" role="menu" id="tk-menu" hidden>
@@ -47,7 +47,7 @@
     <p class="tk-next-lbl quiet"><svg class="i sm" aria-hidden="true"><use href="#i-shield"/></svg>Not triaged yet</p>
     <p class="t-callout muted">Deadlines start once this ticket is triaged as actively exploited.</p>
   </div>
-  <button class="btn primary lg" type="button" data-soon="Triage">Triage</button>
+  <a class="btn primary lg" href="{% url 'console:triage' t.id %}" data-sheet-href="{% url 'console:triage' t.id %}">Triage</a>
 </section>
 {% endif %}
 

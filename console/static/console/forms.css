@@ -1,0 +1,101 @@
+/* New Ticket, Edit Ticket and Triage (4.U2 part 2). Form controls and the sheets' own parts, ported from
+   docs/design/ledger-screens.html ("Forms", "Sheets", "Triage options", "Reveal"). The sheet itself is in ledger.css. */
+
+/* ---------- Forms: label above, help or error below. Errors: red border, a red ring, one line under the field ---------- */
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field > label, .field > .lbl, .sh-group > .lbl { font: 500 13px/1.2 var(--font-ui); color: var(--label); }
+.field .help { font-size: 12px; color: var(--label-2); line-height: 1.4; }
+.field .err { font-size: 12px; color: var(--red); display: flex; gap: 6px; align-items: flex-start; line-height: 1.4; }
+.field .err[hidden] { display: none; }
+.field .err svg { width: 14px; height: 14px; margin-top: 1px; flex: none; }
+.input, .select, .textarea { width: 100%; height: var(--h-md); padding: 0 12px; background: var(--fill-4); color: var(--label); border: 1px solid var(--separator); border-radius: var(--r-md); font: 400 14px/1.2 var(--font-ui); transition: border-color var(--dur-hover) ease, box-shadow var(--dur-hover) ease, background var(--dur-hover) ease; appearance: none; }
+.input::placeholder, .textarea::placeholder { color: var(--label-3); }
+.input:hover, .select:hover, .textarea:hover, .chips-input:hover { border-color: var(--separator-strong); }
+.input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); background: var(--fill-3); }
+.input.invalid, .select.invalid, .textarea.invalid, .chips-input.invalid { border-color: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent); }
+.input.mono { font-family: var(--font-mono); font-size: 13px; }
+.textarea { height: auto; min-height: 92px; padding: 10px 12px; resize: vertical; line-height: 1.45; }
+.select { padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A1A1A6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 10l4-4 4 4M8 14l4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; }
+.select option { background: var(--surface-2); color: var(--label); }
+.input-group { position: relative; display: flex; align-items: center; }
+.input-group .input { padding-right: 48px; }
+.input-group .suffix { position: absolute; right: 12px; font: 500 12px/1 var(--font-ui); color: var(--label-2); pointer-events: none; }
+.chips-input { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; min-height: var(--h-md); background: var(--fill-4); border: 1px solid var(--separator); border-radius: var(--r-md); align-items: center; cursor: text; transition: border-color var(--dur-hover) ease, box-shadow var(--dur-hover) ease, background var(--dur-hover) ease; }
+.chips-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); background: var(--fill-3); }
+.chips-input.invalid:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 22%, transparent); }
+.chips-input .chip { animation: chip-in 260ms var(--spring-smooth) both; }
+.chips-input .chip.leaving { animation: chip-out 160ms ease both; }
+.chips-input .chip button { border: 0; background: none; color: var(--label-2); padding: 0; display: grid; place-items: center; cursor: pointer; width: 16px; height: 16px; border-radius: 50%; }
+.chips-input .chip button:hover { color: var(--label); background: var(--fill-2); }
+.chips-input .chip button svg { width: 12px; height: 12px; }
+.chips-input input { border: 0; background: none; color: var(--label); font: 400 14px var(--font-ui); flex: 1; min-width: 80px; padding: 0 4px; height: 22px; }
+.chips-input input:focus { outline: none; }
+.chips-input input::placeholder { color: var(--label-3); }
+@keyframes chip-in { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
+@keyframes chip-out { to { opacity: 0; transform: scale(0.85); } }
+
+/* ---------- Ticket form: what changed, what a report needs ---------- */
+.sh-alert { flex: none; }
+.sh-more { border-top: 1px solid var(--hairline); padding-top: var(--s4); }
+.sh-more summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; font: 600 14px/1.3 var(--font-ui); color: var(--label); padding: 4px 0; border-radius: var(--r-sm); }
+.sh-more summary::-webkit-details-marker { display: none; }
+.sh-more summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
+.sh-more summary svg { color: var(--label-2); transition: transform 300ms var(--spring-smooth); }
+.sh-more[open] summary svg { transform: rotate(90deg); }
+.sh-more summary span { margin-left: auto; font: 400 12px/1.3 var(--font-ui); color: var(--label-3); }
+.sh-more-body { display: flex; flex-direction: column; gap: var(--s4); padding-top: var(--s4); }
+.sh-more[open] .sh-more-body.opening > * { animation: more-in 320ms var(--spring-smooth) both; animation-delay: calc(40ms + var(--i, 0) * 22ms); }
+@keyframes more-in { from { opacity: 0; transform: translateY(-6px); } }
+.field.changed > label::after, .field.changed > .lbl::after { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: 2px; animation: chip-in 260ms var(--spring-smooth) both; }
+.field.wanted { padding: var(--s3); margin: calc(-1 * var(--s3)); border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yellow) 55%, transparent); background: color-mix(in srgb, var(--yellow) 6%, transparent); }
+
+/* ---------- Triage options ---------- */
+.opts { display: flex; flex-direction: column; gap: var(--s2); }
+.opt { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s3) var(--s4); border-radius: var(--r-lg); background: var(--surface-2); box-shadow: inset 0 0 0 1px transparent; cursor: pointer; transition: box-shadow 160ms ease, background 160ms ease, transform var(--dur-press) ease-out; }
+.opt:hover { background: var(--surface-3); }
+.opt input { appearance: none; margin: 2px 0 0; width: 18px; height: 18px; flex: none; border-radius: 50%; border: 1.5px solid var(--label-3); display: grid; place-items: center; transition: border-color 160ms ease, background 160ms ease; }
+.opt input:focus { outline: none; }
+.opt input:checked { border-color: var(--accent); background: var(--accent); }
+.opt input:checked::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-ink); }
+.opt:has(input:checked) { box-shadow: inset 0 0 0 1.5px var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface-2)); }
+.opt:has(input:focus-visible) { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
+.opt-t { font: 600 14px/1.35 var(--font-ui); }
+.opt-t small { display: block; margin-top: 3px; font: 400 13px/1.45 var(--font-ui); color: var(--label-2); }
+.opt.is-pressed { background: var(--surface-3); transform: scale(0.99); }
+.field.invalid-group .opts .opt { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 55%, transparent); }
+.tr-aware-row { gap: var(--s2); flex-wrap: nowrap; }
+.tr-aware-row .input-group { flex: 1; }
+
+/* Reveal: a section grows open on the same spring, contents fade in after */
+.reveal-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--spring-smooth-dur) var(--spring-smooth), margin-top var(--spring-smooth-dur) var(--spring-smooth); margin-top: calc(-1 * var(--s5)); }
+.reveal-wrap > div { overflow: hidden; min-height: 0; }
+.reveal-wrap > div > * { opacity: 0; transition: opacity 120ms ease; }
+.reveal-wrap.open { grid-template-rows: 1fr; margin-top: 0; }
+.reveal-wrap.open > div > * { opacity: 1; transition: opacity 220ms ease 120ms; }
+.reveal-wrap:not(.open) > div { visibility: hidden; transition: visibility 0s linear var(--spring-smooth-dur); }
+.reveal-wrap.open > div { visibility: visible; }
+/* Room for the 3 px focus ring inside the clipped reveal */
+.reveal-wrap > div > .sh-group { padding: 4px; margin: -4px; }
+.deadline-preview { display: grid; gap: 6px; padding: var(--s3) var(--s4); border-radius: var(--r-lg); background: var(--surface-2); font-size: 13px; }
+.deadline-preview:empty { display: none; }
+.deadline-preview .pv-h { display: flex; justify-content: space-between; gap: var(--s3); font: 500 11px/1.3 var(--font-ui); letter-spacing: 0.02em; text-transform: uppercase; color: var(--label-3); }
+.deadline-preview .pv-h span:last-child { text-transform: none; letter-spacing: 0; }
+.deadline-preview .pv { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) auto; align-items: baseline; gap: var(--s3); }
+.deadline-preview .mono { color: var(--label-2); }
+.deadline-preview .rl { font-variant-numeric: tabular-nums; color: var(--label-2); }
+.deadline-preview .rl.soon { color: var(--yellow); }
+.deadline-preview .rl.late { color: var(--red); }
+@media (max-width: 640px) { .deadline-preview .pv { grid-template-columns: minmax(0, 1fr) auto; } .deadline-preview .mono { grid-column: 1 / -1; grid-row: 2; } }
+
+/* Submitting: the action button says so while the page answers */
+.btn[data-go].busy { opacity: 0.7; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-wrap { transition: none; }
+  .opt.is-pressed { transform: none; }
+  .sh-more summary svg { transition: none; }
+}
+@media (forced-colors: active) {
+  .input.invalid, .select.invalid, .textarea.invalid, .chips-input.invalid { border: 2px solid Mark; }
+  .opt:has(input:checked) { outline: 2px solid Highlight; }
+}

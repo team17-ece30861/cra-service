@@ -154,7 +154,8 @@ def test_ticket_page_shows_reporter_and_audit_entries(api, console):
 def test_audit_entries_never_carry_the_reporter(api, console):
     ticket_id = _create(api)
     html = console.get(f"/console/tickets/{ticket_id}").content.decode()
-    trail = html[html.index("Audit trail") :]
+    start = html.index("Audit trail")
+    trail = html[start : html.index("</ol>", start)]  # the Edit Ticket sheet follows it
     assert REPORTER_NAME not in trail
 
 

@@ -1,0 +1,9 @@
+{# Sheets (PR 2): tasks that slide up over the page they belong to. Closed until opened in place (ledger.js) or by URL (console/views_forms.py). #}
+{% if tf_new or tf_edit or tr %}
+<div class="sheet-layer{% if open_sheet %} open{% if sheet_enter %} entering{% endif %}{% endif %}" id="form-sheets"{% if not open_sheet %} hidden{% endif %}>
+  <div class="sheet-scrim" data-close></div>
+  {% if tf_new %}{% include "console/sheets/ticket_form.html" with tf=tf_new %}{% endif %}
+  {% if tf_edit %}{% include "console/sheets/ticket_form.html" with tf=tf_edit %}{% endif %}
+  {% if tr %}{% include "console/sheets/triage.html" %}{% endif %}
+</div>
+{% endif %}

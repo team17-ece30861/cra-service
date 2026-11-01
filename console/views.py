@@ -12,7 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods, require_POST
 
-from console import present, present_reports
+from console import forms, present, present_reports
 from console.api_calls import call_api
 from console.flash import take as take_flash
 from console.mark import MARK_PATH, MARK_VIEWBOX
@@ -149,6 +149,13 @@ def _everything(request, now):
 @signed_in_required
 @require_http_methods(["GET", "HEAD"])
 def tickets(request):
+    template, context, status = tickets_page(request)
+    return render(request, template, context, status=status)
+
+
+def tickets_page(request) -> tuple[str, dict, int]:
+    """The Tickets list's template, context and status. The New Ticket sheet
+    (console/views_forms.py) opens over it."""
     now = clock.now()
     everything, all_rows, all_groups, upcoming = _everything(request, now)
     view = request.GET.get("view", "")
@@ -192,8 +199,9 @@ def tickets(request):
         "any_tickets": bool(all_rows),
         "hero_on_page": bool(upcoming) and not (view or query),
         "dock_current": view or ("" if query else "all"),
+        **forms.new_sheet(),
     }
-    return render(request, "console/tickets.html", context, status=status)
+    return "console/tickets.html", context, status
 
 
 def ticket_context(request, ticket_id: str, now):
@@ -230,6 +238,7 @@ def ticket_context(request, ticket_id: str, now):
         "cards": cards,
         "audit": present.audit(trail.data),
         "close": present_reports.close_view(data),
+        **forms.ticket_sheets(data),
     }, None
 
 

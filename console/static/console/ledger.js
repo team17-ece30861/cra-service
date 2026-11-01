@@ -312,9 +312,9 @@
     setTimeout(function () { cmdIn.value = ''; fieldEl.classList.remove('has-value'); filterCmd(); }, 200);
   }
   function runCmd(li) {
-    var href = li.getAttribute('data-href'), soon = li.getAttribute('data-soon');
+    var href = li.getAttribute('data-href'), soon = li.getAttribute('data-soon'), sheet = li.getAttribute('data-sheet-href');
     closeCmd();
-    setTimeout(function () { if (href) location.href = href; else if (soon) notYet(soon); }, 140);
+    setTimeout(function () { if (sheet) openSheetHref(sheet, null); else if (href) location.href = href; else if (soon) notYet(soon); }, 140);
   }
   cmdIn.addEventListener('focus', openCmd);
   slotBtn.addEventListener('click', openCmd);
@@ -532,4 +532,98 @@
   /* Arriving on a page: the screen rises in, as the prototype's route change does */
   var screen = document.querySelector('.screen');
   if (screen && !reduceMotion.matches) screen.classList.add('entering');
+
+  /* ================= Sheets (PR 2) =================
+     A sheet slides up over the page it belongs to, with the scrim behind and the page inert; it leaves the same way.
+     Each sheet has its own URL (data-url): opened from the page, it's pushed onto history, so Back closes it and the URL
+     can be shared; opened by that URL, the server renders the page with the sheet already open. Esc, Cancel and the scrim
+     close it; focus stays inside while it's open and goes back to what opened it. Pages put these sheets in #form-sheets
+     (console/templates/console/_sheets.html); a page without the sheet follows the link instead. Sheets announce
+     'sheet:open' (detail.focus: a field to bring into view) for their own scripts (forms.js). */
+  var layer = $('form-sheets'), sheetCard = null, sheetOpener = null, sheetPushed = false;
+  var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+  function sheetFor(href) {
+    if (!layer || !href) return null;
+    var path = new URL(href, location.href).pathname;
+    return layer.querySelector('.sheet-card[data-url="' + path.replace(/"/g, '') + '"]');
+  }
+  function focusables(card) { return [].filter.call(card.querySelectorAll(FOCUSABLE), function (el) { return el.offsetParent !== null || el === document.activeElement; }); }
+  function sheetFocus(card, focus) {
+    var wanted = focus && [].filter.call(card.querySelectorAll('[data-field]'), function (f) { return f.getAttribute('data-field') === focus; })[0];
+    var target = (wanted && wanted.querySelector('input:not([type="hidden"]), textarea, select'))
+      || card.querySelector('.invalid, [aria-invalid="true"]')
+      || card.querySelector('.sh-body input[type="radio"]:checked, .sh-body .input, .sh-body .textarea, .sh-body .select, .sh-body input[type="radio"], .dlg-actions .btn');
+    if (target && target.classList.contains('chips-input')) target = target.querySelector('input:not([type="hidden"])');
+    if (target) target.focus({ preventScroll: true });
+    var into = wanted || (target && target.closest('.field'));
+    if (into && (wanted || card.querySelector('.invalid'))) into.scrollIntoView({ block: 'center', behavior: reduceMotion.matches ? 'auto' : 'smooth' });
+  }
+  function openSheet(card, opts) {
+    opts = opts || {};
+    if (app.classList.contains('cmd-open')) closeCmd();
+    [].forEach.call(layer.querySelectorAll('.sheet-card'), function (c) { c.hidden = c !== card; });
+    sheetCard = card; sheetOpener = opts.opener || document.activeElement;
+    clearTimeout(layer.t); layer.hidden = false; layer.classList.remove('entering');
+    layer.offsetWidth; // start the transition from the closed state
+    layer.classList.add('open'); app.inert = true;
+    card.dispatchEvent(new CustomEvent('sheet:open', { bubbles: true, detail: { focus: opts.focus || '' } }));
+    setTimeout(function () { if (sheetCard === card) sheetFocus(card, opts.focus); }, 80);
+  }
+  function closeSheet(fromHistory) {
+    if (!sheetCard) return;
+    var card = sheetCard; sheetCard = null;
+    layer.classList.remove('open', 'entering'); app.inert = false;
+    layer.t = setTimeout(function () { if (!sheetCard) { layer.hidden = true; card.dispatchEvent(new CustomEvent('sheet:closed', { bubbles: true })); } }, 260);
+    var back = sheetOpener && document.contains(sheetOpener) && sheetOpener !== document.body ? sheetOpener
+      : document.querySelector('#app [data-sheet-href^="' + card.getAttribute('data-url') + '"]');
+    if (back && back.focus) back.focus({ preventScroll: true });
+    if (fromHistory) return;
+    if (sheetPushed) { sheetPushed = false; history.back(); }
+    else history.replaceState(null, '', card.getAttribute('data-base') || location.pathname);
+  }
+  function openSheetHref(href, opener) {
+    var card = sheetFor(href);
+    if (!card) { location.href = href; return; }
+    var url = new URL(href, location.href);
+    if (!sheetCard) { history.pushState({ sheet: url.pathname + url.search }, '', url.pathname + url.search); sheetPushed = true; }
+    openSheet(card, { opener: opener, focus: url.searchParams.get('focus') || '' });
+  }
+  if (layer) {
+    /* Opened by its URL: the server rendered it open (rising in once, by CSS, on a fresh visit) */
+    var already = layer.classList.contains('open') && layer.querySelector('.sheet-card:not([hidden])');
+    if (already) {
+      sheetCard = already; app.inert = true;
+      history.replaceState({ sheet: location.pathname + location.search }, '', location.href);
+      setTimeout(function () { sheetFocus(already, new URLSearchParams(location.search).get('focus')); }, layer.classList.contains('entering') ? 120 : 0);
+    }
+    layer.addEventListener('click', function (e) { if (e.target.closest('[data-close]')) { e.preventDefault(); closeSheet(); } });
+    document.addEventListener('keydown', function (e) {
+      if (!sheetCard) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSheet(); return; }
+      if (e.key !== 'Tab') return;
+      var f = focusables(sheetCard); if (!f.length) return;
+      var first = f[0], last = f[f.length - 1], at = document.activeElement;
+      if (!sheetCard.contains(at)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
+    }, true);
+    window.addEventListener('popstate', function (e) {
+      var want = e.state && e.state.sheet, card = want && sheetFor(want);
+      if (card && card !== sheetCard) { sheetPushed = true; openSheet(card, { focus: new URL(want, location.href).searchParams.get('focus') || '' }); }
+      else if (!card && sheetCard) { sheetPushed = false; closeSheet(true); }
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-sheet-href]');
+    if (!t || t.closest('#cmd-list') || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+    e.preventDefault(); openSheetHref(t.getAttribute('data-sheet-href'), t);
+  });
+
+  /* A toast the server left for this page (a change that just went through) */
+  var flash = document.querySelector('[data-flash]');
+  if (flash) {
+    try { var f = JSON.parse(flash.getAttribute('data-flash')); setTimeout(function () { toast(f.title, f.body, true); }, reduceMotion.matches ? 0 : 280); } catch (err) { /* not a toast */ }
+  }
+
+  window.Ledger = { toast: toast, nowMs: nowMs, relStr: relStr, reduceMotion: reduceMotion, openSheetHref: openSheetHref, closeSheet: closeSheet };
 })();
