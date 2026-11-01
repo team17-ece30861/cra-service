@@ -1,5 +1,7 @@
 # Team 17 system documentation (as delivered in Phase 3)
 
+*Kept as the Phase 3 record. The current system documentation is [system.md](system.md).*
+
 What Team 17's CRA reporting service does at the end of Phase 3: its models, interfaces,
 functionality, validation, and known limitations. Last updated 2026-10-17 (US Eastern;
 times in the tables below are UTC).

@@ -133,7 +133,7 @@ If those drift from Orbit, Team 21 files our intended behavior as bugs.
 - **Published copies.** `pod-k-shared` is public and holds copies of two things from this
   repo, for the course staff and Team 21: `team17/tester/` (a copy of `acceptance/`,
   plus `openapi.yaml` and `tests/fixtures/phase3_model_d.json`) and `team17/SYSTEM.md` (a copy
-  of `docs/phase3.md`, with links rewritten so they don't point into this repo). Refresh both
+  of `docs/system.md`, with links rewritten so they don't point into this repo). Refresh both
   in the same pod PR whenever they change. Check that the tester copy still runs from its own
   folder, and never copy anything that names a secret.
 - **The shared contract and spec** are also published at the top of `pod-k-shared`
