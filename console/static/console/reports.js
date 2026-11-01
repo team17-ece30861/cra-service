@@ -15,11 +15,14 @@
   var T0 = Date.parse(app.getAttribute('data-now')), P0 = performance.now();
   if (isNaN(T0)) T0 = 0;
   function nowMs() { return T0 + (performance.now() - P0); }
+  /* A fixed test clock (PUT /test/clock) doesn't move in the service, so "now" doesn't move here either */
+  function formNow(form) { var f = form && form.hasAttribute('data-clock-fixed') && Date.parse(form.getAttribute('data-now')); return f || nowMs(); }
 
   /* Times as people type them: "YYYY-MM-DD HH:MM[:SS]" in UTC */
   function parseUtc(s) { var m = /^\s*(\d{4})-(\d{2})-(\d{2})[ Tt](\d{2}):(\d{2})(?::(\d{2}))?\s*(?:UTC|Z)?\s*$/i.exec(s || ''); if (!m) return NaN; return Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)); }
   function fmtUtc(ms) { return new Date(Math.floor(ms / 1000) * 1000).toISOString().replace('T', ' ').slice(0, 19); }
   function span(ms) { var m = Math.round(Math.abs(ms) / 60000), d = Math.floor(m / 1440), h = Math.floor(m / 60) % 24; return d ? d + ' d ' + h + ' h' : Math.floor(m / 60) + ' h ' + (m % 60) + ' m'; }
+  var BADGE = { submitted: ['submitted', 'Submitted'], late: ['late', 'Submitted late'] };
   function urlKey(u) { var a = new URL(u, location.href); return a.pathname + a.search; }
 
   /* ---------- Toasts (the shell's #toast) ---------- */
@@ -127,7 +130,7 @@
   /* A sheet opened again in place starts fresh, as in the prototype: the time is now, nothing typed, no old errors */
   function resetCard(card) {
     var at = card.querySelector('#rs-at'); if (!at) return;
-    at.value = fmtUtc(nowMs()); card.querySelector('#rs-ref').value = '';
+    at.value = fmtUtc(formNow(at.form)); card.querySelector('#rs-ref').value = '';
     [].forEach.call(card.querySelectorAll('.alert.error'), function (a) { a.remove(); });
     [].forEach.call(card.querySelectorAll('.field'), function (f) { setErr(f, ''); });
     at.dispatchEvent(new Event('input'));
@@ -236,7 +239,6 @@
   }
 
   /* ---------- Record Submission ---------- */
-  var BADGE = { submitted: ['submitted', 'Submitted'], late: ['late', 'Submitted late'] };
   function setupRecord(card) {
     var form = card.querySelector('#rs-form'); if (!form || form._ready) return; form._ready = true;
     var at = form.querySelector('#rs-at'), out = form.querySelector('#rs-outcome'), go = card.querySelector('#rs-go');
@@ -247,7 +249,7 @@
     function update() {
       if (blocked) return;
       var t = parseUtc(at.value), key = '', html = '';
-      if (!isNaN(t) && !isNaN(due) && t <= nowMs() && (isNaN(aware) || t >= aware)) {
+      if (!isNaN(t) && !isNaN(due) && t <= formNow(form) && (isNaN(aware) || t >= aware)) {
         var onTime = t <= due, b = BADGE[onTime ? 'submitted' : 'late'];
         key = onTime ? 'on' : 'late';
         html = '<span class="badge ' + b[0] + '"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>' + b[1] + '</span><span>' +
@@ -261,7 +263,7 @@
     at.addEventListener('blur', function () { if (at.value.trim() && isNaN(parseUtc(at.value))) setErr(at.closest('.field'), 'Use the format 2026-10-29 14:00:00.'); });
     var ref = form.querySelector('#rs-ref');
     ref.addEventListener('input', function () { setErr(ref.closest('.field'), ''); });
-    form.querySelector('#rs-now').addEventListener('click', function () { at.value = fmtUtc(nowMs()); setErr(at.closest('.field'), ''); update(); });
+    form.querySelector('#rs-now').addEventListener('click', function () { at.value = fmtUtc(formNow(form)); setErr(at.closest('.field'), ''); update(); });
     form.addEventListener('submit', function (e) { e.preventDefault(); if (!go.disabled) post(form, go, card); });
     update();
   }
