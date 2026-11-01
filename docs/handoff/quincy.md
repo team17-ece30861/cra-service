@@ -1,6 +1,6 @@
 # Handoff: Quincy (Platform and Hosting)
 
-**Last updated:** 2026-11-01 by Claude Code (Quincy's agent), after building console sign-in (4.U1).
+**Last updated:** 2026-11-01 by Claude Code (Quincy's agent), after the console pages (4.U1 to U3) merged.
 
 ## Where things stand
 
@@ -13,10 +13,12 @@ operations. Task status is in [`docs/plan.md`](../plan.md); Team 21's answers ar
 [`docs/decisions.md`](../decisions.md) (2026-11-01).
 
 **Console:** design standards are done ([`docs/design.md`](../design.md), 4.U0), with every
-screen prototyped in `docs/design/ledger-screens.html` and approved by Quincy. Sign-in
-(4.U1) is PR #91: `/console/` with session sign-in, and `console.api_calls.call_api` running
-the API's own views in-process as the signed-in person. The console has no accounts yet on
-Launchpad or Orbit: Quincy creates them with Django's create-user command against each database.
+screen prototyped in `docs/design/ledger-screens.html` and approved by Quincy. All console
+pages are on `main` and Launchpad: sign-in (#91), ticket list and ticket page (#93), report
+pages (#94), New/Edit Ticket and Triage (#95), each with an agent review posted on the PR.
+Pages call the API's own views in-process (`console.api_calls.call_api`) as the signed-in
+person. Quincy has a Launchpad account; Orbit has none yet (Django's create-user command
+against `prod-database-url`).
 
 Team 21's tester now authenticates on Orbit: first full run 2026-11-01 01:51 to 01:58 UTC
 (client `team21`).
@@ -41,12 +43,16 @@ Team 21's tester now authenticates on Orbit: first full run 2026-11-01 01:51 to 
 4. 4.A6 Schemathesis, if time allows.
 5. Phase 4 report (`docs/reports/phase4.md`), using #83's operation table from a
    Launchpad or Orbit run, and noting that the cross-team run went one way.
-6. After #91 merges: first check on Launchpad is a POST sign-in (a 403 would mean the CSRF
-   origin check and Google's front end disagree). Then 4.U2 pages, then 4.U3. Each page makes
-   at most one `call_api` change per request, with a fixed `/tickets` path. 4.U4 (UX notes
-   and screenshots) can use `docs/reports/console/` and the prototype.
-7. Console follow-ups: a sign-in lockout or rate limit; the `pod-k-shared` gray-areas table
-   noting `/console/` and `/static/` no longer return 401 (after the next Orbit launch).
+6. 4.U4: UX notes and screenshots for the Phase 4 report (`docs/reports/console/` has them).
+7. Console follow-ups, from the PR reviews:
+   - a sign-in lockout or rate limit;
+   - `pod-k-shared` gray-areas table: `/console/` and `/static/` no longer return 401
+     (after the next Orbit launch);
+   - unify the two sheet systems and the two toast mechanisms (`ledger.js` "Sheets (PR 2)" vs
+     `reports.js`);
+   - the Edit 409 sheet should show the other person's value, and sign `{id, values}`;
+   - countdowns use `performance.now()` and can drift after a laptop sleeps (#94's Record
+     sheet already takes the larger of the two time differences).
 
 ## Waiting on
 
