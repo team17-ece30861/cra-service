@@ -1,8 +1,10 @@
 flowchart TB
-  client["<b>Client</b><br/>Team 21, course staff, our tests"]
+  client["<b>API client</b><br/>Team 21, course staff, our tests"]
+  person["<b>Person in a browser</b><br/>manufacturer's security team"]
   subgraph run["Google Cloud Run service (Django + Django Ninja on gunicorn)"]
     direction TB
-    mw["<b>Platform middleware</b><br/>bearer token (401), 64 KB limit (413),<br/>one transaction per write, rolled back on error"]
+    mw["<b>Platform middleware</b><br/>bearer token (401) for the API, 64 KB limit (413),<br/>one transaction per write (not for /tester), rolled back on error"]
+    console["<b>Console</b> (/console/)<br/>Django sign-in session, no bearer token;<br/>calls ticket routes in-process,<br/>signed-in username as X-Actor"]
     subgraph api["Django Ninja API"]
       direction LR
       health["<b>GET /health</b><br/>public"]
@@ -14,21 +16,32 @@ flowchart TB
     clock["<b>Service clock</b><br/>real or fixed test time"]
     runner["<b>Tester subprocess</b><br/>our acceptance suite, run against a<br/>target with only that target's token"]
   end
-  db[("<b>Neon Postgres</b><br/>Ticket, AuditEntry, ReportSubmission,<br/>FixedClock, SystemSession, TesterSession")]
+  db[("<b>Neon Postgres</b><br/>Ticket, AuditEntry, ReportSubmission,<br/>FixedClock, SystemSession, TesterSession,<br/>Django user and session tables")]
   target["<b>Target system</b><br/>a podmate's service, or this one"]
   client -->|"HTTPS request"| mw
+  person -->|"HTTPS, signed in"| mw
   mw -->|"no token needed"| health
   mw -->|"token checked"| tickets
   mw -->|"token checked"| controls
   mw -->|"token checked"| testerapi
-  tickets -->|"inputs + current time"| domain
-  domain -->|"result or 400/409/422"| tickets
+  mw -->|"session checked by the pages"| console
+  console -->|"ticket operations"| tickets
+  console -->|"sessions"| db
+  tickets <-->|"inputs + time;<br/>result or 400/409/422"| domain
   tickets -->|"current time"| clock
   controls -->|"fix or release time"| clock
   tickets -->|"read, lock, write"| db
-  controls -->|"clear tickets, reports, audit entries"| db
+  controls -->|"clear tickets, reports, audit entries;<br/>test sessions"| db
   clock -->|"fixed time"| db
   testerapi -->|"start a run"| runner
   testerapi -->|"session and report"| db
+  testerapi -->|"/test/setup, /test/report"| target
   runner -->|"HTTPS requests"| target
   mw -.->|"JSON or problem+json response"| client
+  subgraph legend["Legend"]
+    direction LR
+    l1["Boxes are components that exist in the delivered system; the cylinder is the database.<br/>Solid arrows are calls or data flow; the dotted arrow is the API response<br/>(the console answers the browser with HTML pages)."]
+  end
+  target ~~~ legend
+  classDef note fill:#ffffff,stroke:#999,color:#333
+  class l1 note

@@ -1,6 +1,6 @@
 flowchart TB
   start((" ")) -->|"submit ticket<br/>(receipt time = now)"| received
-  received(["<b>received</b><br/>can update: ticket details"])
+  received(["<b>received</b><br/>can update: ticket details, fix time"])
   received -->|"triage: actively exploited<br/>+ awareness time + reason"| reportable
   received -->|"triage: not actively exploited<br/>or invalid + reason"| closedNA
   reportable(["<b>reportable</b><br/>can update: details, awareness time, fix time<br/>can read: all four report drafts<br/>can record: early warning, then notification,<br/>then final report (each once, in that order)"])
@@ -8,7 +8,7 @@ flowchart TB
   reportable -->|"close, once all three<br/>reports are recorded"| closedR(["<b>closed</b><br/>resolution: resolved<br/>read only; recorded reports stay readable"])
   subgraph legend["Legend"]
     direction LR
-    l1["Every state and transition is delivered (Phase 4).<br/>A request not allowed in the current state returns 409 and changes nothing."]
+    l1["Every state and transition is delivered (Phase 4).<br/>A request not allowed in the current state returns 409 and changes nothing.<br/>Recording a report returns 422 if its required fields are missing<br/>or submitted_at isn't between the awareness time and now."]
   end
   closedR ~~~ legend
   classDef state fill:#eef3fb,stroke:#3b5b8c,color:#111
