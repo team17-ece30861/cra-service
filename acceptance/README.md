@@ -14,7 +14,14 @@ point. The suite now collects 87 cases. Local stored-row fixtures cover locked
 reads but do not establish submission POST behavior. Q3/Q4 use documented plan
 proposals. No Phase 4 deployment run is claimed.
 
+**Submission increment (4.A3):** `submission_cases.py` adds 63 portable actual-POST
+cases, shared with `tests/test_submission_api.py`. Coverage includes snapshots,
+one audit, failures, schema/time/order/duplicates, auth/size precedence and reset.
+Local persistence/fault tests supplement them; a genuine race requires PostgreSQL.
+This is not closure or Ann's full Ticket/list status integration.
+
 ## Warning: it resets the target
+
 
 
 Every test starts with `POST /test/reset`, which deletes **all** tickets on the target
@@ -47,7 +54,7 @@ Run it from the repository root.
 
 ## Results
 
-This increment collects 87 cases (55 original plus 32 draft-read cases). On
+This increment collects 150 cases (55 original, 32 drafts, 63 submissions). On
 localhost the plain-HTTP probe is skipped. These are collection/expected counts,
 not a new deployed result; earlier Phase 3 validation covered only the original 55.
 
@@ -71,3 +78,5 @@ curl -X DELETE "$CRA_BASE_URL/test/clock" -H "Authorization: Bearer $CRA_API_TOK
 | `test_phase3.py` | HTTP entry point, including the plain-HTTP (AC-15) probe |
 | `draft_cases.py` | Live-draft cases shared by local Django and HTTP runs |
 | `test_drafts.py` | HTTP entry point for draft-read checks |
+| `submission_cases.py` | Actual recording cases shared by Django and HTTP |
+| `test_submissions.py` | HTTP recording entry point |
