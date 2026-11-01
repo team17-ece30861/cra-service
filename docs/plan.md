@@ -59,7 +59,7 @@ same spec. We test their deployment and they test ours.
 | Phase 3 report | Was due 2026-10-18. Answers in [reports/phase3.md](reports/phase3.md) |
 | Phase 3 pod items carried into Phase 4 | Team 21's tester now runs against Orbit (3.8; first full run 2026-11-01 01:51 UTC). Team 21 checked the shared test file by email (3.10; PR #8 awaits their GitHub approval). Freeze PR `pod-k-shared` #14 awaits their approval (3.9). |
 | Phase 4 reporting workflow | Not started. No Phase 4 code on `main` as of 2026-10-26 |
-| Console (4.U1 to U4) | Not started. Moved up from Phase 5 (task 5.3) on 2026-10-26 |
+| Console (4.U0 to U4) | Design standards done 2026-11-01 (4.U0, [design.md](design.md)); every screen prototyped and approved by Quincy. Pages (4.U1 to U4) not started |
 | **Phase 4 due date** | **Sunday 2026-11-01** (time of day to confirm) |
 | Phase 4 report questions | Not received yet (2026-10-26) |
 | Phase 5 due date | Not announced yet |
@@ -199,7 +199,7 @@ the shared spec, so it doesn't change the contract or need Team 21's approval. D
 
 | # | Task | Status |
 |---|---|---|
-| 4.U0 | Design standards: a short `docs/design.md` (type, colors, spacing, components such as the ticket table, status badge, forms, and buttons, page layout, accessibility, copy voice), referenced from `CLAUDE.md` so every agent building UI follows it. | To do (Wed 10-28) |
+| 4.U0 | Design standards: a short `docs/design.md` (type, colors, spacing, components such as the ticket table, status badge, forms, and buttons, page layout, accessibility, copy voice), referenced from `CLAUDE.md` so every agent building UI follows it. | Done 2026-11-01: [design.md](design.md), with the reference prototype in `docs/design/` |
 | 4.U1 | Sign-in with Django's built-in accounts: one account per person, Django's login page, and the signed-in username sent as `X-Actor` on every change (decided 2026-10-27; Google sign-in not needed for now). | To do (Wed 10-28) |
 | 4.U2 | Pages on the existing endpoints: ticket list (state, report statuses, time until the next deadline), single ticket with audit trail, submit a ticket, triage. | To do |
 | 4.U3 | Report pages: each draft with its missing fields highlighted, record a submission, close a ticket. Show "not available yet" until 4.A2 to A4 are live. | Blocked on 4.A2 to A4 |

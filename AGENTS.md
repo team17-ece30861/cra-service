@@ -15,6 +15,8 @@ Read these before starting any task:
 4. [`docs/handoff/`](docs/handoff/): one file per teammate (`quincy.md`, `ann.md`,
    `richard.md`). Read all three, so you know what the others are in the middle of and
    what they're waiting on.
+5. For console (UI) work: [`docs/design.md`](docs/design.md), the design standards, and its
+   reference prototype. UI changes ship with screenshots at 1280 px and 390 px.
 
 ## Before building anything
 

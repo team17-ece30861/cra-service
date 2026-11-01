@@ -1,6 +1,6 @@
 # Handoff: Quincy (Platform and Hosting)
 
-**Last updated:** 2026-11-01 by Claude Code (Quincy's agent), after merging the Phase 4 API.
+**Last updated:** 2026-11-01 by Claude Code (Quincy's agent), after the console design review (4.U0).
 
 ## Where things stand
 
@@ -11,6 +11,10 @@ list filters and order, the Q6 no-change rule, and the AC-16 privacy sweep (PRs 
 **Orbit still runs Phase 3** (`262fedf`), so Team 21's tester gets 404 on the Phase 4
 operations. Task status is in [`docs/plan.md`](../plan.md); Team 21's answers are in
 [`docs/decisions.md`](../decisions.md) (2026-11-01).
+
+**Console:** design standards are done ([`docs/design.md`](../design.md), 4.U0), with every
+screen prototyped in `docs/design/ledger-screens.html` and approved by Quincy. No console
+pages exist yet (4.U1 to U4).
 
 Team 21's tester now authenticates on Orbit: first full run 2026-11-01 01:51 to 01:58 UTC
 (client `team21`).
@@ -35,6 +39,8 @@ Team 21's tester now authenticates on Orbit: first full run 2026-11-01 01:51 to 
 4. 4.A6 Schemathesis, if time allows.
 5. Phase 4 report (`docs/reports/phase4.md`), using #83's operation table from a
    Launchpad or Orbit run, and noting that the cross-team run went one way.
+6. Console pages: 4.U1 sign-in (auth, so guide it with Quincy), then 4.U2 and 4.U3, built
+   to `docs/design.md`. 4.U4 (UX notes and screenshots for the report) can use the prototype.
 
 ## Waiting on
 

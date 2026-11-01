@@ -17,6 +17,11 @@ person who assigned it. Write "None" if there are none. -->
 
 Not tested for real (mocked, skipped, or not run):
 
+## Screenshots
+
+<!-- UI changes only (see docs/design.md): each state you changed, at 1280 px and 390 px,
+plus one pass with reduced motion. Write "n/a" if this changes no UI. -->
+
 ## Risks and follow-ups
 
 <!-- Anything a reviewer should look at closely, open questions, and work left for later. -->

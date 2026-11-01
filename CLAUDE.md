@@ -3,6 +3,7 @@
 Django 5.2 + Django Ninja on Cloud Run, Postgres on Neon.
 The contract is `openapi.yaml`. Match it exactly; Ninja's /docs page is not the source of truth.
 Read `docs/plan.md` (owners, status, tasks) and `docs/spec.md` (requirements, models, ACs) before starting a task.
+For console (UI) work, also read `docs/design.md`.
 The team's agent workflow (shared with Codex) is imported below:
 @AGENTS.md
 
@@ -26,3 +27,4 @@ The team's agent workflow (shared with Codex) is imported below:
 - Never log request bodies.
 - Don't edit .github/workflows/deploy.yml or orbit.yml unless the task says to.
 - Work on a branch and open a PR. Never push to main.
+- Console pages follow `docs/design.md`. Every UI change is checked in a real browser at 1280 px and 390 px, and its PR includes the screenshots.
