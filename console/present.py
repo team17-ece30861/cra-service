@@ -229,11 +229,11 @@ def shell(tickets: list[dict], now: datetime) -> dict:
                     "soon": "Triage",
                 }
             )
+    commands.append({"icon": "i-plus", "text": "New Ticket", "hint": "", "soon": "New Ticket"})
     for t in tickets:
         commands.append(
             {"icon": "i-doc", "text": f"Open · {t['title']}", "hint": t["id"][:8], "href": t["id"]}
         )
-    commands.append({"icon": "i-plus", "text": "New Ticket", "hint": "", "soon": "New Ticket"})
     return {
         "island": upcoming[0] if upcoming else None,
         "island_more": upcoming[1:4],
@@ -323,15 +323,12 @@ def audit(entries: list[dict]) -> list[dict]:
         elif e["action"] == "report_submitted":
             node = "sub"
             report = next(
-                (
-                    f.split(".")[1]
-                    for f in changes
-                    if f.startswith("reports.") and f.count(".") >= 2
-                ),
+                (f.split(".")[1] for f in changes if f.startswith("reports.")),
                 None,
             )
             title = REPORT_LABEL.get(report, "Report") + " submitted"
-            ref = (changes.get(f"reports.{report}.reference") or {}).get("new")
+            whole = (changes.get(f"reports.{report}") or {}).get("new")
+            ref = whole.get("reference") if isinstance(whole, dict) else None
             if ref:
                 diff.append({"text": f"Reference {ref}"})
         elif e["action"] == "updated":

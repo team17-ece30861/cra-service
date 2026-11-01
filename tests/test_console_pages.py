@@ -221,3 +221,26 @@ def test_countdown_text_matches_the_prototype():
     assert present.hms(19 * 3600 + 12 * 60) == "19:12:00"
     assert present.initials("m.okafor") == "MO"
     assert present.utc("2026-10-30T09:12:00Z") == "2026-10-30 09:12:00 UTC"
+
+
+def test_audit_names_the_submitted_report_and_its_reference(api, console):
+    ticket_id = _create(api)
+    patch = api.patch(
+        f"/tickets/{ticket_id}",
+        {"product": {"affected_versions": ["4.1.0"]}, "member_states": ["DE"]},
+        content_type="application/json",
+        headers={ACTOR_HEADER: "m.okafor"},
+    )
+    assert patch.status_code == 200
+    _triage(api, ticket_id)
+    submitted = api.post(
+        f"/tickets/{ticket_id}/reports/early_warning/submission",
+        {"reference": "CSIRT-DE-2026-1044"},
+        content_type="application/json",
+        headers={ACTOR_HEADER: "j.berg"},
+    )
+    assert submitted.status_code == 200, submitted.content
+    html = console.get(f"/console/tickets/{ticket_id}").content.decode()
+    assert "Early warning submitted</b> by j.berg" in html
+    assert "Reference CSIRT-DE-2026-1044" in html
+    assert "affected_versions" in html  # the update's change is listed
