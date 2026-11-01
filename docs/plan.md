@@ -163,7 +163,7 @@ Saturday, the report records a one-way run and says why.
 | # | Task | Covers | Status |
 |---|---|---|---|
 | 4.A1 | Submission model and migration: one row per ticket and report type with `submitted_at`, `reference`, the locked `content` snapshot, and the actor. Reset must clear it (anything in the `core` app is cleared automatically). | REQ-08, 18 | Done (PR #76): `ReportSubmission`, migration `0004`. |
-| 4.A2 | `GET /tickets/{id}/reports/{type}`: unknown type → 404. Before submission, build the draft live (4.D1). After submission, return the locked snapshot. | REQ-07, 08, 15; AC-08, 09 | To do (4.D1 done) |
+| 4.A2 | `GET /tickets/{id}/reports/{type}`: unknown type → 404. Before submission, build the draft live (4.D1). After submission, return the locked snapshot. | REQ-07, 08, 15; AC-08, 09 | Prepared draft PR on codex/phase4-draft-reads: live/stored/resolved reads on merged PR75/76 foundation. Local 310-test focused run passed; PostgreSQL CI and posted review pending. Q3/Q4 proposals documented; no deployed validation |
 | 4.A3 | `POST /tickets/{id}/reports/{type}/submission`: `user_advisory` and unknown types → 404. Use 4.D3, store the snapshot, add one `report_submitted` audit entry, return the locked report as a `Draft`. | REQ-05, 08; AC-06, 09 | Blocked on 4.D3 |
 | 4.A4 | `POST /tickets/{id}/close`: use 4.D4, set `closed`/`resolved`, add one `closed` audit entry. | REQ-09; AC-10 | Blocked on 4.D4 |
 | 4.A5 | Ticket responses use submissions for `obligations.*.status`, `submitted_at`, `reference`, and `next_due_at`. `GET /tickets` supports `state` and `obligation_status` filters (bad values → 400) and the 4.D5 ordering. | REQ-05, 10; AC-06, 11 | Blocked on 4.D2, 4.D5 |

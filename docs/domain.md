@@ -106,12 +106,31 @@ lists from Model C, independently of the code. It checks each required field, in
 completion (including one fill order checked against all four drafts), cleared sections, optional fields, exclusion of reporter/unlisted
 data, UTC normalization, and independence from mutable inputs.
 
-This completes the pure generator portion (4.D1), not the entire AC-08 HTTP
-criterion. The read endpoint (4.A2) must still enforce resource/state checks,
-add status/deadline/submission metadata, and return locked content after a
-submission. Recorded-report storage is Ann's 4.A1; its interface is not yet
-published. This change adds no migration, route, or submission persistence and
-does not mark API or deployed acceptance as passing.
+The pure generator (4.D1) is merged in PR #75. Ann's recorded-report foundation
+and status helper are merged through Quincy's reconciliation in PR #76. This
+4.A2 increment preserves their model, helper, migration and original tests.
+
+## Draft read endpoint (4.A2)
+
+`GET /tickets/{id}/reports/{type}` returns the existing Draft envelope. Unknown
+types/tickets return 404. Under Q3's documented proposal, never-reportable tickets
+return 409 and resolved tickets remain readable. Before recording, Model C builds
+live content/missing fields; a stored submission instead supplies locked content,
+time/reference and empty missing fields. Metadata uses current deadlines under Q4.
+Both proposals remain open pod questions, not new contract agreements.
+
+Advisory is always live, with null status/deadline/submission/reference. Auth is
+required but X-Actor is not. Reads add no writes/audit and exclude reporter data.
+The route uses main's stricter submitted helper only for actual recorded rows;
+missing early/notification deadlines remain integration errors.
+
+Portable cases cover Model C, incremental completeness, read-only behavior, time
+boundaries, auth, unknown paths and state conflicts. Local stored fixtures test
+locked reads, current-deadline recalculation and resolved tickets; they are not
+evidence of working submission POST, audits, closure or concurrency. Supplemental
+upgrade/reset/model/helper tests exercise the merged foundation without changing it.
+Local focused validation: 310 passed on SQLite; PostgreSQL/deployed validation
+and posted independent PR approval remain pending. Ann's 4.A5 remains separate.
 
 ## Contract documentation gap
 
