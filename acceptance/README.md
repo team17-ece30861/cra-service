@@ -115,12 +115,13 @@ Refresh `pod-k-shared/team17/tester/` through the normal approval/release proces
 The integrated audit PUT/DELETE checks use raw transport because those methods
 are not operations in the contract. They prove immutability in their tests, but
 do not masquerade as GET audit 405 observations in this table. Its 405 status
-therefore remains explicitly untested here. A passing list response likewise
-does not establish Ann's pending filtering/status work.
+therefore remains explicitly untested here. Statuses and list filters are covered by
+`listing_cases.py` (PR #84).
 
 ## Results
 
-This increment collects 188 cases (59 Phase 3/audit, 32 drafts, 63 submissions, 34 closure). On
+The suite collects 222 cases (59 Phase 3/audit, 32 drafts, 63 submissions, 34 closure, 22
+statuses and listing, 11 no-change updates, 1 confidentiality sweep). On
 localhost the plain-HTTP probe is skipped. These are collection/expected counts,
 not a new deployed result; earlier Phase 3 validation covered only the original 55.
 
@@ -149,3 +150,9 @@ curl -X DELETE "$CRA_BASE_URL/test/clock" -H "Authorization: Bearer $CRA_API_TOK
 | `test_submissions.py` | HTTP recording entry point |
 | `closure_cases.py` | Portable closure and append-only lifecycle cases |
 | `test_closures.py` | HTTP closure/lifecycle entry point |
+| `listing_cases.py` | AC-06 statuses through E6 and AC-11 list filters and order |
+| `test_listing.py` | HTTP entry point for statuses and listing |
+| `update_cases.py` | Q6: a PATCH that changes nothing adds no audit entry |
+| `test_updates.py` | HTTP entry point for the Q6 cases |
+| `privacy_cases.py` | AC-16: the reporter appears only in `GET /tickets/{id}` |
+| `test_privacy.py` | HTTP entry point for the confidentiality sweep |
