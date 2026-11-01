@@ -12,7 +12,11 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods, require_POST
 
+from console import present
+from console.api_calls import call_api
 from console.mark import MARK_PATH, MARK_VIEWBOX
+from core import clock
+from core.models import FixedClock
 
 # Remembers that this browser was signed in, so a person whose session ended sees
 # "Signed out" instead of a bare sign-in page. It holds no identity.
@@ -96,7 +100,133 @@ def sign_out(request):
     return response
 
 
+# The dock's views of the list. Overdue and To Triage are the API's own filters; Due in 24 h
+# and Closed are presentation (a due window, and the closed tickets the Home list leaves out).
+VIEWS = {
+    "overdue": ("Overdue", {"obligation_status": "overdue"}),
+    "triage": ("To triage", {"state": "received"}),
+    "due": ("Due in 24 h", {}),
+    "closed": ("Closed", {"state": "closed"}),
+}
+
+
+# One line for a failed read, in the console's voice (docs/design.md, "Copy voice").
+LOAD_FAILED = "Tickets couldn't be loaded. Reload the page to try again."
+
+
+def _failed_status(result) -> int:
+    """A page whose read failed answers with the API's error status (5xx as it was)."""
+    return result.status if result.status >= 400 else 500
+
+
+def _shell(request, route: str, rows: list[dict], groups: list[dict], upcoming: list[dict], now):
+    """What every signed-in page shows around its content (the island, dock and command
+    field), from the unfiltered list. The page's "now" is the service clock's, never the
+    browser's: the page ticks forward from it."""
+    username = request.user.get_username()
+    return {
+        "route": route,
+        "now_iso": present.iso(now),
+        "now_utc": present.utc(present.iso(now)),
+        "clock_fixed": FixedClock.objects.exists(),
+        "username": username,
+        "initials": present.initials(username),
+        **present.shell(rows, groups, upcoming),
+    }
+
+
+def _everything(request, now):
+    """The unfiltered list, its rows, groups and deadlines: built once per request."""
+    result = call_api(request, "GET", "/tickets")
+    rows = present.rows(result.data if result.ok else [], now)
+    groups = present.group_rows(rows)
+    return result, rows, groups, present.deadlines(rows)
+
+
 @never_cache
 @signed_in_required
+@require_http_methods(["GET", "HEAD"])
 def tickets(request):
-    return render(request, "console/tickets.html")
+    now = clock.now()
+    everything, all_rows, all_groups, upcoming = _everything(request, now)
+    view = request.GET.get("view", "")
+    if view not in VIEWS:
+        view = ""
+    query = {k: request.GET[k] for k in ("state", "obligation_status") if request.GET.get(k)}
+    title = ""
+    if view:
+        title, query = VIEWS[view][0], {**VIEWS[view][1], **query}
+    elif query:
+        labels = [present.STATE_LABEL.get(query.get("state", ""), "")]
+        labels.append(present.STATUS.get(query.get("obligation_status", ""), ("", "", ""))[2])
+        title = " · ".join(label for label in labels if label) or "Filtered"
+    groups, problem, failed, status = all_groups, None, None, 200
+    if not everything.ok:
+        failed, status = LOAD_FAILED, _failed_status(everything)
+    elif query:
+        result = call_api(request, "GET", "/tickets", query=query)
+        if result.status == 400:
+            problem = (result.data or {}).get("detail") or "That filter isn't valid."
+            status = 400
+        elif not result.ok:
+            failed, status = LOAD_FAILED, _failed_status(result)
+        groups = present.group_rows(present.rows(result.data if result.ok else [], now))
+    closed = next((g for g in groups if g["key"] == "closed"), None)
+    if view == "due":
+        groups = [g for g in groups if g["key"] == "today"]
+    elif not query:
+        groups = [g for g in groups if g["key"] != "closed"]
+    context = {
+        **_shell(request, "tickets", all_rows, all_groups, upcoming, now),
+        "view": view,
+        "view_title": title,
+        "filtered": bool(view or query),
+        "problem": problem,
+        "failed": failed,
+        "groups": [] if failed else groups,
+        "listed_count": sum(len(g["rows"]) for g in groups),
+        "closed_count": len(closed["rows"]) if closed and not query else 0,
+        "hero": upcoming[0] if upcoming else None,
+        "any_tickets": bool(all_rows),
+        "hero_on_page": bool(upcoming) and not (view or query),
+        "dock_current": view or ("" if query else "all"),
+    }
+    return render(request, "console/tickets.html", context, status=status)
+
+
+@never_cache
+@signed_in_required
+@require_http_methods(["GET", "HEAD"])
+def ticket(request, ticket_id: str):
+    now = clock.now()
+    _, rows, groups, upcoming = _everything(request, now)
+    shell = _shell(request, "ticket", rows, groups, upcoming, now)
+    found = call_api(request, "GET", f"/tickets/{ticket_id}")
+    if found.status == 404:
+        return render(request, "console/not_found.html", shell, status=404)
+    trail = call_api(request, "GET", f"/tickets/{ticket_id}/audit") if found.ok else found
+    if not found.ok or not trail.ok:
+        failed = found if not found.ok else trail
+        context = {
+            **shell,
+            "message": "This ticket couldn't be loaded. Reload the page to try again.",
+        }
+        return render(request, "console/error.html", context, status=_failed_status(failed))
+    data = found.data
+    cards = present.report_cards(data, now)
+    report = present.next_report(data)
+    context = {
+        **shell,
+        "t": data,
+        "state_label": present.STATE_LABEL.get(data["state"], data["state"]),
+        "resolution_label": present.RESOLUTION_LABEL.get(data.get("resolution") or ""),
+        "source_label": present.SOURCE_LABEL.get(data.get("source"), data.get("source")),
+        "tlp_class": present.TLP_CLASS.get(data.get("sensitivity") or "", ""),
+        "received": present.utc(data.get("received_at")),
+        "aware": present.utc(data.get("aware_at")),
+        "fix_at": present.utc((data.get("fix") or {}).get("available_at")),
+        "next": next((c for c in cards if c["type"] == report), None),
+        "cards": cards,
+        "audit": present.audit(trail.data),
+    }
+    return render(request, "console/ticket.html", context)

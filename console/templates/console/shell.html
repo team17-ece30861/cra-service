@@ -1,0 +1,59 @@
+{% extends "console/base.html" %}
+{% load static %}
+{% block body %}
+{% include "console/_icons.html" %}
+{# The app shell (docs/design/ledger-screens.html): the deadline island, one scrolling screen, and the dock with the command field. #}
+<div class="app route-{{ route }}" id="app" data-now="{{ now_iso }}">
+  {% if island %}
+  <div class="island{% if hero_on_page %} away{% endif %}" id="island"{% if island_more %} role="button" tabindex="0" aria-expanded="false" aria-label="Next deadline: {{ island.report_label|lower }}, {{ island.title }}. Show the next {{ island_more|length }}."{% else %} role="group" aria-label="Next deadline"{% endif %}>
+    <div class="bar"><span class="pulse" aria-hidden="true"></span><span class="what"><b>{{ island.report_label }}</b> · {{ island.title }}</span><span class="cd{% if island.rel_cls == 'late' %} late{% endif %}" data-hms="{{ island.due }}">{{ island.count }}</span></div>
+    {% if island_more %}
+    <div class="more"><div><ul>
+      {% for r in island_more %}
+      <li><span class="track"><span class="{{ r.report_cls }}">{{ r.report_short }}</span></span><a class="n" href="{% url 'console:ticket' r.id %}" tabindex="-1">{{ r.title }}</a><span class="rl {{ r.rel_cls }}" data-rl="{{ r.due }}">{{ r.rel }}</span></li>
+      {% endfor %}
+    </ul></div></div>
+    {% endif %}
+  </div>
+  {% endif %}
+  <div class="app-scroll" id="app-scroll">
+    <main class="screen" aria-label="{% block screen_label %}Tickets{% endblock %}">
+      <div class="screen-in">
+        {% include "console/_top.html" %}
+        {% block screen %}{% endblock %}
+      </div>
+    </main>
+  </div>
+  <div class="cmd-scrim" id="cmd-scrim"></div>
+  <div class="dock" id="dock">
+    <nav class="dock-nav" aria-label="Ledger">
+      <a href="{% url 'console:tickets' %}" aria-label="Tickets"{% if dock_current == 'all' %} aria-current="page"{% endif %}><svg class="i lg" aria-hidden="true"><use href="#i-tray"/></svg><span class="tip" aria-hidden="true">Tickets</span>{% if dock_current == 'all' %}<span class="dot"></span>{% endif %}</a>
+      <a href="{% url 'console:tickets' %}?view=due" aria-label="Due in 24 h{% if counts.today %}, {{ counts.today }}{% endif %}"{% if dock_current == 'due' %} aria-current="page"{% endif %}><svg class="i lg" aria-hidden="true"><use href="#i-clock"/></svg><span class="tip" aria-hidden="true">Due in 24 h</span>{% if counts.today %}<span class="ct y" aria-hidden="true">{{ counts.today }}</span>{% endif %}{% if dock_current == 'due' %}<span class="dot"></span>{% endif %}</a>
+      <a href="{% url 'console:tickets' %}?view=overdue" aria-label="Overdue{% if counts.overdue %}, {{ counts.overdue }}{% endif %}"{% if dock_current == 'overdue' %} aria-current="page"{% endif %}><svg class="i lg" aria-hidden="true"><use href="#i-alert"/></svg><span class="tip" aria-hidden="true">Overdue</span>{% if counts.overdue %}<span class="ct" aria-hidden="true">{{ counts.overdue }}</span>{% endif %}{% if dock_current == 'overdue' %}<span class="dot"></span>{% endif %}</a>
+      <a href="{% url 'console:tickets' %}?view=triage" aria-label="To Triage{% if counts.triage %}, {{ counts.triage }}{% endif %}"{% if dock_current == 'triage' %} aria-current="page"{% endif %}><svg class="i lg" aria-hidden="true"><use href="#i-shield"/></svg><span class="tip" aria-hidden="true">To Triage</span>{% if counts.triage %}<span class="ct y" aria-hidden="true">{{ counts.triage }}</span>{% endif %}{% if dock_current == 'triage' %}<span class="dot"></span>{% endif %}</a>
+      <span class="sep" aria-hidden="true"></span>
+      <button type="button" class="dock-field" id="dock-find" tabindex="-1" aria-hidden="true"><svg class="i"><use href="#i-search"/></svg><span>Find or do…</span><kbd>/</kbd></button>
+      <span class="sep" aria-hidden="true"></span>
+      <button type="button" class="new" data-soon="New Ticket" aria-label="New Ticket"><svg class="i lg" aria-hidden="true"><use href="#i-plus"/></svg><span class="tip" aria-hidden="true">New Ticket</span></button>
+    </nav>
+    <div class="cmd" role="dialog" aria-label="Find or do" id="cmd">
+      <ul role="listbox" id="cmd-list" aria-label="Suggestions">
+        {% for c in commands %}
+        <li role="option" aria-selected="false"{% if c.href %} data-href="{% url 'console:ticket' c.href %}"{% else %} data-soon="{{ c.soon }}"{% endif %}><svg class="i" aria-hidden="true"><use href="#{{ c.icon }}"/></svg><span class="x">{{ c.text }}</span><span class="s">{{ c.hint }}</span></li>
+        {% endfor %}
+        <li class="none" hidden>{% if commands_capped %}No match in the {{ command_tickets }} most urgent tickets. Find others in the list.{% else %}No match.{% endif %}</li>
+      </ul>
+      <div class="field-slot" aria-hidden="true"></div>
+    </div>
+    <label class="dock-input" id="dock-input">
+      <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+      <input id="cmd-input" autocomplete="off" spellcheck="false" role="combobox" aria-controls="cmd-list" aria-expanded="false" aria-label="Find a ticket or do something. Shortcut: slash">
+      <span class="ph ph-closed" aria-hidden="true">Find or do…</span>
+      <span class="ph ph-open" aria-hidden="true">Type a ticket, product, or action</span>
+      <kbd class="k-closed" aria-hidden="true">/</kbd><kbd class="k-open" aria-hidden="true">esc</kbd>
+    </label>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"><svg class="i" aria-hidden="true"><use href="#i-hourglass"/></svg><div><div class="t-headline toast-title" id="toast-title">Not available yet</div><div class="t-footnote muted" id="toast-body"></div></div></div>
+<script src="{% static 'console/ledger.js' %}"></script>
+{% endblock %}

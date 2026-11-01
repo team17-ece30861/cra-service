@@ -1,0 +1,117 @@
+{% extends "console/shell.html" %}
+{% block title %}{{ t.title }} · Ledger{% endblock %}
+{% block screen_label %}Ticket{% endblock %}
+{% block screen %}
+<div class="tk">
+<a class="tk-back" href="{% url 'console:tickets' %}"><svg class="i" aria-hidden="true"><use href="#i-chev-l"/></svg>Tickets</a>
+<header class="tk-head">
+  <div class="tk-headrow">
+    <div class="stack tk-headmain">
+      <div class="idline"><span id="tk-id">{{ t.id }}</span><button type="button" id="tk-copy" data-copy="{{ t.id }}"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button></div>
+      <h1 class="t-title1">{{ t.title }}</h1>
+      <div class="row tk-meta">
+        <span class="state {{ t.state }}"><span class="dot" aria-hidden="true"></span>{{ state_label }}</span>
+        {% if t.severity %}<span class="sev {{ t.severity }}"><span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>{{ t.severity|capfirst }}</span>{% endif %}
+        {% if t.aware_at %}<span class="chip">Actively exploited</span>{% elif resolution_label %}<span class="chip">{{ resolution_label }}</span>{% endif %}
+        {% if t.sensitivity %}<span class="tlp {{ tlp_class }}">TLP:{{ t.sensitivity }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="row tk-actions">
+      <button class="btn secondary" type="button" data-soon="Edit Ticket">Edit Ticket</button>
+      <div class="tk-more-wrap menu-wrap">
+        <button class="btn secondary icon" type="button" id="tk-more" aria-haspopup="menu" aria-expanded="false" aria-controls="tk-menu" aria-label="More actions"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>
+        <div class="menu tk-menu" role="menu" id="tk-menu" hidden>
+          <button role="menuitem" type="button" data-copy="{{ t.id }}"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy Ticket ID</button>
+          <hr>
+          <button role="menuitem" type="button" class="danger" data-soon="Close Ticket"><svg class="i" aria-hidden="true"><use href="#i-archive"/></svg>Close Ticket…</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+{% if next %}
+<section class="tk-next" aria-label="Next deadline">
+  <div class="stack tk-next-main">
+    <p class="tk-next-lbl"><svg class="i sm" aria-hidden="true"><use href="#i-clock"/></svg>Next deadline · {{ next.label|lower }}</p>
+    <p class="tk-count"><span class="{% if next.late %}late{% endif %}" data-hms2="{{ next.due_at }}">{{ next.count }}</span><small data-left>{% if next.late %}overdue{% else %}left{% endif %}</small></p>
+    <p class="t-footnote muted mono">Due {{ next.due }}{% if next.window %} · {{ next.window.total }} after {{ next.window.since }}{% endif %}</p>
+  </div>
+  <button class="btn primary lg" type="button" data-soon="Record {{ next.title }}">Record {{ next.title }}</button>
+</section>
+{% elif t.state == "received" %}
+<section class="tk-next" aria-label="Triage">
+  <div class="stack tk-next-main">
+    <p class="tk-next-lbl quiet"><svg class="i sm" aria-hidden="true"><use href="#i-shield"/></svg>Not triaged yet</p>
+    <p class="t-callout muted">Deadlines start once this ticket is triaged as actively exploited.</p>
+  </div>
+  <button class="btn primary lg" type="button" data-soon="Triage">Triage</button>
+</section>
+{% endif %}
+
+<h2 class="tk-h2">Reports</h2>
+<div class="reports">
+  {% for c in cards %}
+  <div class="report{% if c.active %} active{% endif %}">
+    <div class="r-name">{{ c.label }}<span class="badge {{ c.cls }}"><svg class="i" aria-hidden="true"><use href="#{{ c.icon }}"/></svg>{{ c.badge }}</span></div>
+    {% if c.submitted or c.due or c.status == "awaiting_fix" %}
+    <span class="r-time">{% if c.submitted %}Submitted {{ c.submitted }}<br>{% endif %}{% if c.due %}Due {{ c.due }}{% else %}No deadline until a fix is available{% endif %}{% if c.reference %}<br>Reference {{ c.reference }}{% endif %}</span>
+    {% endif %}
+    {% if c.window %}
+    <div class="meter{% if c.window.soon %} soon{% endif %}" role="img" aria-label="{{ c.window.left }} left of {{ c.window.total }}" data-meter data-start="{{ c.window.start }}" data-due="{{ c.window.due }}" data-total="{{ c.window.total }}"><i style="width:{{ c.window.pct }}%"></i></div>
+    <span class="t-footnote muted num" data-meter-text>{% if c.window.late %}{{ c.window.left }}{% else %}{{ c.window.left }} left of {{ c.window.total }}{% endif %}</span>
+    {% endif %}
+    <button class="btn tinted sm r-act" type="button" data-soon="{{ c.view }}">{{ c.view }}</button>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="tk-cols">
+  <div class="stack tk-col">
+    <section class="tile tk-sec">
+      <h2 class="tk-h3">What happened</h2>
+      <dl class="tk-text">
+        <dt>Description</dt><dd>{{ t.description|linebreaksbr }}</dd>
+        <dt>Vulnerability</dt>{% if t.vulnerability.description or t.vulnerability.cve_id %}<dd>{% if t.vulnerability.cve_id %}<span class="mono">{{ t.vulnerability.cve_id }}</span>{% if t.vulnerability.description %}. {% endif %}{% endif %}{{ t.vulnerability.description|linebreaksbr }}</dd>{% else %}<dd class="faint">Not provided</dd>{% endif %}
+        <dt>Exploit</dt>{% if t.exploit.description %}<dd>{{ t.exploit.description|linebreaksbr }}</dd>{% else %}<dd class="faint">Not provided</dd>{% endif %}
+        <dt>Impact</dt>{% if t.impact %}<dd>{{ t.impact|linebreaksbr }}</dd>{% else %}<dd class="faint">Not provided</dd>{% endif %}
+        <dt>Mitigations</dt>{% if t.mitigations.taken or t.mitigations.for_users %}<dd>{% if t.mitigations.taken %}{{ t.mitigations.taken|linebreaksbr }}{% endif %}{% if t.mitigations.taken and t.mitigations.for_users %}<br>{% endif %}{% if t.mitigations.for_users %}<span class="muted">For users:</span> {{ t.mitigations.for_users|linebreaksbr }}{% endif %}</dd>{% else %}<dd class="faint">Not provided</dd>{% endif %}
+        <dt>Malicious actor</dt>{% if t.malicious_actor %}<dd>{{ t.malicious_actor|linebreaksbr }}</dd>{% else %}<dd class="faint">Unknown</dd>{% endif %}
+      </dl>
+    </section>
+    <section class="tile tk-sec">
+      <h2 class="tk-h3">Details</h2>
+      <dl class="kv">
+        <dt>Product</dt><dd>{{ t.product.manufacturer }} · {{ t.product.name }}</dd>
+        <dt>Affected versions</dt>{% if t.product.affected_versions %}<dd class="mono">{{ t.product.affected_versions|join:", " }}</dd>{% else %}<dd class="faint">Not provided</dd>{% endif %}
+        <dt>Member states</dt>{% if t.member_states %}<dd><span class="row chips">{% for m in t.member_states %}<span class="chip">{{ m }}</span>{% endfor %}</span></dd>{% else %}<dd class="faint">None</dd>{% endif %}
+        <dt>Source</dt><dd>{{ source_label }}</dd>
+        <dt>Received</dt><dd class="mono">{{ received }}</dd>
+        <dt>Aware since</dt>{% if aware %}<dd class="mono">{{ aware }}</dd>{% else %}<dd class="faint">Not triaged as actively exploited</dd>{% endif %}
+        <dt>Fix</dt>{% if t.fix %}<dd>{% if fix_at %}<span class="mono">Available {{ fix_at }}</span>{% else %}<span class="faint">Not available yet</span>{% endif %}{% if t.fix.description %}<br>{{ t.fix.description|linebreaksbr }}{% endif %}{% if t.fix.fixed_versions %}<br><span class="mono">{{ t.fix.fixed_versions|join:", " }}</span>{% endif %}</dd>{% else %}<dd class="faint">Not available yet</dd>{% endif %}
+      </dl>
+    </section>
+  </div>
+  <div class="stack tk-col">
+    <div class="private">
+      <div class="p-head"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Reporter<span>Shown only here</span></div>
+      {% if t.reporter.name or t.reporter.contact %}
+      <dl class="kv"><dt>Name</dt>{% if t.reporter.name %}<dd>{{ t.reporter.name }}</dd>{% else %}<dd class="faint">Not given</dd>{% endif %}<dt>Contact</dt>{% if t.reporter.contact %}<dd class="mono">{{ t.reporter.contact }}</dd>{% else %}<dd class="faint">Not given</dd>{% endif %}</dl>
+      {% else %}
+      <p class="t-footnote faint">No reporter details.</p>
+      {% endif %}
+    </div>
+    <section class="tile" aria-labelledby="audit-h">
+      <h2 class="tk-h3 audit-h" id="audit-h">Audit trail</h2>
+      <ol class="timeline">
+        {% for e in audit %}
+        <li><span class="node {{ e.node }}" aria-hidden="true"><svg class="i"><use href="#{{ e.icon }}"/></svg></span><div class="ev"><b>{{ e.title }}</b> by {{ e.actor }}<div class="meta">{{ e.at }} · {{ e.action }}</div>{% if e.diff or e.reason %}<div class="diff">{% for d in e.diff %}{% if d.text %}<span>{{ d.text }}</span>{% else %}<span>{{ d.field }} <del>{{ d.old }}</del> → <ins>{{ d.new }}</ins></span>{% endif %}{% endfor %}{% if e.reason %}<span>"{{ e.reason }}"</span>{% endif %}</div>{% endif %}</div></li>
+        {% empty %}
+        <li class="faint">No entries yet.</li>
+        {% endfor %}
+      </ol>
+    </section>
+  </div>
+</div>
+</div>
+{% endblock %}
