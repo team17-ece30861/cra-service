@@ -23,6 +23,12 @@
     [].forEach.call(field.querySelectorAll('input:not([type="hidden"]), textarea, select'), function (c) { if (c.type !== 'radio') { if (msg) c.setAttribute('aria-invalid', 'true'); else c.removeAttribute('aria-invalid'); } });
     field.classList.toggle('invalid-group', !!msg && !ctl);
   }
+  /* Cancel discards: a closed sheet goes back to where it started (the ticket's values, or empty) */
+  function clearMessages(form) {
+    [].forEach.call(form.querySelectorAll('.field'), function (f) { setErr(f, null); f.classList.remove('wanted', 'changed'); });
+    [].forEach.call(form.querySelectorAll('.sh-alert'), function (a) { a.remove(); });
+    var go = form.closest('.sheet-card').querySelector('[data-go]'); go.classList.remove('busy'); go.removeAttribute('aria-busy');
+  }
   function hasErr(form) { return !!form.querySelector('.field:not(:has([data-chips])) .err:not([hidden])'); }
 
   /* ---------- Chips (versions, member states): the typed text input becomes chips plus one hidden value ---------- */
@@ -63,6 +69,13 @@
     [].forEach.call(box.querySelectorAll('.chip'), function (c) { c.style.animation = 'none'; });
     inp.value = ''; hidden.value = values.join('\n');
     box._commit = function () { if (inp.value.trim() && add(inp.value)) inp.value = ''; };
+    box._set = function (list) {
+      [].forEach.call(box.querySelectorAll('.chip'), function (c) { c.remove(); });
+      values = []; inp.value = '';
+      list.forEach(function (v) { values.push(v); chip(v); });
+      [].forEach.call(box.querySelectorAll('.chip'), function (c) { c.style.animation = 'none'; });
+      hidden.value = values.join('\n');
+    };
     box.addEventListener('click', function (e) { if (e.target === box) inp.focus(); });
     inp.addEventListener('input', function () { if (inp.value.indexOf(',') >= 0) { inp.value.split(',').slice(0, -1).forEach(add); inp.value = inp.value.split(',').pop(); } });
     inp.addEventListener('keydown', function (e) {
@@ -133,6 +146,15 @@
       if (more && more.contains(fl)) more.open = true;
       fl.classList.add('wanted');
     }
+    card.addEventListener('sheet:closed', function () {
+      [].forEach.call(form.querySelectorAll('input:not([type="hidden"]), textarea, select'), function (el) {
+        if (el.closest('[data-chips]')) return;
+        el.value = edit ? (el.getAttribute('data-initial') || '') : '';
+      });
+      [].forEach.call(form.querySelectorAll('[data-chips]'), function (b) { b._set(edit ? (b._initial || []) : []); });
+      if (more && !edit) more.open = false;
+      clearMessages(form); update();
+    });
     form.addEventListener('submit', function (e) {
       [].forEach.call(form.querySelectorAll('[data-chips]'), function (b) { b._commit(); });
       update();
@@ -191,6 +213,11 @@
     });
     form.addEventListener('submit', function (e) { update(); if (go.disabled) { e.preventDefault(); return; } go.classList.add('busy'); go.setAttribute('aria-busy', 'true'); });
     card.addEventListener('sheet:open', update);
+    card.addEventListener('sheet:closed', function () {
+      [].forEach.call(form.querySelectorAll('input[name="decision"]'), function (r) { r.checked = false; });
+      aware.value = ''; reason.value = '';
+      clearMessages(form); update();
+    });
     update();
   }
 
