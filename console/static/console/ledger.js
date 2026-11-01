@@ -553,7 +553,7 @@
     var target = (wanted && wanted.querySelector('input:not([type="hidden"]), textarea, select'))
       || card.querySelector('.invalid, [aria-invalid="true"]')
       || card.querySelector('.sh-body input[type="radio"]:checked, .sh-body .input, .sh-body .textarea, .sh-body .select, .sh-body input[type="radio"], .dlg-actions .btn');
-    if (target && target.classList.contains('chips-input')) target = target.querySelector('input');
+    if (target && target.classList.contains('chips-input')) target = target.querySelector('input:not([type="hidden"])');
     if (target) target.focus({ preventScroll: true });
     var into = wanted || (target && target.closest('.field'));
     if (into && (wanted || card.querySelector('.invalid'))) into.scrollIntoView({ block: 'center', behavior: reduceMotion.matches ? 'auto' : 'smooth' });
