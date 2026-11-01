@@ -228,6 +228,8 @@ def shell(rows: list[dict], groups: list[dict], upcoming: list[dict]) -> dict:
                 "text": f"{r['action']} · {r['title']}",
                 "hint": r["rel"].replace("in ", "due in ", 1),
                 "soon": r["action"],
+                "id": r["id"],
+                "record": r["report"],
             }
         )
     for r in by_key.get("triage", [])[:1]:

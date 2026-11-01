@@ -3,7 +3,7 @@
 {% block body %}
 {% include "console/_icons.html" %}
 {# The app shell (docs/design/ledger-screens.html): the deadline island, one scrolling screen, and the dock with the command field. #}
-<div class="app route-{{ route }}" id="app" data-now="{{ now_iso }}">
+<div class="app route-{{ route }}" id="app" data-now="{{ now_iso }}"{% if sheet %} inert{% endif %}>
   {% if island %}
   <div class="island{% if hero_on_page %} away{% endif %}" id="island"{% if island_more %} role="button" tabindex="0" aria-expanded="false" aria-label="Next deadline: {{ island.report_label|lower }}, {{ island.title }}. Show the next {{ island_more|length }}."{% else %} role="group" aria-label="Next deadline"{% endif %}>
     <div class="bar"><span class="pulse" aria-hidden="true"></span><span class="what"><b>{{ island.report_label }}</b> · {{ island.title }}</span><span class="cd{% if island.rel_cls == 'late' %} late{% endif %}" data-hms="{{ island.due }}">{{ island.count }}</span></div>
@@ -39,7 +39,7 @@
     <div class="cmd" role="dialog" aria-label="Find or do" id="cmd">
       <ul role="listbox" id="cmd-list" aria-label="Suggestions">
         {% for c in commands %}
-        <li role="option" aria-selected="false"{% if c.href %} data-href="{% url 'console:ticket' c.href %}"{% else %} data-soon="{{ c.soon }}"{% endif %}><svg class="i" aria-hidden="true"><use href="#{{ c.icon }}"/></svg><span class="x">{{ c.text }}</span><span class="s">{{ c.hint }}</span></li>
+        <li role="option" aria-selected="false"{% if c.href %} data-href="{% url 'console:ticket' c.href %}"{% elif c.record %} data-href="{% url 'console:record' c.id c.record %}?from=ticket"{% else %} data-soon="{{ c.soon }}"{% endif %}><svg class="i" aria-hidden="true"><use href="#{{ c.icon }}"/></svg><span class="x">{{ c.text }}</span><span class="s">{{ c.hint }}</span></li>
         {% endfor %}
         <li class="none" hidden>{% if commands_capped %}No match in the {{ command_tickets }} most urgent tickets. Find others in the list.{% else %}No match.{% endif %}</li>
       </ul>
@@ -54,6 +54,8 @@
     </label>
   </div>
 </div>
-<div class="toast" id="toast" role="status" aria-live="polite"><svg class="i" aria-hidden="true"><use href="#i-hourglass"/></svg><div><div class="t-headline toast-title" id="toast-title">Not available yet</div><div class="t-footnote muted" id="toast-body"></div></div></div>
+{% block sheets %}{% endblock %}
+<div class="toast" id="toast" role="status" aria-live="polite"{% if flash %} data-flash-title="{{ flash.title }}" data-flash-body="{{ flash.body }}"{% endif %}><svg class="i" aria-hidden="true"><use href="#i-hourglass"/></svg><div><div class="t-headline toast-title" id="toast-title">Not available yet</div><div class="t-footnote muted" id="toast-body"></div></div></div>
 <script src="{% static 'console/ledger.js' %}"></script>
+{% block scripts %}{% endblock %}
 {% endblock %}
