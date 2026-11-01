@@ -17,6 +17,10 @@ from console.api_calls import call_api
 from core import clock
 
 TOAST_TAG = "ledger-toast"
+OUT_OF_DATE = "This form is out of date. Your changes weren't saved; make them again here."
+CHANGED_MEANWHILE = (
+    "Someone else changed this since you opened the sheet. Save again to replace it."
+)
 PAGE_ONLY = ("console/not_found.html", "console/error.html")
 READ_FAILED = (
     "This ticket couldn't be loaded, so nothing was changed. Reload the page to try again."
@@ -97,11 +101,31 @@ def edit_ticket(request, ticket_id: str):
     if not found.ok:
         return _read_failed(request, ticket_id, found)
     ticket = found.data
-    initial = forms.values_from_ticket(ticket)
+    current = forms.values_from_ticket(ticket)
+    original = forms.read_original(request.POST.get("original", ""))
+    if original is None:  # not a form this console rendered: start again from the ticket
+        problems = forms.Problems(general=OUT_OF_DATE)
+        sheet = forms.ticket_form(
+            "edit", values=current, initial=current, problems=problems, ticket=ticket
+        )
+        return _over(
+            request, views.ticket_page(request, ticket_id), "edit", {"tf_edit": sheet}, status=400
+        )
     values = forms.values_from_post(request.POST)
-    values["change_reason"] = request.POST.get("change_reason", "").strip()
-    body, changed = forms.update_body(initial, values, show_aware=bool(ticket.get("aware_at")))
-    if not body:
+    values["change_reason"] = forms.clean(request.POST.get("change_reason", ""))
+    # Only what this person changed, against what they saw; never a field someone else
+    # changed meanwhile.
+    changed = forms.changed_keys(original, values)
+    clashes = forms.conflicts(changed, original, current, values)
+    values = forms.merged(changed, values, current)
+    body = forms.update_body(changed, values) if changed and not clashes else {}
+    if clashes:
+        problems = forms.Problems(
+            fields={k: CHANGED_MEANWHILE for k in clashes if k in forms.edit_known(ticket)},
+            general="Someone else changed this ticket while you were editing. Nothing was saved.",
+        )
+        status = 409
+    elif not body:
         problems, status = forms.Problems(general="Change a field to save."), 200
     else:
         result = call_api(request, "PATCH", f"/tickets/{ticket_id}", body=body)
@@ -115,10 +139,10 @@ def edit_ticket(request, ticket_id: str):
             )
             return redirect("console:ticket", ticket_id)
         problems = forms.problems(result, forms.edit_known(ticket), clock.now())
-        forms.explain_partial_clears(problems, initial, values)
+        forms.explain_partial_clears(problems, current, values)
         status = result.status
     sheet = forms.ticket_form(
-        "edit", values=values, initial=initial, problems=problems, ticket=ticket
+        "edit", values=values, initial=current, problems=problems, ticket=ticket
     )
     page = views.ticket_page(request, ticket_id)
     return _over(request, page, "edit", {"tf_edit": sheet}, status=status)

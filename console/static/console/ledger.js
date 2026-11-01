@@ -549,7 +549,7 @@
   }
   function focusables(card) { return [].filter.call(card.querySelectorAll(FOCUSABLE), function (el) { return el.offsetParent !== null || el === document.activeElement; }); }
   function sheetFocus(card, focus) {
-    var wanted = focus && card.querySelector('[data-field="' + focus + '"]');
+    var wanted = focus && [].filter.call(card.querySelectorAll('[data-field]'), function (f) { return f.getAttribute('data-field') === focus; })[0];
     var target = (wanted && wanted.querySelector('input:not([type="hidden"]), textarea, select'))
       || card.querySelector('.invalid, [aria-invalid="true"]')
       || card.querySelector('.sh-body input[type="radio"]:checked, .sh-body .input, .sh-body .textarea, .sh-body .select, .sh-body input[type="radio"], .dlg-actions .btn');

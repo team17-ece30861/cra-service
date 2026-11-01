@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import get_args
 
+from django.core import signing
 from django.urls import reverse
 
 from console import present
@@ -92,9 +93,11 @@ TRIAGE_FIELDS = {
     "reason": Field("reason", "Reason", "long", missing="Enter what you checked and found."),
 }
 
+# One rule for times typed into the sheets, the same in forms.js (parseUtc): a date, a space
+# or T, hours and minutes, optional seconds, then an optional UTC or Z, in any letter case.
 _INPUT_TIME = re.compile(
-    r"\s*([0-9]{4})-([0-9]{2})-([0-9]{2})[ Tt]([0-9]{2}):([0-9]{2})(?::([0-9]{2}))?"
-    r"\s*(?:UTC|Z|z)?\s*"
+    r"\s*([0-9]{4})-([0-9]{2})-([0-9]{2})[ T]([0-9]{2}):([0-9]{2})(?::([0-9]{2}))?\s*(?:UTC|Z)?\s*",
+    re.IGNORECASE,
 )
 
 
@@ -121,8 +124,14 @@ def _get(data: dict | None, path: str):
     return data
 
 
-def _split(text: str) -> list[str]:
-    return [v.strip() for v in re.split(r"[\n,]", text or "") if v.strip()]
+def clean(text) -> str:
+    """One rule for text on both sides of a comparison: browsers send textarea newlines as
+    CRLF, and surrounding whitespace isn't a change."""
+    return (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def clean_list(items) -> list[str]:
+    return [clean(v) for v in items or [] if clean(v)]
 
 
 def values_from_ticket(ticket: dict) -> dict:
@@ -131,23 +140,59 @@ def values_from_ticket(ticket: dict) -> dict:
     for f in FIELDS:
         value = _get(ticket, f.key)
         if f.kind == "list":
-            out[f.key] = list(value or [])
+            out[f.key] = clean_list(value)
         elif f.kind == "time":
             out[f.key] = to_input_time(value)
         else:
-            out[f.key] = value or ""
+            out[f.key] = clean(value)
     out["change_reason"] = ""
     return out
 
 
 def values_from_post(post) -> dict:
+    """The posted form, cleaned by the same rules. A list arrives as one value per line (the
+    chips' hidden field), plus whatever was typed but not yet made a chip, comma-separated."""
     out = {}
     for f in FIELDS:
         if f.kind == "list":
-            out[f.key] = _split(post.get(f.key, ""))
+            typed = re.split(r"[,\n]", post.get(f.key + "__add", ""))
+            out[f.key] = clean_list(clean(post.get(f.key, "")).split("\n") + typed)
         else:
-            out[f.key] = post.get(f.key, "").strip()
+            out[f.key] = clean(post.get(f.key, ""))
     return out
+
+
+# --- Edit: what the person changed, against what they saw ---
+
+ORIGINAL_SALT = "console.edit-ticket.original"
+
+
+def sign_original(values: dict) -> str:
+    """The values the Edit sheet opened with, posted back with it (signed, so the page can't
+    be made to claim a different starting point)."""
+    return signing.dumps({k: values[k] for k in EDITABLE}, salt=ORIGINAL_SALT, compress=True)
+
+
+def read_original(token: str) -> dict | None:
+    try:
+        data = signing.loads(token or "", salt=ORIGINAL_SALT)
+    except signing.BadSignature:
+        return None
+    return data if isinstance(data, dict) and set(data) == set(EDITABLE) else None
+
+
+def changed_keys(original: dict, values: dict) -> list[str]:
+    return [k for k in EDITABLE if values[k] != original[k]]
+
+
+def conflicts(changed: list[str], original: dict, current: dict, values: dict) -> list[str]:
+    """Fields this person changed that someone else also changed since the sheet opened."""
+    return [k for k in changed if current[k] != original[k] and current[k] != values[k]]
+
+
+def merged(changed: list[str], values: dict, current: dict) -> dict:
+    """The ticket as it is now, with this person's changes on top: what the sheet shows next."""
+    return {**current, **{k: values[k] for k in changed}, "change_reason": values["change_reason"]}
 
 
 def _api_value(f: Field, value):
@@ -172,12 +217,12 @@ def create_body(values: dict) -> dict:
     return body
 
 
-def update_body(initial: dict, values: dict, *, show_aware: bool) -> tuple[dict, list[str]]:
-    """PATCH /tickets/{id}: only the fields that differ from the ticket. An emptied optional
-    field is cleared with null; a group whose fields are all empty is cleared whole. The
-    API can't clear one field inside a group while keeping the rest (subfields aren't
-    nullable), so that goes as "" and the API's answer is shown under the field."""
-    changed = [k for k in EDITABLE if (k != "aware_at" or show_aware) and values[k] != initial[k]]
+def update_body(changed: list[str], values: dict) -> dict:
+    """PATCH /tickets/{id}: only the fields the person changed (``values`` is the ticket as
+    it is now with their changes on top). An emptied optional field is cleared with null; a
+    group whose fields are all empty is cleared whole. The API can't clear one field inside a
+    group while keeping the rest (subfields aren't nullable), so that goes as "" and the
+    API's answer is shown under the field."""
     body: dict = {}
     for key in changed:
         f = BY_KEY[key]
@@ -188,11 +233,11 @@ def update_body(initial: dict, values: dict, *, show_aware: bool) -> tuple[dict,
             body[top] = value if keep else (value or None)
         elif top in GROUPS and all(not values[k] for k in BY_KEY if k.startswith(top + ".")):
             body[top] = None
-        else:
+        elif body.get(top, {}) is not None:
             body.setdefault(top, {})[sub] = value
     if body and values.get("change_reason"):
         body["change_reason"] = values["change_reason"]
-    return body, changed
+    return body
 
 
 def triage_body(post) -> dict:
@@ -200,7 +245,7 @@ def triage_body(post) -> dict:
     decision = post.get("decision", "")
     if decision:
         body["decision"] = decision
-    reason = post.get("reason", "").strip()
+    reason = clean(post.get("reason", ""))
     if reason:
         body["reason"] = reason
     aware = post.get("aware_at", "").strip()
@@ -335,7 +380,7 @@ def _nest(flat: dict) -> dict:
 
 
 def _shown(values: dict) -> dict:
-    return {k: ", ".join(v) if isinstance(v, list) else v for k, v in values.items()}
+    return {k: "\n".join(v) if isinstance(v, list) else v for k, v in values.items()}
 
 
 def blank() -> dict:
@@ -360,6 +405,7 @@ def ticket_form(mode, *, values, initial=None, problems=None, ticket=None, focus
         else reverse("console:tickets"),
         "v": _nest(_shown(values)),
         "i": _nest(_shown(initial)) if initial else {},
+        "original": sign_original(initial) if edit and initial else "",
         "e": _nest(p.fields),
         "general": p.general,
         "general_title": GENERAL_TITLE[mode],

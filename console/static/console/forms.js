@@ -9,10 +9,14 @@
   var TIME_FORMAT = 'Use the format 2026-10-29 14:00:00.';
   var CVE = /^CVE-\d{4}-\d{4,}$/;
 
+  /* One rule for typed times, the same as console/forms.py (_INPUT_TIME): date, space or T, hh:mm, optional :ss, optional UTC or Z, any case */
   function parseUtc(s) { var m = /^\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?\s*(?:UTC|Z)?\s*$/i.exec(s || ''); if (!m) return NaN; return Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)); }
   function fmtUtc(ms) { return new Date(ms).toISOString().replace('T', ' ').slice(0, 19); }
   function laterMsg() { return "That's later than now. Enter a time at or before " + fmtUtc(nowMs()) + ' UTC.'; }
-  function split(text) { return (text || '').split(/[\n,]/).map(function (v) { return v.trim(); }).filter(Boolean); }
+  /* The same rules as console/forms.py (clean, clean_list): CRLF is LF, and surrounding spaces aren't a change */
+  function clean(text) { return (text || '').replace(/\r\n?/g, '\n').trim(); }
+  function lines(text) { return clean(text).split('\n').map(clean).filter(Boolean); }
+  function fieldFor(root, key) { return [].filter.call(root.querySelectorAll('[data-field]'), function (f) { return f.getAttribute('data-field') === key; })[0] || null; }
 
   /* One line under the field, a red ring on its control */
   function setErr(field, msg) {
@@ -34,14 +38,13 @@
 
   /* ---------- Chips (versions, member states): the typed text input becomes chips plus one hidden value ---------- */
   function initChips(box, onChange) {
-    var inp = box.querySelector('input'), field = box.closest('.field'), form = box.closest('form');
+    var inp = box.querySelector('input:not([type="hidden"])'), hidden = box.querySelector('input[type="hidden"]');
+    var field = box.closest('.field'), form = box.closest('form');
     var eu = box.hasAttribute('data-eu') ? (form.getAttribute('data-eu') || '').split(' ') : null;
-    var hidden = document.createElement('input');
-    hidden.type = 'hidden'; hidden.name = inp.name; inp.removeAttribute('name');
-    box.appendChild(hidden);
-    var values = [];
+    inp.removeAttribute('name'); /* typed text becomes a chip first; the hidden field carries the list */
+    var values = lines(hidden.value);
     box._values = function () { return values.slice(); };
-    box._initial = inp.hasAttribute('data-initial') ? split(inp.getAttribute('data-initial')) : null;
+    box._initial = hidden.hasAttribute('data-initial') ? lines(hidden.getAttribute('data-initial')) : null;
     function sync() { hidden.value = values.join('\n'); onChange(); }
     function chip(v) {
       var c = document.createElement('span'); c.className = 'chip'; c.textContent = v + ' ';
@@ -66,9 +69,8 @@
       if (values.indexOf(v) < 0) { values.push(v); chip(v); sync(); }
       return true;
     }
-    split(inp.value).forEach(function (v) { if (eu) v = v.toUpperCase(); if (values.indexOf(v) < 0) { values.push(v); chip(v); } });
+    values.forEach(chip);
     [].forEach.call(box.querySelectorAll('.chip'), function (c) { c.style.animation = 'none'; });
-    inp.value = ''; hidden.value = values.join('\n');
     box._commit = function () { if (inp.value.trim() && add(inp.value)) inp.value = ''; };
     box._set = function (list) {
       [].forEach.call(box.querySelectorAll('.chip'), function (c) { c.remove(); });
@@ -93,8 +95,8 @@
   function initTicketForm(form) {
     var card = form.closest('.sheet-card'), go = card.querySelector('[data-go]'), edit = form.getAttribute('data-mode') === 'edit';
     var more = form.querySelector('.sh-more');
-    function current(el) { return el.classList.contains('chips-input') ? el._values().join('\n') : el.value.trim(); }
-    function initial(el) { return el.classList.contains('chips-input') ? (el._initial || []).join('\n') : (el.getAttribute('data-initial') || '').trim(); }
+    function current(el) { return el.classList.contains('chips-input') ? el._values().join('\n') : clean(el.value); }
+    function initial(el) { return el.classList.contains('chips-input') ? (el._initial || []).join('\n') : clean(el.getAttribute('data-initial')); }
     var tracked = [];
     function update() {
       var n = 0;
@@ -142,7 +144,7 @@
     card.addEventListener('sheet:open', function (e) { want(e.detail && e.detail.focus); update(); });
     function want(key) {
       [].forEach.call(form.querySelectorAll('.field.wanted'), function (f) { f.classList.remove('wanted'); });
-      var fl = key && form.querySelector('[data-field="' + key + '"]');
+      var fl = key && fieldFor(form, key);
       if (!fl) return;
       if (more && more.contains(fl)) more.open = true;
       fl.classList.add('wanted');

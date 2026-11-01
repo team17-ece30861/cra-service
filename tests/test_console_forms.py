@@ -3,7 +3,9 @@ change through the API as the signed-in person; when the API says no, the sheet 
 with the input kept and the API's errors under the fields, and nothing changes."""
 
 import json
+import re
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 
 import pytest
 from django.contrib.auth.models import User
@@ -51,6 +53,53 @@ def _create(api, **extra):
     )
     assert response.status_code == 201
     return response.json()["id"]
+
+
+class _Form(HTMLParser):
+    """The fields a browser would post from one form on a page: inputs, the selected
+    options, and textareas with their newlines sent as CRLF, as browsers do."""
+
+    def __init__(self, form_id):
+        super().__init__()
+        self.form_id, self.inside, self.data, self._ta, self._sel = form_id, False, {}, None, None
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "form":
+            self.inside = a.get("id") == self.form_id
+            return
+        name = a.get("name")
+        if not self.inside:
+            return
+        if tag == "input" and name and a.get("type") not in ("radio", "checkbox"):
+            self.data[name] = a.get("value") or ""
+        elif tag == "textarea" and name:
+            self._ta, self.data[name] = name, ""
+        elif tag == "select" and name:
+            self._sel, self.data[name] = name, ""
+        elif tag == "option" and self._sel and "selected" in a:
+            self.data[self._sel] = a.get("value", "")
+
+    def handle_endtag(self, tag):
+        if tag == "form":
+            self.inside = False
+        elif tag == "textarea" and self._ta:
+            self.data[self._ta] = self.data[self._ta].replace("\n", "\r\n")
+            self._ta = None
+        elif tag == "select":
+            self._sel = None
+
+    def handle_data(self, data):
+        if self._ta:
+            self.data[self._ta] += data
+
+
+def _edit_form(console, ticket_id):
+    parser = _Form("te-form")
+    parser.feed(console.get(f"/console/tickets/{ticket_id}/edit").content.decode())
+    post = dict(parser.data)
+    post.pop("csrfmiddlewaretoken", None)
+    return post
 
 
 def _toast(response):
@@ -155,8 +204,7 @@ def test_edit_page_is_the_ticket_with_the_sheet_open_and_focus(api, console):
 
 def test_edit_sends_only_changed_fields_and_records_the_actor(api, console):
     ticket_id = _create(api, impact="Reads any file.")
-    current = forms.values_from_ticket(api.get(f"/tickets/{ticket_id}").json())
-    post = {k: "\n".join(v) if isinstance(v, list) else v for k, v in current.items()}
+    post = _edit_form(console, ticket_id)
     post.update({"title": "Path traversal in log export (v2)", "member_states": "DE", "impact": ""})
     response = console.post(f"/console/tickets/{ticket_id}/edit", post)
     assert response.status_code == 302
@@ -178,8 +226,7 @@ def test_edit_aware_without_a_reason_shows_the_apis_error_and_changes_nothing(ap
         content_type="application/json",
         headers={ACTOR_HEADER: "intake"},
     )
-    current = forms.values_from_ticket(api.get(f"/tickets/{ticket_id}").json())
-    post = {k: "\n".join(v) if isinstance(v, list) else v for k, v in current.items()}
+    post = _edit_form(console, ticket_id)
     post["aware_at"] = "2026-10-29 09:00:00"
     response = console.post(f"/console/tickets/{ticket_id}/edit", post)
     assert response.status_code == 422
@@ -191,8 +238,7 @@ def test_edit_aware_without_a_reason_shows_the_apis_error_and_changes_nothing(ap
 
 def test_edit_with_nothing_changed_makes_no_call(api, console):
     ticket_id = _create(api)
-    current = forms.values_from_ticket(api.get(f"/tickets/{ticket_id}").json())
-    post = {k: "\n".join(v) if isinstance(v, list) else v for k, v in current.items()}
+    post = _edit_form(console, ticket_id)
     response = console.post(f"/console/tickets/{ticket_id}/edit", post)
     assert response.status_code == 200
     assert "Change a field to save." in response.content.decode()
@@ -202,8 +248,7 @@ def test_edit_with_nothing_changed_makes_no_call(api, console):
 def test_edit_closed_ticket_shows_the_apis_conflict(api, console):
     ticket_id = _create(api)
     console.post(f"/console/tickets/{ticket_id}/triage", {"decision": "invalid", "reason": "No."})
-    current = forms.values_from_ticket(api.get(f"/tickets/{ticket_id}").json())
-    post = {k: "\n".join(v) if isinstance(v, list) else v for k, v in current.items()}
+    post = _edit_form(console, ticket_id)
     response = console.post(f"/console/tickets/{ticket_id}/edit", {**post, "title": "New title"})
     assert response.status_code == 409
     assert "A closed ticket cannot be changed." in response.content.decode()
@@ -305,8 +350,7 @@ def test_list_never_carries_reporter_details_in_its_sheet(api, console):
 
 def test_clearing_one_field_of_a_group_says_what_works(api, console):
     ticket_id = _create(api, vulnerability={"cve_id": "CVE-2026-12345", "description": "Path."})
-    current = forms.values_from_ticket(api.get(f"/tickets/{ticket_id}").json())
-    post = {k: "\n".join(v) if isinstance(v, list) else v for k, v in current.items()}
+    post = _edit_form(console, ticket_id)
     response = console.post(
         f"/console/tickets/{ticket_id}/edit", {**post, "vulnerability.cve_id": ""}
     )
@@ -335,3 +379,122 @@ def test_a_failed_read_before_a_change_shows_the_error_page(api, console, monkey
     assert response.status_code == 503
     assert "Something went wrong" in response.content.decode()
     assert Ticket.objects.get(pk=ticket_id).state == "received"
+
+
+# --- Edit: only what the person changed (PR #95 review) ---
+
+
+def test_editing_the_title_sends_only_the_title(api, console):
+    ticket_id = _create(
+        api,
+        title="  Path traversal in log export ",
+        description="line one\nline two\n",
+        product={"manufacturer": "Ostrava", "name": "NAS 2", "affected_versions": ["4.1,b", "5"]},
+    )
+    post = _edit_form(console, ticket_id)
+    assert "\r\n" in post["description"]  # what a browser sends for a textarea
+    response = console.post(f"/console/tickets/{ticket_id}/edit", {**post, "title": "New title"})
+    assert response.status_code == 302
+    ticket = Ticket.objects.get(pk=ticket_id)
+    entry = ticket.audit_entries.last()
+    assert [c["field"] for c in entry.changes] == ["title"]
+    assert ticket.data["description"] == "line one\nline two\n"
+    assert ticket.data["product"]["affected_versions"] == ["4.1,b", "5"]
+    assert _toast(response)[0]["body"].startswith("1 field changed.")
+
+
+def test_a_crlf_only_post_changes_nothing(api, console):
+    ticket_id = _create(api, description="line one\nline two")
+    response = console.post(f"/console/tickets/{ticket_id}/edit", _edit_form(console, ticket_id))
+    assert response.status_code == 200
+    assert "Change a field to save." in response.content.decode()
+    assert AuditEntry.objects.filter(ticket_id=ticket_id).count() == 1
+
+
+def test_a_concurrent_change_to_another_field_is_kept(api, console):
+    ticket_id = _create(api, impact="old")
+    post = _edit_form(console, ticket_id)  # A opens the sheet
+    api.patch(  # B changes the impact
+        f"/tickets/{ticket_id}",
+        {"impact": "someone else"},
+        content_type="application/json",
+        headers={ACTOR_HEADER: "other"},
+    )
+    response = console.post(f"/console/tickets/{ticket_id}/edit", {**post, "title": "Mine"})
+    assert response.status_code == 302
+    ticket = Ticket.objects.get(pk=ticket_id)
+    assert (ticket.data["title"], ticket.data["impact"]) == ("Mine", "someone else")
+    assert [c["field"] for c in ticket.audit_entries.last().changes] == ["title"]
+
+
+def test_a_concurrent_change_to_the_same_field_is_not_overwritten(api, console):
+    ticket_id = _create(api, impact="old")
+    post = _edit_form(console, ticket_id)
+    api.patch(
+        f"/tickets/{ticket_id}",
+        {"impact": "someone else"},
+        content_type="application/json",
+        headers={ACTOR_HEADER: "other"},
+    )
+    response = console.post(f"/console/tickets/{ticket_id}/edit", {**post, "impact": "mine"})
+    assert response.status_code == 409
+    html = response.content.decode()
+    assert "Someone else changed this ticket while you were editing." in html
+    assert "Someone else changed this since you opened the sheet." in html
+    assert Ticket.objects.get(pk=ticket_id).data["impact"] == "someone else"
+    # Saving again from the re-rendered sheet replaces it, knowingly
+    again = _Form("te-form")
+    again.feed(html)
+    data = {k: v for k, v in again.data.items() if k != "csrfmiddlewaretoken"}
+    assert console.post(f"/console/tickets/{ticket_id}/edit", data).status_code == 302
+    assert Ticket.objects.get(pk=ticket_id).data["impact"] == "mine"
+
+
+def test_clearing_a_whole_group_sends_null(api, console):
+    ticket_id = _create(api, mitigations={"taken": "Patched.", "for_users": "Update."})
+    post = _edit_form(console, ticket_id)
+    post.update({"mitigations.taken": "", "mitigations.for_users": ""})
+    response = console.post(f"/console/tickets/{ticket_id}/edit", post)
+    assert response.status_code == 302
+    assert Ticket.objects.get(pk=ticket_id).data["mitigations"] is None
+
+
+def test_a_reporter_only_edit_keeps_the_reporter_out_of_the_trail(api, console):
+    ticket_id = _create(api)
+    post = _edit_form(console, ticket_id)
+    response = console.post(
+        f"/console/tickets/{ticket_id}/edit", {**post, "reporter.name": "Zora Newname-5521"}
+    )
+    assert response.status_code == 302
+    assert Ticket.objects.get(pk=ticket_id).audit_entries.last().action == "updated"
+    html = console.get(f"/console/tickets/{ticket_id}").content.decode()
+    start = html.index("Audit trail")
+    assert "Zora Newname-5521" not in html[start : html.index("</ol>", start)]
+
+
+def test_an_edit_without_its_original_values_saves_nothing(api, console):
+    ticket_id = _create(api)
+    post = _edit_form(console, ticket_id)
+    post["original"] = post["original"][:-3] + "abc"  # tampered or missing
+    response = console.post(f"/console/tickets/{ticket_id}/edit", {**post, "title": "x"})
+    assert response.status_code == 400
+    assert "This form is out of date." in response.content.decode()
+    assert Ticket.objects.get(pk=ticket_id).data["title"] == "Path traversal in log export"
+
+
+def test_server_errors_mark_their_fields_invalid(api, console):
+    ticket_id = _create(api)
+    post = {**_edit_form(console, ticket_id), "member_states": "XX", "severity": "huge"}
+    response = console.post(f"/console/tickets/{ticket_id}/edit", post)
+    assert response.status_code == 400
+    html = response.content.decode()
+    assert re.search(r'id="te-ms-in"[^>]*aria-invalid="true"', html)
+    assert re.search(r'id="te-sev"[^>]*aria-invalid="true"', html)
+
+
+@pytest.mark.parametrize(
+    "typed",
+    ["2026-10-29 14:00:00", "2026-10-29T14:00", "2026-10-29t14:00:00 utc", " 2026-10-29 14:00Z "],
+)
+def test_typed_times_follow_one_rule(typed):
+    assert forms.to_api_time(typed) == "2026-10-29T14:00:00Z"
