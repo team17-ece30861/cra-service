@@ -258,6 +258,7 @@ def update_ticket(request, id: str):
         if payload.aware_at > now:
             errors.append(field_error("aware_at", "must not be later than now"))
     before = _snapshot(ticket)
+    before_view = _render(ticket, now, detail=True)
     data = deepcopy(ticket.data)
     for key, value in payload.model_dump(mode="json", exclude_unset=True).items():
         if key in ("aware_at", "change_reason"):
@@ -278,11 +279,10 @@ def update_ticket(request, id: str):
         ticket.aware_at = payload.aware_at
     response = _render(ticket, now)
     # Q6 (agreed with Team 21, 2026-11-01): a PATCH that changes nothing succeeds but adds
-    # no audit entry. The comparison includes the reporter, so a reporter-only edit still
-    # gets an entry (with the reporter left out of its changes). A field sent as null
-    # that was never set counts as no change, as the response is the same.
-    after = _snapshot(ticket)
-    if not _changes(before, after) and before.get("reporter") == after.get("reporter"):
+    # no audit entry and saves nothing. "Nothing" means every read looks the same, so it's
+    # judged on the full single-ticket view: null or [] for a field never set is no change,
+    # and a reporter-only edit is a change (its entry leaves the reporter out).
+    if _render(ticket, now, detail=True) == before_view:
         return response
     ticket.save(update_fields=["data", "aware_at"])
     _audit(

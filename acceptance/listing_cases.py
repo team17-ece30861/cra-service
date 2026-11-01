@@ -201,6 +201,14 @@ class ListingChecks:
         # 2026-10-07T08:00:00Z; the sooner one's is 2026-10-08T08:00:00Z.
         assert self.ids(list_tickets(service)) == [later, overdue, sooner, received]
 
+    def test_ac11_state_closed_returns_closed_tickets(self, service):
+        received, overdue, sooner, later = self.four_tickets(service)
+        closed = service.create()["id"]
+        service.triage(closed, {"decision": "invalid", "reason": "Not a vulnerability"})
+        assert self.ids(list_tickets(service, "?state=closed")) == [closed]
+        # Both have no deadline and the same receipt time, so they share the end of the list.
+        assert set(self.ids(list_tickets(service))[-2:]) == {received, closed}
+
     @pytest.mark.parametrize(
         "query",
         ["?state=open", "?state=", "?obligation_status=late", "?obligation_status=PENDING"],
