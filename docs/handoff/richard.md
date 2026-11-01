@@ -4,31 +4,40 @@
 
 ## Where things stand
 
-Feature drafts #77–81 are published, with all five PostgreSQL 18 CI runs passing.
-The complete #81 stack passed 1,143 tests with no skips. These are not deployed
-HTTP results or posted independent approval, and no PR has been merged by us.
+Feature drafts #77–81 are published; their full cumulative PostgreSQL 18 CI passed
+1,143 tests with no skips. Audit draft #82 adds four failure/immutability cases.
+This branch adds only 4.T5 runner evidence reporting, not service/API behavior.
 
 ## In progress
 
-- Task 4.T6 on codex/phase4-audit-failure-tests, stacked above #81 with Richard's
-  explicit draft/CI permission. Four shared portable cases: unknown UUID and
-  malformed ID audit 404, PUT/DELETE audit 405, all with unchanged ticket/list/audit.
-- No service endpoint, contract, workflow, model, helper or migration changes.
-  Old exact-title coupling is avoided; status and contract schema are authoritative.
-- Publication and PostgreSQL CI validation are authorized; merge/deployment or
-  shared reset tests are not. Posted independent PR review remains required.
+- codex/phase4-operation-reporting stacks above codex/phase4-audit-failure-tests.
+  Richard approved these two drafts/CI, not merges/deployments/shared reset tests.
+- Reports all 14 contract operations from actual Service.expect checks and completed
+  test outcomes: terminal, optional --operation-report Markdown and additive JSON.
+- Auth-only is not implementation; untested is not passed; failed/skipped/unfinished
+  or failed/interrupted teardown makes valid observations inconclusive. Setup/raw
+  transport is excluded; evidence contains no token/actor/ID/request/response body.
+- Reused 33 reporting tests. Reporting/validator/interface focused run: 65 passed.
+  Hooks across actual Phase 4 Django tests: 237 passed, four PostgreSQL concurrency
+  skips. Generated table has 14 rows, including honest untested DELETE-clock success
+  and audit 405 (raw PUT/DELETE tests are not GET observations).
+- Lint/format (99 files), Django and migration checks pass. Portable collection:
+  188 cases only; no deployed target contacted. Posted review/CI remain required.
 
 ## Next up
 
-Validate this task and CI, then integrate 4.T5 operation reporting as a separate
-one-task draft above it. Leave feature drafts and earlier local worktrees untouched.
-Ann's 4.A5 and wider privacy/contract work remain separate.
+Finish fresh independent local review, publish this one-task draft and inspect
+PostgreSQL CI. Do not equate the observation table with full feature/requirement
+coverage or a supplied version label with deployed identity. Ann's 4.A5 remains separate.
 
 ## Waiting on
 
-CI/posted review, owner integration, Quincy/pod coordination and a separate merge go.
+Posted independent approval, CI, teammate/pod integration and Richard's separate
+merge/shared-reset go. Only Quincy launches Orbit.
 
 ## Notes for the next session
 
-The prior localhost HTTP suite had one Windows 10053 abort, also reproduced without
-CRA/Django; do not hide it or infer a deployed regression. Only Quincy launches Orbit.
+Prior raw localhost WSGI run retains its one Windows 10053 transport failure,
+also reproduced without CRA/Django; it was not hidden/retried away. These new
+in-process results do not replace actual Linux/gunicorn/deployed HTTP validation.
+Do not change the deployed /tester/test/report schema or publish pod copies early.

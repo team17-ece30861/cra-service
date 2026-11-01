@@ -64,6 +64,60 @@ Run it from the repository root.
 | `--tested-version LABEL` | Optional label recorded in the report (for example, a commit). Defaults to `CRA_TESTED_VERSION`. |
 | `--report FILE` | Optional JSON report: run times, target, counts, and each test's outcome. It never contains the token or request bodies. |
 
+## Operation-status evidence (4.T5)
+
+The runner lists every contract operation, its method/path and referenced
+requirements, implementation evidence, and success/error response checks. For an
+authorized run, add output paths to the command above:
+
+```bash
+python -m pytest -c acceptance/pytest.ini acceptance --allow-reset -v \
+  --tested-version <deployed-commit> --report results.json \
+  --operation-report operations.md
+```
+
+The version is a supplied label, not independently verified deployment identity.
+The JSON report retains its existing fields and adds `operations`; each result
+also includes `operation_checks` when its test body executes and `teardown_complete`
+to distinguish finished tests from interrupted teardown. New evidence stores
+only contract method/path templates, expected/actual status codes, and whether
+the status and defined response schema checked successfully. It stores no token,
+actor, resource identifier, request body, or response body.
+
+- **Implementation `success_observed`:** an expected 2xx checked successfully in
+  a passing test. This is not a declaration that every requirement is implemented.
+  A working unfiltered list, for example, does not prove its filters work.
+- **`not_demonstrated`:** no passing successful-response check. Correct 401s on
+  an otherwise unbuilt route do not demonstrate implementation.
+- **Conformance `passed`:** every explicitly declared status in that category
+  has a passing check, and no observed check failed or is inconclusive. This is
+  status-code coverage, not exhaustive behavioral or code coverage.
+- **`partial`:** some declared statuses passed; others remain untested.
+  **`not_tested`:** no observations for the category. **`not_defined`:** the
+  contract declares no statuses in that category, as with health-check errors.
+- **`failed`:** a reached status/schema check failed (including communication
+  failure). **`inconclusive`:** the response checked successfully but its enclosing
+  test failed or skipped, or teardown failed/interrupted without completion.
+  Those are not passing evidence; passing observations require completed teardown.
+
+Per-test fixture setup/reset calls are excluded, so setup alone cannot prove an
+operation. Direct transport calls outside `Service.expect` are also excluded;
+add explicit checked cases to improve the table rather than guessing results.
+Bodies not defined by the contract, such as the health response, are not validated.
+Interrupted runs say `incomplete`; all unobserved statuses remain untested.
+Clock read/release map to REQ-16 from `docs/spec.md` because their contract
+descriptions omit that requirement ID. Other IDs come from operation descriptions.
+
+These exports belong to the standalone runner. They do not change the deployed
+course `/tester/test/report` response or claim the new tester has been deployed.
+Refresh `pod-k-shared/team17/tester/` through the normal approval/release process.
+
+The integrated audit PUT/DELETE checks use raw transport because those methods
+are not operations in the contract. They prove immutability in their tests, but
+do not masquerade as GET audit 405 observations in this table. Its 405 status
+therefore remains explicitly untested here. A passing list response likewise
+does not establish Ann's pending filtering/status work.
+
 ## Results
 
 This increment collects 188 cases (59 Phase 3/audit, 32 drafts, 63 submissions, 34 closure). On
@@ -85,8 +139,9 @@ curl -X DELETE "$CRA_BASE_URL/test/clock" -H "Authorization: Bearer $CRA_API_TOK
 | File | Purpose |
 |---|---|
 | `cases.py` | The test cases, shared by the HTTP and in-process runs |
-| `client.py` | HTTP transport, plus response checks against `openapi.yaml` |
-| `conftest.py` | Command-line options, safety checks, and the JSON report |
+| `client.py` | HTTP transport, response checks and safe observation metadata |
+| `reporting.py` | Pure operation evidence aggregation and Markdown rendering |
+| `conftest.py` | Safety options, completed-test observations and JSON/table exports |
 | `test_phase3.py` | HTTP entry point, including the plain-HTTP (AC-15) probe |
 | `draft_cases.py` | Live-draft cases shared by local Django and HTTP runs |
 | `test_drafts.py` | HTTP entry point for draft-read checks |
