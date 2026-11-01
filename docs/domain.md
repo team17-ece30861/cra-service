@@ -133,6 +133,14 @@ Local focused validation: 310 passed on SQLite; PostgreSQL/deployed validation
 and posted independent PR approval remain pending. Ann's 4.A5 remains separate.
 
 ## Contract documentation gap
+`core.domain.submissions.validate_submission` (4.D3) is pure: it receives state,
+report type, awareness/recording time, submitted identities, Model C missing paths
+and optional submitted time. State/duplicate/predecessor conflicts (409) precede
+missing fields or interval violations (422). It returns UTC seconds, defaults to
+the supplied now and changes no input. Q5 adds no timestamp ordering between
+reports beyond the inclusive aware-to-now interval. Sixty unit tests cover this;
+the actual recording endpoint/audit/transactions remain separate task 4.A3.
+
 
 The current `openapi.yaml` references REQ-04 and exposes obligation deadlines,
 but does not spell out the hour/day intervals or the fix-before-awareness rule.
