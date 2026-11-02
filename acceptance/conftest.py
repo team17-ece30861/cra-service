@@ -92,6 +92,8 @@ def pytest_runtest_logreport(report):
         entry["message"] = crash.message if crash else str(report.longrepr)[-500:]
     if report.failed or entry["outcome"] != "failed" and (report.when == "call" or report.skipped):
         entry["outcome"] = report.outcome
+    # Written once the test's teardown ends, so a run stopped during a teardown reports
+    # that test as interrupted even though its call had finished.
     if report.when == "teardown" and PROGRESS is not None:
         with PROGRESS.open("a", encoding="utf-8") as progress:
             progress.write(json.dumps(entry) + "\n")

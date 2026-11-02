@@ -1,5 +1,6 @@
 import hmac
 import json
+from http import HTTPStatus
 
 from django.conf import settings
 from django.db import transaction
@@ -143,19 +144,32 @@ def _interface_source(path: str) -> str | None:
 
 def _with_interface_fields(path: str, response: HttpResponse) -> HttpResponse:
     """Adds `message` and `source` to an error from the testing interface that doesn't
-    already have them. Bodies that already carry them (a forwarded system error, say)
-    are left as they are."""
+    already have them. Bodies that already carry them (a forwarded system error, say),
+    and anything that isn't a JSON problem object, are left as they are."""
     source = _interface_source(path)
     if (
         source is None
         or response.status_code < 400
+        or response.streaming
         or not response.get("Content-Type", "").startswith(PROBLEM_CONTENT_TYPE)
     ):
         return response
-    body = json.loads(response.content)
-    if body.get("message") and body.get("source"):
+    try:
+        body = json.loads(response.content)
+    except ValueError:
         return response
-    body["message"] = body.get("message") or body.get("detail") or body["title"]
+    if not isinstance(body, dict) or (body.get("message") and body.get("source")):
+        return response
+    body["message"] = (
+        body.get("message")
+        or body.get("detail")
+        or body.get("title")
+        or HTTPStatus(response.status_code).phrase
+    )
     body["source"] = body.get("source") or source
     response.content = json.dumps(body)
+    # CommonMiddleware (inside this one) already set Content-Length for the old body, and
+    # gunicorn sends no more bytes than it says.
+    if response.has_header("Content-Length"):
+        response["Content-Length"] = str(len(response.content))
     return response
