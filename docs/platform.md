@@ -258,7 +258,8 @@ Before you rely on a rollback, check the following.
 ## Deployed tester
 
 Our tester runs inside the service at `/tester/test/*` (the course's cross-team testing
-interface), as a pytest subprocess that sees only the target's token.
+interface), as a pytest subprocess that sees only the target's token. Its OpenAPI
+description is [`docs/interface/tester.yaml`](interface/tester.yaml).
 
 - **Allowed targets:** this service itself, plus the hosts in `TESTER_ALLOWED_HOSTS`
   (default in `cra_service/settings.py`: Team 21's old and new hosts). Hosts match
@@ -273,6 +274,9 @@ interface), as a pytest subprocess that sees only the target's token.
   gunicorn workers for its whole length, so two runs at once hold both. A caller whose
   connection drops (some networks cut a connection that's been silent for minutes) can
   still fetch the report with `GET /tester/test/report?session_id=...` once the run ends.
+  Seen on 2026-11-01: during a deployed-tester run against Orbit, the caller's connection
+  dropped at 540 s, the run finished at 655 s (222 of 222), and the report was fetched
+  afterwards.
 
 ## Console accounts
 
