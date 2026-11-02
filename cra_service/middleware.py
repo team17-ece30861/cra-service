@@ -1,4 +1,5 @@
 import hmac
+import json
 
 from django.conf import settings
 from django.db import transaction
@@ -28,6 +29,14 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 # state must be visible to other requests (409 while running) before it ends.
 NO_TRANSACTION_PREFIX = "/tester/"
 
+# The course's cross-team testing interface: its system endpoints and our tester. The
+# course spec requires a non-empty `message` and a `source` on every error from these,
+# including 401s, unknown routes, and server errors that never reach their own handlers.
+# Other paths (the pod's /test/reset and /test/clock included) keep the pod contract's
+# plain problem body.
+INTERFACE_SYSTEM_PATHS = {"/test/setup", "/test/report"}
+INTERFACE_TESTER_PREFIX = "/tester/"
+
 # Headers worth keeping when an error response is rewritten as a problem.
 _KEPT_HEADERS = ("Allow", "WWW-Authenticate", "Retry-After")
 
@@ -51,6 +60,9 @@ class PlatformMiddleware:
     def __call__(self, request: HttpRequest) -> HttpResponse:
         if _is_console(request.path_info):
             return self._console(request)
+        return _with_interface_fields(request.path_info, self._api(request))
+
+    def _api(self, request: HttpRequest) -> HttpResponse:
         request.client_name = _client_name(request)
         if request.client_name:
             # request.META is the WSGI environ that gunicorn logs from.
@@ -119,3 +131,31 @@ def _as_problem(response: HttpResponse) -> HttpResponse:
         return response
     headers = {h: response[h] for h in _KEPT_HEADERS if response.has_header(h)}
     return problem_response(response.status_code, headers=headers)
+
+
+def _interface_source(path: str) -> str | None:
+    if path in INTERFACE_SYSTEM_PATHS:
+        return "system"
+    if path.startswith(INTERFACE_TESTER_PREFIX):
+        return "tester"
+    return None
+
+
+def _with_interface_fields(path: str, response: HttpResponse) -> HttpResponse:
+    """Adds `message` and `source` to an error from the testing interface that doesn't
+    already have them. Bodies that already carry them (a forwarded system error, say)
+    are left as they are."""
+    source = _interface_source(path)
+    if (
+        source is None
+        or response.status_code < 400
+        or not response.get("Content-Type", "").startswith(PROBLEM_CONTENT_TYPE)
+    ):
+        return response
+    body = json.loads(response.content)
+    if body.get("message") and body.get("source"):
+        return response
+    body["message"] = body.get("message") or body.get("detail") or body["title"]
+    body["source"] = body.get("source") or source
+    response.content = json.dumps(body)
+    return response
