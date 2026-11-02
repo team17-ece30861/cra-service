@@ -110,13 +110,8 @@ def run(request):
         report, aborted = runner.run_suite(session.session_id, session.target_url)
     except Exception as error:
         logger.error("Tester session %s crashed: %s", session.session_id, type(error).__name__)
-        report = {
-            "session_id": session.session_id,
-            "target_url": session.target_url,
-            "results": [],
-            "coverage": None,
-        }
         aborted = "The tester failed before any results were recorded"
+        report = runner.failed_report(session.session_id, session.target_url, aborted)
     session.report = report
     session.state = "finished"
     session.save(update_fields=["report", "state"])

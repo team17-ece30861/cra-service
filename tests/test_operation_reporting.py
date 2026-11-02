@@ -336,6 +336,7 @@ def test_real_pytest_hooks_exclude_fixture_calls_and_withhold_failed_test_eviden
             "--allow-reset",
             "--report=" + str(tmp_path / "report.json"),
             "--operation-report=" + str(tmp_path / "operations.md"),
+            "--progress=" + str(tmp_path / "progress.jsonl"),
             "-q",
         ],
         cwd=tmp_path,
@@ -346,11 +347,20 @@ def test_real_pytest_hooks_exclude_fixture_calls_and_withhold_failed_test_eviden
     )
     assert completed.returncode == (2 if interrupted else 1), completed.stdout + completed.stderr
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    progress_file = tmp_path / "progress.jsonl"
+    progress = (
+        [json.loads(line) for line in progress_file.read_text(encoding="utf-8").splitlines()]
+        if progress_file.exists()
+        else []
+    )
     if interrupted:
         assert report["results"][0]["teardown_complete"] is False
         assert report["exit_code"] == 2
+        assert progress == []  # its teardown never finished
     else:
         assert (report["passed"], report["failed"], report["skipped"]) == (1, 1, 1)
+        # One line per test as it finished, matching the final report's entries.
+        assert progress == report["results"]
     health = next(row for row in report["operations"] if row["path"] == "/health")
     reset = next(row for row in report["operations"] if row["path"] == "/test/reset")
     assert health["success"]["status"] == "inconclusive"

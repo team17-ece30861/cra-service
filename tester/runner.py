@@ -170,13 +170,59 @@ def _system_coverage(results: list[dict]) -> dict:
     }
 
 
+def _recorded_entries(report_path: Path, progress_path: Path) -> dict[str, dict]:
+    """The suite's results by test ID: from its final report if it finished, otherwise
+    from the progress file it appends to as each test finishes."""
+    if report_path.exists():
+        try:
+            final = json.loads(report_path.read_text(encoding="utf-8"))
+            return {entry["test"]: entry for entry in final["results"]}
+        except (ValueError, KeyError, TypeError):
+            pass  # cut off while being written when the run was stopped
+    entries = {}
+    if progress_path.exists():
+        for line in progress_path.read_text(encoding="utf-8").splitlines():
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue  # a line cut off when the run was stopped
+            entries[entry["test"]] = entry
+    return entries
+
+
+def _mark_abort(results: list[dict], entries: dict[str, dict], aborted: str) -> list[dict]:
+    """After an abort, the course spec keeps recorded outcomes, marks the test the abort
+    prevented as an error with source "tester", and marks the tests never started skip.
+    Tests run in planned order, so the first test without a recorded result is the one
+    that was running when the tester aborted. This relies on the run and planned_tests()
+    collecting in the same order: a plugin that reorders tests (random order, xdist) would
+    break it."""
+    marked = []
+    interrupted = False
+    for result in results:
+        entry = entries.get(result["test_id"])
+        if entry is None or entry["outcome"] == "not_run":
+            if not interrupted:
+                interrupted = True
+                result = {
+                    "test_id": result["test_id"],
+                    "outcome": "error",
+                    "source": "tester",
+                    "message": f"Not evaluated: {aborted}.",
+                }
+            else:
+                result = {**result, "message": f"Not executed: {aborted}."}
+        marked.append(result)
+    return marked
+
+
 def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
     """Run the whole suite once. Returns the report and, if the tester aborted, why."""
     planned = planned_tests()
-    entries: dict[str, dict] = {}
     aborted = None
     with tempfile.TemporaryDirectory() as tmp:
         report_path = Path(tmp) / "report.json"
+        progress_path = Path(tmp) / "progress.jsonl"
         token = target_token(target_url) or "no-token-configured"
         try:
             done = _pytest(
@@ -186,6 +232,8 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
                 "--allow-reset",
                 "--report",
                 str(report_path),
+                "--progress",
+                str(progress_path),
                 env=_child_env(token),
                 timeout=SUITE_TIMEOUT,
             )
@@ -193,17 +241,12 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
                 aborted = f"The test suite stopped with exit code {done.returncode}"
         except subprocess.TimeoutExpired:
             aborted = f"The test suite did not finish within {SUITE_TIMEOUT} seconds"
-        if report_path.exists():
-            for entry in json.loads(report_path.read_text(encoding="utf-8"))["results"]:
-                entries[entry["test"]] = entry
+        entries = _recorded_entries(report_path, progress_path)
     if aborted:
         logger.error("Tester session %s aborted: %s", session_id, aborted)
     results = [_result(test_id, entries.get(test_id)) for test_id in planned]
     if aborted:
-        results = [
-            {**r, "message": f"Not executed: {aborted}."} if r["outcome"] == "skip" else r
-            for r in results
-        ]
+        results = _mark_abort(results, entries, aborted)
     report = {
         "session_id": session_id,
         "target_url": target_url,
@@ -219,3 +262,20 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
         },
     }
     return report, aborted
+
+
+def failed_report(session_id: str, target_url: str, aborted: str) -> dict:
+    """The report when the tester itself failed before the suite produced anything: every
+    planned test it can still list (the first as the interrupted one), and coverage
+    marked unavailable, so the report keeps the course's format."""
+    try:
+        planned = planned_tests()
+    except Exception:
+        planned = []
+    unavailable = {"covered": None, "total": None, "basis": f"Not measured: {aborted}"}
+    return {
+        "session_id": session_id,
+        "target_url": target_url,
+        "results": _mark_abort([_result(t, None) for t in planned], {}, aborted),
+        "coverage": {"code": unavailable, "component": unavailable, "system": unavailable},
+    }

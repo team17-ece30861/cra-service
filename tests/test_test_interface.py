@@ -2,6 +2,8 @@
 and the tester under /tester. The tester's suite run and its calls to the target
 are replaced with fakes; the real suite runs in acceptance/."""
 
+import json
+
 import pytest
 
 from tester import runner
@@ -280,3 +282,174 @@ def test_tester_calls_send_an_actor_and_the_target_token(settings, monkeypatch):
     headers = dict(sent[0].header_items())
     assert headers["X-actor"] == runner.TESTER_ACTOR
     assert headers["Authorization"] == "Bearer their-token"
+
+
+# --- error bodies outside the interface's own handlers -------------------------------
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "source"),
+    [
+        ("post", "/test/setup", "system"),
+        ("get", "/test/report", "system"),
+        ("post", "/tester/test/setup", "tester"),
+        ("post", "/tester/test/run", "tester"),
+        ("get", "/tester/test/report", "tester"),
+    ],
+)
+def test_interface_401s_carry_a_message_and_source(client, method, path, source):
+    response = getattr(client, method)(path)
+    _assert_interface_error(response, 401, source)
+    assert response.json()["title"] == "Unauthorized"
+    assert response["WWW-Authenticate"] == "Bearer"
+
+
+def test_pod_test_controls_keep_the_plain_problem_body(client):
+    body = client.post("/test/reset").json()
+    assert body["status"] == 401
+    assert "source" not in body and "message" not in body
+
+
+def test_unknown_tester_routes_carry_a_message_and_source(authed):
+    _assert_interface_error(authed.get("/tester/test/nothing"), 404, "tester")
+
+
+def test_system_setup_crash_is_a_system_error(authed, monkeypatch):
+    from core.models import SystemSession
+
+    def crash(**kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(SystemSession.objects, "create", crash)
+    response = _post(authed, "/test/setup", {"session_id": "run-x", "setup": {}})
+    _assert_interface_error(response, 500, "system")
+    assert "database unavailable" not in response.content.decode()
+    # gunicorn sends no more than Content-Length bytes, so it must match the rewritten body.
+    assert response["Content-Length"] == str(len(response.content))
+
+
+def test_forwarded_errors_keep_their_own_message_and_source(authed, allowed, monkeypatch):
+    monkeypatch.setattr(
+        runner, "call", lambda *a, **k: (503, {"message": "Warming up", "source": "unknown"})
+    )
+    response = _setup(authed)
+    _assert_interface_error(response, 503, "unknown")
+    assert response.json()["message"] == "Warming up"
+
+
+# --- results kept when the tester aborts ---------------------------------------------
+
+PLANNED = ["t.py::test_a", "t.py::test_b", "t.py::test_c", "t.py::test_d"]
+
+
+@pytest.fixture
+def no_target(monkeypatch):
+    monkeypatch.setattr(runner, "planned_tests", lambda: list(PLANNED))
+    monkeypatch.setattr(
+        runner, "_code_coverage", lambda *a: {"covered": None, "total": None, "basis": "fake"}
+    )
+
+
+def _fake_pytest(lines, outcome, final=None):
+    """A suite run that writes these progress lines (and this final report text, if
+    given), then times out or exits with the given code."""
+
+    def fake(*args, env=None, timeout):
+        args = list(args)
+        with open(args[args.index("--progress") + 1], "w", encoding="utf-8") as file:
+            file.write(lines)
+        if final is not None:
+            with open(args[args.index("--report") + 1], "w", encoding="utf-8") as file:
+                file.write(final)
+        if outcome == "timeout":
+            raise runner.subprocess.TimeoutExpired("pytest", timeout)
+        return runner.subprocess.CompletedProcess(args, outcome)
+
+    return fake
+
+
+def _final(*entries):
+    return json.dumps({"results": [{"test": t, "outcome": o} for t, o in entries]})
+
+
+def test_timeout_keeps_finished_results_and_marks_the_interrupted_test(no_target, monkeypatch):
+    lines = (
+        '{"test": "t.py::test_a", "outcome": "passed"}\n'
+        '{"test": "t.py::test_b", "outcome": "failed", "message": "expected 409, got 200"}\n'
+        '{"test": "t.py::test_c", "outc'  # cut off when the process was killed
+    )
+    monkeypatch.setattr(runner, "_pytest", _fake_pytest(lines, "timeout"))
+    report, aborted = runner.run_suite("run-1", TARGET)
+    assert aborted == f"The test suite did not finish within {runner.SUITE_TIMEOUT} seconds"
+    results = report["results"]
+    assert [r["test_id"] for r in results] == PLANNED
+    assert [r["outcome"] for r in results] == ["pass", "fail", "error", "skip"]
+    assert results[1]["message"] == "expected 409, got 200"
+    assert results[2]["source"] == "tester"
+    assert results[2]["message"] == f"Not evaluated: {aborted}."
+    assert results[3]["message"] == f"Not executed: {aborted}."
+
+
+def test_abort_before_any_result_marks_the_first_test_and_skips_the_rest(no_target, monkeypatch):
+    monkeypatch.setattr(runner, "_pytest", _fake_pytest("", 3))
+    report, aborted = runner.run_suite("run-1", TARGET)
+    assert aborted == "The test suite stopped with exit code 3"
+    assert [r["outcome"] for r in report["results"]] == ["error", "skip", "skip", "skip"]
+
+
+def test_progress_lines_are_used_when_there_is_no_final_report(no_target, monkeypatch):
+    lines = "".join(f'{{"test": "{t}", "outcome": "passed"}}\n' for t in PLANNED[:3])
+    monkeypatch.setattr(runner, "_pytest", _fake_pytest(lines, 1))
+    report, aborted = runner.run_suite("run-1", TARGET)
+    assert aborted is None
+    assert [r["outcome"] for r in report["results"]] == ["pass", "pass", "pass", "skip"]
+
+
+def test_a_finished_run_uses_the_final_report(no_target, monkeypatch):
+    final = _final(*[(t, "passed") for t in PLANNED[:3]], (PLANNED[3], "failed"))
+    monkeypatch.setattr(runner, "_pytest", _fake_pytest("", 1, final))
+    report, aborted = runner.run_suite("run-1", TARGET)
+    assert aborted is None
+    assert [r["outcome"] for r in report["results"]] == ["pass", "pass", "pass", "fail"]
+
+
+def test_an_interrupted_suite_with_a_final_report_marks_its_unfinished_test(no_target, monkeypatch):
+    final = _final((PLANNED[0], "passed"), (PLANNED[1], "not_run"))
+    monkeypatch.setattr(runner, "_pytest", _fake_pytest("", 2, final))
+    report, aborted = runner.run_suite("run-1", TARGET)
+    assert aborted == "The test suite stopped with exit code 2"
+    assert [r["outcome"] for r in report["results"]] == ["pass", "error", "skip", "skip"]
+
+
+def test_a_test_skipped_by_the_suite_is_not_taken_for_the_interrupted_one(no_target, monkeypatch):
+    lines = (
+        f'{{"test": "{PLANNED[0]}", "outcome": "passed"}}\n'
+        f'{{"test": "{PLANNED[1]}", "outcome": "skipped"}}\n'
+    )
+    monkeypatch.setattr(runner, "_pytest", _fake_pytest(lines, "timeout"))
+    results = runner.run_suite("run-1", TARGET)[0]["results"]
+    assert [r["outcome"] for r in results] == ["pass", "skip", "error", "skip"]
+    assert results[1]["message"] == "Skipped by the suite."
+
+
+def test_a_final_report_cut_off_mid_write_falls_back_to_progress(no_target, monkeypatch):
+    lines = f'{{"test": "{PLANNED[0]}", "outcome": "passed"}}\n'
+    monkeypatch.setattr(runner, "_pytest", _fake_pytest(lines, "timeout", '{"results": [{"te'))
+    results = runner.run_suite("run-1", TARGET)[0]["results"]
+    assert [r["outcome"] for r in results] == ["pass", "error", "skip", "skip"]
+
+
+def test_a_tester_crash_still_reports_every_planned_test(authed, target, no_target, monkeypatch):
+    def crash(session_id, target_url):
+        raise RuntimeError("tester bug")
+
+    monkeypatch.setattr(runner, "run_suite", crash)
+    session_id = _setup(authed).json()["session_id"]
+    _assert_interface_error(
+        _post(authed, "/tester/test/run", {"session_id": session_id}), 500, "tester"
+    )
+    stored = authed.get("/tester/test/report", {"session_id": session_id}).json()
+    assert [r["test_id"] for r in stored["results"]] == PLANNED
+    assert [r["outcome"] for r in stored["results"]] == ["error", "skip", "skip", "skip"]
+    assert stored["results"][0]["source"] == "tester"
+    assert all(m["basis"] for m in stored["coverage"].values())
