@@ -258,7 +258,8 @@ Before you rely on a rollback, check the following.
 ## Deployed tester
 
 Our tester runs inside the service at `/tester/test/*` (the course's cross-team testing
-interface), as a pytest subprocess that sees only the target's token.
+interface), as a pytest subprocess that sees only the target's token. Its OpenAPI
+description is [`docs/interface/tester.yaml`](interface/tester.yaml).
 
 - **Allowed targets:** this service itself, plus the hosts in `TESTER_ALLOWED_HOSTS`
   (default in `cra_service/settings.py`: Team 21's old and new hosts). Hosts match
