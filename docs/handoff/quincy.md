@@ -1,6 +1,6 @@
 # Handoff: Quincy (Platform and Hosting)
 
-**Last updated:** 2026-11-01 by Claude Code (Quincy's agent), at the end of Phase 4.
+**Last updated:** 2026-11-02 by Claude Code (Quincy's agent).
 
 ## Where things stand
 
@@ -13,8 +13,16 @@ recorded in `pod-k-shared` (#17). The Phase 4 report text is in
 [`docs/plan.md`](../plan.md); Phase 5 owners are in its Phase 5 table (split agreed
 2026-11-01, see [`docs/decisions.md`](../decisions.md)).
 
+On 2026-11-02 we checked the service against the course's "Cross-team Testing Interface"
+document and closed its gaps (5.11): an aborted tester run keeps its results (#103), every
+interface error carries `message` and `source` (#103), and OpenAPI descriptions of the
+tester and the system's test endpoints are in [`docs/interface/`](../interface/) (#104).
+Both are on Launchpad (`2768aa2`, checked 2026-11-02), not yet on Orbit.
+
 ## In progress
 
+- **Next Orbit launch** picks up #103 and #104. Right after it, set the version row in
+  `team17/SYSTEM.md` on `pod-k-shared` #19 (draft) to the launched commit and merge #19.
 - **`pod-k-shared` #14:** contract freeze (`0.2.0`), waiting on Team 21's approval. Once it
   merges, Ann mirrors `openapi.yaml` into this repo (5.9).
 
@@ -23,7 +31,8 @@ recorded in `pod-k-shared` (#17). The Phase 4 report text is in
 1. 5.8 first: the early performance check, then 5.1 (AC-18 on Orbit) with Richard's load
    script.
 2. 5.8: the 5xx alert; refuse a second deployed-tester run while one is going, and return
-   before a long run ends; the console sign-in lockout (LIM-12).
+   before a long run ends; recover a tester session stuck in `running` after a restart;
+   the console sign-in lockout (LIM-12); LIM-13 (tester cleans up after a run).
 3. 5.7: console without page reloads. 5.2: the restart demo.
 
 ## Waiting on
@@ -38,8 +47,12 @@ recorded in `pod-k-shared` (#17). The Phase 4 report text is in
 - Merging a stacked PR with `--delete-branch` from the CLI closes the next PR instead of
   retargeting it. Retarget the next PR to `main` first, then merge, then delete.
 - Two local pytest runs at once share the `test_team17` database and fail each other.
-- A deployed-tester run takes about 12 minutes; some networks drop a connection that has
-  been silent that long, so fetch the report with `GET /tester/test/report` afterwards.
+- A deployed-tester run takes about 11 to 12 minutes; some networks drop a connection that
+  has been silent that long (ours dropped at 540 s), so fetch the report with
+  `GET /tester/test/report` afterwards. The run carries on without the client.
+- `docs/interface/*.yaml` are checked against real responses by
+  `tests/test_interface_descriptions.py`: change them together with any tester or
+  `/test/setup`/`/test/report` behavior, and refresh the copies in `pod-k-shared/team17/`.
 - Team 17 tests on Launchpad; it ran against Orbit once after the Phase 4 release, for the
   report, with Quincy's go-ahead.
 - Claude Code merges a code PR only after Quincy says to in their own message.
