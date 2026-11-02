@@ -142,7 +142,9 @@ def test_tester_setup_responses_are_described(authed, client, allowed, monkeypat
     check(_setup(client), 401)
     check(_big(authed, "/tester/test/setup"), 413)
     answer.update(status=503, body={"message": "Warming up", "source": "unknown"})
-    check(_setup(authed), 503, forwarded=True)
+    response = _setup(authed)
+    check(response, 503, forwarded=True)
+    assert response.json()["source"] == "unknown"  # the target's own source
     answer.update(status=201, body={})  # ready, but without the session ID
     response = _setup(authed)
     check(response, 500, forwarded=True)

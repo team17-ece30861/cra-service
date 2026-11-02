@@ -274,6 +274,9 @@ description is [`docs/interface/tester.yaml`](interface/tester.yaml).
   gunicorn workers for its whole length, so two runs at once hold both. A caller whose
   connection drops (some networks cut a connection that's been silent for minutes) can
   still fetch the report with `GET /tester/test/report?session_id=...` once the run ends.
+  Seen on 2026-11-01: during a deployed-tester run against Orbit, the caller's connection
+  dropped at 540 s, the run finished at 655 s (222 of 222), and the report was fetched
+  afterwards.
 
 ## Console accounts
 
