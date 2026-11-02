@@ -39,12 +39,16 @@ def _validator(document: dict, schema_ref: str) -> Draft202012Validator:
     return Draft202012Validator({"$ref": "urn:doc" + schema_ref}, registry=registry)
 
 
-def assert_described(document: dict, path: str, method: str, response) -> None:
-    """The response's status is documented for this operation, and its body matches the
-    documented schema for its media type."""
+def assert_described(document, path, method, response, status, *, forwarded=False) -> None:
+    """The response has the expected status, that status is documented for this
+    operation (only a forwarded target error may fall back to `default`), and the body
+    matches the documented schema for its media type."""
+    assert response.status_code == status, response.content
     responses = document["paths"][path][method]["responses"]
-    spec = responses.get(str(response.status_code)) or responses.get("default")
-    assert spec, f"{method.upper()} {path} returned {response.status_code}, not described"
+    spec = responses.get(str(status))
+    if forwarded:
+        spec = responses["default"]
+    assert spec, f"{method.upper()} {path} returned {status}, which isn't described"
     if "$ref" in spec:
         spec = _pointer(document, spec["$ref"])
     media_type = response["Content-Type"].split(";")[0]
@@ -84,17 +88,19 @@ def test_examples_match_their_schemas(document):
 # --- system: POST /test/setup, GET /test/report -------------------------------------
 
 
-def test_system_setup_responses_are_described(authed, client, monkeypatch):
-    def setup(body, c=authed):
-        return _post(c, "/test/setup", body)
+def _big(client, path):
+    return client.post(path, "x" * 70_000, content_type="application/json")
 
-    assert_described(SYSTEM, "/test/setup", "post", setup({"session_id": "s1", "setup": {}}))
-    assert_described(SYSTEM, "/test/setup", "post", setup({"session_id": "s1"}))  # 409
-    assert_described(SYSTEM, "/test/setup", "post", setup({"session_id": ""}))  # 400
-    assert_described(SYSTEM, "/test/setup", "post", setup({"session_id": "s2"}, client))  # 401
-    big = authed.post("/test/setup", "x" * 70_000, content_type="application/json")
-    assert big.status_code == 413
-    assert_described(SYSTEM, "/test/setup", "post", big)
+
+def test_system_setup_responses_are_described(authed, client, monkeypatch):
+    def check(response, status):
+        assert_described(SYSTEM, "/test/setup", "post", response, status)
+
+    check(_post(authed, "/test/setup", {"session_id": "s1", "setup": {}}), 201)
+    check(_post(authed, "/test/setup", {"session_id": "s1"}), 409)
+    check(_post(authed, "/test/setup", {"session_id": ""}), 400)
+    check(_post(client, "/test/setup", {"session_id": "s2"}), 401)
+    check(_big(authed, "/test/setup"), 413)
 
     from core.models import SystemSession
 
@@ -102,39 +108,49 @@ def test_system_setup_responses_are_described(authed, client, monkeypatch):
         raise RuntimeError("unavailable")
 
     monkeypatch.setattr(SystemSession.objects, "create", crash)
-    crashed = setup({"session_id": "s3"})
-    assert crashed.status_code == 500
-    assert_described(SYSTEM, "/test/setup", "post", crashed)
+    check(_post(authed, "/test/setup", {"session_id": "s3"}), 500)
 
 
 def test_system_report_responses_are_described(authed, client):
     _post(authed, "/test/setup", {"session_id": "s1", "setup": {}})
-    for response in (
-        authed.get("/test/report", {"session_id": "s1"}),  # 200
-        authed.get("/test/report", {"session_id": "nope"}),  # 404
-        authed.get("/test/report"),  # 400
-        client.get("/test/report", {"session_id": "s1"}),  # 401
+    for response, status in (
+        (authed.get("/test/report", {"session_id": "s1"}), 200),
+        (authed.get("/test/report", {"session_id": "nope"}), 404),
+        (authed.get("/test/report"), 400),
+        (client.get("/test/report", {"session_id": "s1"}), 401),
     ):
-        assert_described(SYSTEM, "/test/report", "get", response)
+        assert_described(SYSTEM, "/test/report", "get", response, status)
 
 
 # --- tester: /tester/test/setup, /run, /report --------------------------------------
 
 
 def test_tester_setup_responses_are_described(authed, client, allowed, monkeypatch):
-    calls = {"status": 201}
+    answer = {}
 
     def call(target_url, method, path, body=None, *, timeout):
-        if calls["status"] == 201:
-            return 201, {"session_id": body["session_id"]}
-        return calls["status"], {"message": "Warming up", "source": "unknown"}
+        if "raise" in answer:
+            raise runner.CommunicationError("POST /test/setup failed: URLError")
+        return answer.get("status", 201), answer.get("body", {"session_id": body["session_id"]})
+
+    def check(response, status, **kwargs):
+        assert_described(TESTER, "/test/setup", "post", response, status, **kwargs)
 
     monkeypatch.setattr(runner, "call", call)
-    assert_described(TESTER, "/test/setup", "post", _setup(authed))  # 201
-    assert_described(TESTER, "/test/setup", "post", _setup(authed, "ftp://x"))  # 400
-    assert_described(TESTER, "/test/setup", "post", _setup(client))  # 401
-    calls["status"] = 503
-    assert_described(TESTER, "/test/setup", "post", _setup(authed))  # forwarded
+    check(_setup(authed), 201)
+    check(_setup(authed, "ftp://x"), 400)
+    check(_setup(client), 401)
+    check(_big(authed, "/tester/test/setup"), 413)
+    answer.update(status=503, body={"message": "Warming up", "source": "unknown"})
+    check(_setup(authed), 503, forwarded=True)
+    answer.update(status=201, body={})  # ready, but without the session ID
+    response = _setup(authed)
+    check(response, 500, forwarded=True)
+    assert response.json()["source"] == "system"
+    answer["raise"] = True
+    response = _setup(authed)
+    check(response, 500, forwarded=True)
+    assert response.json()["source"] == "communication"
 
 
 def test_tester_run_and_report_responses_are_described(
@@ -145,22 +161,24 @@ def test_tester_run_and_report_responses_are_described(
     session_id = _setup(authed).json()["session_id"]
     body = {"session_id": session_id}
     report = "/tester/test/report"
-    assert_described(TESTER, "/test/report", "get", authed.get(report, body))  # 409
-    assert_described(TESTER, "/test/run", "post", _post(authed, "/tester/test/run", body))  # 200
-    assert_described(TESTER, "/test/run", "post", _post(authed, "/tester/test/run", body))  # 409
-    for response in (
-        _post(authed, "/tester/test/run", {"session_id": "nope"}),  # 404
-        _post(authed, "/tester/test/run", {}),  # 400
-        _post(client, "/tester/test/run", body),  # 401
-    ):
-        assert_described(TESTER, "/test/run", "post", response)
-    for response in (
-        authed.get(report, body),  # 200
-        authed.get(report, {"session_id": "nope"}),  # 404
-        authed.get(report),  # 400
-        client.get(report, body),  # 401
-    ):
-        assert_described(TESTER, "/test/report", "get", response)
+
+    def run(response, status):
+        assert_described(TESTER, "/test/run", "post", response, status)
+
+    def lookup(response, status):
+        assert_described(TESTER, "/test/report", "get", response, status)
+
+    lookup(authed.get(report, body), 409)
+    run(_post(authed, "/tester/test/run", body), 200)
+    run(_post(authed, "/tester/test/run", body), 409)
+    run(_post(authed, "/tester/test/run", {"session_id": "nope"}), 404)
+    run(_post(authed, "/tester/test/run", {}), 400)
+    run(_post(client, "/tester/test/run", body), 401)
+    run(_big(authed, "/tester/test/run"), 413)
+    lookup(authed.get(report, body), 200)
+    lookup(authed.get(report, {"session_id": "nope"}), 404)
+    lookup(authed.get(report), 400)
+    lookup(client.get(report, body), 401)
 
 
 def test_an_aborted_run_report_is_described(authed, target, no_target, monkeypatch):
@@ -168,10 +186,9 @@ def test_an_aborted_run_report_is_described(authed, target, no_target, monkeypat
     monkeypatch.setattr(runner, "_pytest", _fake_pytest(lines, "timeout"))
     session_id = _setup(authed).json()["session_id"]
     run = _post(authed, "/tester/test/run", {"session_id": session_id})
-    assert run.status_code == 500
-    assert_described(TESTER, "/test/run", "post", run)
+    assert_described(TESTER, "/test/run", "post", run, 500)
     stored = authed.get("/tester/test/report", {"session_id": session_id})
-    assert_described(TESTER, "/test/report", "get", stored)
+    assert_described(TESTER, "/test/report", "get", stored, 200)
     assert [r["outcome"] for r in stored.json()["results"]] == ["pass", "error", "skip", "skip"]
 
 
@@ -181,8 +198,7 @@ def test_a_tester_crash_report_is_described(authed, target, no_target, monkeypat
 
     monkeypatch.setattr(runner, "run_suite", crash)
     session_id = _setup(authed).json()["session_id"]
-    assert_described(
-        TESTER, "/test/run", "post", _post(authed, "/tester/test/run", {"session_id": session_id})
-    )
+    run = _post(authed, "/tester/test/run", {"session_id": session_id})
+    assert_described(TESTER, "/test/run", "post", run, 500)
     stored = authed.get("/tester/test/report", {"session_id": session_id})
-    assert_described(TESTER, "/test/report", "get", stored)
+    assert_described(TESTER, "/test/report", "get", stored, 200)
