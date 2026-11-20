@@ -18,10 +18,11 @@ separate actions. See
 
 ## In progress
 
-- Implementation is prepared on `codex/phase5-model-coverage`, based on fetched
-  main `ecb59a7`, in the reused `work/cra-publish-t5` checkout. Draft publication
-  and current PostgreSQL CI are pending; original Phase 4 branches and the user's
-  original checkout are preserved.
+- Draft [PR #106](https://github.com/team17-ece30861/cra-service/pull/106) is open
+  from `codex/phase5-model-coverage` into main, based on `ecb59a7`, in the reused
+  `work/cra-publish-t5` checkout. Current Linux/PostgreSQL 18 CI is attached to the
+  PR; inspect checks for its exact current head. Original Phase 4 branches and
+  the user's original checkout are preserved.
 - Own-system `coverage.model` uses 44 fixed requirements, 266 scenarios and exact
   test bindings. 141 scenarios are bound; 125 stay unbound/incomplete. A reached
   failed oracle is evaluated, not passing conformance. CI/manual/name inference
@@ -48,10 +49,9 @@ separate actions. See
 
 ## Next up
 
-1. Publish the authorized model-coverage draft into main and inspect current CI.
-   Code still needs posted independent review and passing Linux/PostgreSQL CI
-   before any separately authorized merge. Quincy should review the nonsecret
-   settings and interface changes in his platform area.
+1. Check #106's current-head CI and obtain posted independent review before any
+   separately authorized merge. Quincy should review the nonsecret settings and
+   interface changes in his platform area. This is a draft, not merge approval.
 2. Coordinate with Quincy: confirm own-system bases, publish a version-pinned
    mapping URL, configure it, verify on Launchpad with explicit reset permission,
    and follow his Orbit/shared-copy release process.
