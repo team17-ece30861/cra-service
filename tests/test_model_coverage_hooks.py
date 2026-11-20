@@ -162,9 +162,12 @@ def test_actual_portable_cases_emit_bound_evidence_using_only_local_django(tmp_p
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    assert report["tests_run"] == 222
-    assert (report["passed"], report["failed"], report["skipped"]) == (221, 0, 1)
     planned = [result["test"] for result in report["results"]]
+    assert report["tests_run"] == len(planned) == len(set(planned))
+    assert (report["passed"], report["failed"], report["skipped"]) == (len(planned) - 1, 0, 1)
+    assert [result["test"] for result in report["results"] if result["outcome"] == "skipped"] == [
+        "test_phase3.py::test_ac15_plain_http_is_refused_or_redirected_to_https"
+    ]
     expected = {binding for binding in scenario_bindings().values() if binding is not None}
     assert expected <= set(planned)
     recorded = read_model_journal(journal)
