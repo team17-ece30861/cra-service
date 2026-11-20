@@ -1,71 +1,80 @@
 # Handoff: Richard (Domain Logic and Testing)
 
-## Handed over 2026-11-01 by Quincy's agent (Claude Code)
-
-**Current state:** PRs #77 to #83 are merged (each with an independent agent review posted
-on the PR) and released to Orbit with the rest of Phase 4 on 2026-11-01. The tester (222
-tests) passed 222/222 against Orbit and against Team 21's new deployment; Team 21's suite
-passed 17/17 against Orbit. The notes below are from Richard's last session and predate
-the merges.
-
-**Next up (Phase 5, split agreed 2026-11-01; owners in [`docs/plan.md`](../plan.md)):**
-
-1. **5.4:** the full suite in CI on every change, and against Team 21 before the deadline.
-2. **5.10:**
-   - Phase 4 cases in the shared test file with Team 21 (4.T2).
-   - The pod decision on whether a 422 must list every problem (AC-09, see Q6.2 in the
-     Phase 4 report). Until then a 422 naming at least one problem counts as passing in
-     cross-team runs; loosen or keep our test once the pod decides.
-   - HTTP tester cases for AC-07 and for PATCH/triage 404 and 413 and `DELETE /test/clock`
-     (LIM-11).
-   - The two should-fixes on the generated operation table from PR #83's review (partial
-     runs labeled "finished"; setup-phase failures dropped from the table).
-3. **5.1:** the load script for Quincy's AC-18 run on Orbit.
-4. **5.6 (results part):** the final cross-team results.
-
----
-
-**Last updated:** 2026-11-01 by Codex (Richard's session).
+**Last updated:** 2026-11-20 by Codex with Richard.
 
 ## Where things stand
 
-Feature drafts #77–81 remain unchanged and have passing PostgreSQL CI. Two additional
-one-task drafts are published: #82 (4.T6 audit failures), above #81, and #83 (4.T5
-operation reporting), above #82. Richard explicitly approved these stacked drafts
-and CI, not merges, deployment or shared reset tests.
+Phase 4 is delivered. Main remains `ecb59a7`; no merge or deployment was
+performed. Richard authorized publishing the Phase 5 model-coverage draft and
+checking PostgreSQL CI, then implementing the HTTP test gaps separately. He has
+now authorized publishing the HTTP draft and fixing operation reporting separately.
+Remote reset tests, performance/restart runs and merges remain separate actions.
 
 ## In progress
 
-- #82 c4925ce: PostgreSQL 18 CI passed **1,147 tests, no skips**.
-- #83 application commit 7396445: PostgreSQL 18 CI passed **1,180 tests, no skips**.
-  These are the verified code-run results; current checks/evidence are linked in
-  each PR description. This handoff is a documentation-only follow-up.
-- All 14 operations are reported from safe Service.expect metadata and completed
-  outcomes. Auth-only/untested is not implementation/passing; failed, skipped and
-  unfinished/interrupted teardown is inconclusive. Setup/raw calls are excluded.
-- Local reporting/validator/interface: 65 passed (33 reporting tests). Actual Phase 4
-  hooks: 237 passed, four PostgreSQL-only skips, with real JSON/Markdown output.
-  The 188-case portable collection is not a deployed run.
-- Fresh independent local review found no actionable issues; reviewer reran 40
-  focused tests. That is not posted independent approval. No service, model,
-  helper, migration, workflow, contract or Ann/Quincy handoff changed.
+- Model coverage: draft [PR #106](https://github.com/team17-ece30861/cra-service/pull/106),
+  `codex/phase5-model-coverage`, in `work/cra-publish-t5`. Full Linux/PostgreSQL 18
+  CI passed 1,494 tests on the final compatibility commit `81a05eb`; inspect its
+  current-head CI on the PR before merging. The fixed
+  44-requirement/266-scenario inventory and counting rules are unchanged.
+- Mapping publication/configuration and exact own-target URL confirmation still
+  need Quincy. Until an accessible mapping is configured, own model counts are
+  null with a reason; other-team reports omit model. No deployed result is claimed.
+- HTTP gaps: prepared for authorized draft publication on `codex/phase5-http-gaps`,
+  based directly on main in the reused `work/cra-publish-t6`. New `http_gap_cases.py` plus
+  remote and Django wrappers supply 19 portable cases: AC-07 edits, complete
+  deadline/next-due and exact audit checks, rejected-write rollback, PATCH/triage
+  404/413 precedence, and successful clock release.
+- These 19 pass through Django and real isolated loopback WSGI HTTP. Selected
+  regression: 197 passed, one existing PostgreSQL-only triage-concurrency skip.
+  No skip was added. The full portable suite collects 241 tests.
+- A temporary validation copy combined #106 and these HTTP files: 26 focused
+  model-hook/HTTP tests passed. Its nested portable run passed 240 cases with
+  the one expected HTTPS-only skip, retaining the original model expectations.
+  New HTTP scenarios have no model bindings; do not inflate model coverage.
+- Independent local review corrected a clock-release false pass and a missing
+  `next_due_at` assertion; re-review found no remaining code issue. The stale
+  README count was also corrected. The reviewer is closed. This is not a posted
+  PR approval.
 
 ## Next up
 
-Obtain required posted independent PR reviews and a separate merge go. Retarget
-through main as prerequisites land; do not merge the drafts into feature bases.
-Ann's 4.A5, wider privacy/contract work and actual deployed/cross-team validation
-remain separate. Refresh pod tester only through the agreed release process.
+1. Check #106's exact-head CI; obtain posted independent review and Quincy's
+   platform/configuration review before any separately authorized merge.
+2. Verify the authorized HTTP draft's current Linux/PostgreSQL CI and obtain
+   posted independent review before any separately authorized merge. Preserve the collector
+   test's suite-size compatibility correction when integrating the two changes.
+3. Finish 5.10's operation-table partial-run/setup-failure fixes; shared fixtures
+   and the pod's multiple-problem 422 decision remain outstanding.
+4. 5.1: agree the load protocol before building the script; Quincy runs deployed
+   performance/restart work. 5.4/5.6 still need full and cross-team evidence.
 
 ## Waiting on
 
-Posted approval, current CI checks, teammate/pod integration and Richard's separate
-merge/shared-reset permission. Only Quincy launches Orbit.
+Quincy: accessible version-pinned model mapping/manifest, configured mapping URL,
+confirmed service bases, authorized Launchpad verification and Orbit/shared-copy
+release. Ann/Team 21: remaining contract decisions and shared fixtures. No
+Launchpad, Orbit or Team 21 reset test was run this session.
 
 ## Notes for the next session
 
-The local table honestly leaves DELETE-clock success unobserved and audit 405
-untested because raw PUT/DELETE tests are not GET evidence. Supplied revision
-labels do not verify deployment, and observed status coverage is not full delivery.
-The prior Windows localhost transport failure remains visible; no swallowing or
-retry-until-green. PostgreSQL CI is not Linux/gunicorn/Cloud Run HTTP acceptance.
+The HTTP clock-release oracle brackets service clock/receipt values with the
+runner's independent wall clock, allowing 120 seconds of skew; synchronize both
+real clocks. It verifies advancement and restores FIXED in finally. This is not
+the deployed tester's cleanup/isolation fix.
+
+The first socket attempt failed with sandbox WinError 10013; the permitted client
+to a sandbox server then timed out with WinError 10060. A permitted same-environment
+server/client run passed 19/19. Failed artifacts were preserved separately.
+The test server was stopped. This SQLite/WSGI result does not establish deployed
+Gunicorn/Neon behavior.
+
+Evidence in the parent workspace: `work/phase5-http-live-20261120-c.json`,
+`work/phase5-http-live-20261120-c-operations.md`,
+`work/phase5-http-regression-20261120-final.xml`, and
+`work/phase5-combined-20261120-a.xml`. Model CI metadata/logs are in
+`work/phase5-model-ci.json` and `work/phase5-model-job-*.log`.
+
+No production API code, auth, root contract, workflow, migration, other teammate's
+handoff or shared repository was changed by the HTTP increment. The user's original
+checkout and earlier branches are preserved. Do not claim all Phase 5 is complete.
