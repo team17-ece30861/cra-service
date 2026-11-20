@@ -118,6 +118,24 @@ do not masquerade as GET audit 405 observations in this table. Its 405 status
 therefore remains explicitly untested here. Statuses and list filters are covered by
 `listing_cases.py` (PR #84).
 
+## Phase 5 model-evaluation evidence
+
+The approved [design mapping](../docs/model-coverage.md) and
+`model_requirements.json` define 44 requirements and 266 fixed scenarios. Explicit
+assertion checkpoints record evaluations, not pass-rate or implementation claims.
+No test-name inference or historical CI results fill untested scenarios.
+
+The deployed course tester includes `coverage.model` for explicitly configured
+own-system targets and omits it for other teams. A published mapping URL must be
+configured before claiming a usable measure; see the design mapping for settings
+and release gates. The standalone JSON carries safe per-result `model_evidence`
+plus version/availability metadata. Optional `--model-progress FILE` flushes that
+evidence as each oracle completes, so an abort can retain it before teardown.
+
+These counts differ from the operation table: a failed comparison evaluates a
+design scenario but does not establish passing conformance. CI-only checks,
+skipped work, missing bindings and manual demos do not become suite evidence.
+
 ## Results
 
 The suite collects 222 cases (59 Phase 3/audit, 32 drafts, 63 submissions, 34 closure, 22
@@ -142,6 +160,8 @@ curl -X DELETE "$CRA_BASE_URL/test/clock" -H "Authorization: Bearer $CRA_API_TOK
 | `cases.py` | The test cases, shared by the HTTP and in-process runs |
 | `client.py` | HTTP transport, response checks and safe observation metadata |
 | `reporting.py` | Pure operation evidence aggregation and Markdown rendering |
+| `model_coverage.py` | Explicit design evaluations, abort journal and own-model aggregation |
+| `model_requirements.json` | Versioned 44-requirement / 266-scenario design and exact bindings |
 | `conftest.py` | Safety options, completed-test observations and JSON/table exports |
 | `test_phase3.py` | HTTP entry point, including the plain-HTTP (AC-15) probe |
 | `draft_cases.py` | Live-draft cases shared by local Django and HTTP runs |
