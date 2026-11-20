@@ -19,6 +19,8 @@ from urllib.request import Request, urlopen
 
 from django.conf import settings
 
+from acceptance.model_coverage import canonical_base_url, model_measure, read_model_journal
+
 logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +66,23 @@ def target_token(target_url: str) -> str | None:
     if host.split(":")[0] in settings.ALLOWED_HOSTS:
         return settings.API_TOKENS.get(SELF_CLIENT)
     return None
+
+
+def own_target(target_url: str) -> bool:
+    canonical = canonical_base_url(target_url)
+    configured = getattr(settings, "TESTER_OWN_SYSTEM_URLS", [])
+    if canonical is None or not isinstance(configured, (list, tuple)):
+        return False
+    return canonical in {
+        normalized for value in configured if (normalized := canonical_base_url(value)) is not None
+    }
+
+
+def _add_model_measure(report, target_url, planned, evidence=None):
+    if own_target(target_url):
+        report["coverage"]["model"] = model_measure(
+            evidence, planned, getattr(settings, "TESTER_MODEL_MAPPING_URL", "")
+        )
 
 
 def call(target_url: str, method: str, path: str, body=None, *, timeout: int):
@@ -223,6 +242,7 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
     with tempfile.TemporaryDirectory() as tmp:
         report_path = Path(tmp) / "report.json"
         progress_path = Path(tmp) / "progress.jsonl"
+        model_progress_path = Path(tmp) / "model-progress.jsonl"
         token = target_token(target_url) or "no-token-configured"
         try:
             done = _pytest(
@@ -234,6 +254,8 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
                 str(report_path),
                 "--progress",
                 str(progress_path),
+                "--model-progress",
+                str(model_progress_path),
                 env=_child_env(token),
                 timeout=SUITE_TIMEOUT,
             )
@@ -242,6 +264,18 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
         except subprocess.TimeoutExpired:
             aborted = f"The test suite did not finish within {SUITE_TIMEOUT} seconds"
         entries = _recorded_entries(report_path, progress_path)
+        model_evidence = read_model_journal(model_progress_path)
+        if report_path.exists():
+            try:
+                saved_report = json.loads(report_path.read_text(encoding="utf-8"))
+                if isinstance(saved_report, dict) and (
+                    saved_report.get("model_evidence_available") is False
+                    or saved_report.get("model_evidence_version", model_evidence["version"])
+                    != model_evidence["version"]
+                ):
+                    model_evidence["available"] = False
+            except (OSError, ValueError, AttributeError):
+                saved_report = None
     if aborted:
         logger.error("Tester session %s aborted: %s", session_id, aborted)
     results = [_result(test_id, entries.get(test_id)) for test_id in planned]
@@ -261,6 +295,7 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
             "system": _system_coverage(results),
         },
     }
+    _add_model_measure(report, target_url, planned, model_evidence)
     return report, aborted
 
 
@@ -273,9 +308,11 @@ def failed_report(session_id: str, target_url: str, aborted: str) -> dict:
     except Exception:
         planned = []
     unavailable = {"covered": None, "total": None, "basis": f"Not measured: {aborted}"}
-    return {
+    report = {
         "session_id": session_id,
         "target_url": target_url,
         "results": _mark_abort([_result(t, None) for t in planned], {}, aborted),
         "coverage": {"code": unavailable, "component": unavailable, "system": unavailable},
     }
+    _add_model_measure(report, target_url, planned)
+    return report

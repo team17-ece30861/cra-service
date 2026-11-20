@@ -214,7 +214,7 @@ against Team 21 before each deadline.
 | 5.1 | AC-18 performance on Orbit: load 1,000 tickets, then 200 mixed requests one at a time, p95 ≤ 1 s. Orbit scales to zero and Neon suspends when idle, so warm both with a few requests before measuring and report cold-start numbers separately. If p95 still fails, check query counts on `GET /tickets` first, then consider a temporary minimum instance for the evaluation window. | Quincy (stress testing), Richard (load script) | To do |
 | 5.2 | AC-19 restart demo: create a ticket with a recorded report, force a new revision (redeploy, or `gcloud run services update` with a harmless env change), read the ticket, report, and audit log back unchanged. Screen-record it. | Quincy | To do |
 | 5.3 | Our own intake channel (team's choice, outside the shared spec). If behind, cut it to "clients call `POST /tickets` directly" (Q6.4). | Quincy | Moved up to Phase 4 as the console (4.U1 to U4) on 2026-10-26. Phase 5 finishes it. |
-| 5.4 | Full suite (AC-01 to 18) runs in CI on every change, and against Team 21 before each deadline. | Richard | To do |
+| 5.4 | Full suite (AC-01 to 18) runs in CI on every change, and against Team 21 before each deadline. | Richard | In progress: local own-system model-coverage increment implemented 2026-11-19; full Phase 5 CI and deployed/cross-team evidence remain pending. |
 | 5.5 | Short operations guide: deploy, roll back, rotate tokens, lift the spend cap, read logs. Mostly a trim of [platform.md](platform.md). | Ann | To do |
 | 5.6 | Final spec version agreed with Team 21; final cross-team results recorded. | Ann (spec), Richard (results) | To do |
 | 5.7 | Console without page reloads (Quincy, 2026-11-01): saving a sheet (New/Edit Ticket, Triage, Record Submission, Close) updates the page in place, as the prototype does, instead of reloading the window to show the toast. Lists, the ticket page, the island and dock counts refresh in place. Keep the no-JavaScript fallback, one change per request, and Back/Forward working. Good moment to merge the two sheet systems and the two toast mechanisms (`ledger.js` "Sheets (PR 2)" and `reports.js`). | Quincy | To do |
@@ -222,6 +222,19 @@ against Team 21 before each deadline.
 | 5.9 | Carried over from Phase 4, contract and API: contract PRs for Q7 (422 for a future fix time on submit) and Q9 (allow "unknown" for an early warning; settle the exact form first) with Team 21's approval, then the code and the Model C table; raise Q8 with Team 21 and word the answer into the spec; mirror the frozen contract into this repo once `pod-k-shared` #14 merges; our own AC-13 run with Schemathesis (4.A6). | Ann | To do |
 | 5.10 | Carried over from Phase 4, testing: Phase 4 cases in the shared test file with Team 21 (4.T2); the pod decision on whether a 422 must list every problem, then loosen or keep our test; HTTP tester cases for AC-07 and for PATCH/triage 404 and 413 and `DELETE /test/clock` (LIM-11); the two fixes to the generated operation table (PR #83). | Richard | To do |
 | 5.11 | Gaps against the course's "Cross-team Testing Interface" document, found 2026-11-02: (a) when the deployed tester aborts, keep the outcomes already recorded, mark the test it interrupted `error` with source `tester` and the rest `skip` (a timeout used to lose every result); (b) `message` and `source` on every error from `/test/setup`, `/test/report` and `/tester/*`, including 401s, unknown routes and crashes; (c) OpenAPI descriptions of our tester's three endpoints and the system's `/test/setup` and `/test/report`, published in `pod-k-shared/team17/`. | Quincy | (a) and (b): PR #103; (c): PR #104 |
+
+**Course testing interface v2 (2026-11-19):** Richard approved local implementation
+of [own-system model coverage](model-coverage.md), with 44 versioned requirements,
+266 scenarios and explicit evaluation evidence. This extends the testing work in
+5.4; the complete suite and other Phase 5 tasks are not thereby complete. Quincy's
+interface/configuration review and release coordination remain required. No pod
+project-contract change, shared-target run or deployment is included in that
+approval. Unbound/CI-only scenarios stay visible rather than receiving credit.
+
+The old 5.8 phrase "returning before a long run ends" must be reconciled with v2:
+tester run waits for the suite and returns the complete report. A client that loses
+the response retrieves the stored report instead of sending run again. This
+increment keeps the synchronous interface; discuss platform changes with Quincy.
 
 ### If we fall behind
 

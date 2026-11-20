@@ -7,11 +7,14 @@ from pathlib import Path
 import pytest
 
 from acceptance.client import Contract, HTTPTransport, Service
+from acceptance.model_coverage import DESIGN_VERSION, ModelJournal, record_model_test
 from acceptance.reporting import operation_statuses, render_operation_table
 
 RESULTS = {}
 STARTED = None
 PROGRESS = None  # --progress path: one JSON line per finished test, written as it finishes
+MODEL_JOURNAL = None
+MODEL_RECORDER = pytest.StashKey()
 
 
 def pytest_addoption(parser):
@@ -25,6 +28,9 @@ def pytest_addoption(parser):
     parser.addoption("--report", default=None, help="Write a JSON result report")
     parser.addoption("--operation-report", default=None, help="Write a Markdown operation table")
     parser.addoption(
+        "--model-progress", default=None, help="Write session model-evaluation evidence"
+    )
+    parser.addoption(
         "--progress",
         default=None,
         help="Append each finished test's result to this JSON Lines file as it finishes, "
@@ -33,10 +39,11 @@ def pytest_addoption(parser):
 
 
 def pytest_sessionstart(session):
-    global STARTED, PROGRESS
+    global STARTED, PROGRESS, MODEL_JOURNAL
     config = session.config
     STARTED = None
     PROGRESS = None
+    MODEL_JOURNAL = None
     RESULTS.clear()
     if config.option.collectonly:
         return
@@ -54,6 +61,7 @@ def pytest_sessionstart(session):
     except ValueError as error:
         raise pytest.UsageError(str(error)) from None
     STARTED = time.time()
+    MODEL_JOURNAL = ModelJournal(config.getoption("--model-progress"))
     if config.getoption("--progress"):
         PROGRESS = Path(config.getoption("--progress"))
         PROGRESS.parent.mkdir(parents=True, exist_ok=True)
@@ -65,9 +73,19 @@ def service(pytestconfig):
 
 
 @pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    journal = MODEL_JOURNAL if MODEL_JOURNAL is not None else ModelJournal()
+    with record_model_test(item.nodeid, journal) as recorder:
+        item.stash[MODEL_RECORDER] = recorder
+        yield
+
+
+@pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
+    if report.when == "call" and MODEL_RECORDER in item.stash:
+        report.user_properties.append(("model_evidence", item.stash[MODEL_RECORDER].evidence()))
     service = item.funcargs.get("service")
     if service is None:
         return
@@ -87,6 +105,7 @@ def pytest_runtest_logreport(report):
         entry["teardown_complete"] = True
     if report.when == "call":
         entry["operation_checks"] = dict(report.user_properties).get("operation_checks", [])
+        entry["model_evidence"] = dict(report.user_properties).get("model_evidence")
     if report.failed and "message" not in entry:
         crash = getattr(report.longrepr, "reprcrash", None)
         entry["message"] = crash.message if crash else str(report.longrepr)[-500:]
@@ -119,6 +138,8 @@ def pytest_sessionfinish(session, exitstatus):
         "code_coverage": "not measured by external HTTP tests",
         "results": results,
         "operations": operations,
+        "model_evidence_version": DESIGN_VERSION,
+        "model_evidence_available": MODEL_JOURNAL is not None and MODEL_JOURNAL.available,
     }
     if destination is not None:
         path = Path(destination)
