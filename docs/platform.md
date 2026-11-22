@@ -100,9 +100,10 @@ To read a token: `gcloud secrets versions access latest --secret=SECRET`.
 ### Rotating a token
 
 Rotate a client's token if it leaks or someone who had it leaves. Other clients are
-not affected. The old token stops working as soon as a new instance starts, and there's
-no overlap period. With min instances 0, that can be the next cold start, before you
-redeploy. Tell the client before you start, and finish all the steps together.
+not affected. Existing instances keep cached tokens; new instances read `latest` at
+startup, so a cold start can change the accepted token before redeployment. Different
+instances may temporarily accept different versions. Tell the client before starting
+and coordinate the handoff without an active deployed-tester run.
 
 ```bash
 SECRET=prod-api-token-team21    # the client's secret, from the table above
@@ -114,18 +115,31 @@ printf '%s' "$(openssl rand -hex 32)" | gcloud secrets versions add "$SECRET" --
 gcloud secrets versions list "$SECRET"
 ```
 
-3. **Redeploy**, so every instance reads the new version: **Launch to Orbit** for a
+3. **Redeploy** a replacement revision that reads the new version: **Launch to Orbit** for a
    `prod-` secret, or re-run the latest CI run on `main` for `dev-api-token`. If traffic
    is pinned (see [Rolling back](#rolling-back)), the new revision gets no traffic. The
-   pinned revision picks up the new token only as its instances restart.
+   pinned revision picks up the new token only as its instances restart. Follow the
+   [operations guide's pinned-traffic procedure](operations.md#rotate-an-api-token):
+   fix or revert on `main`, validate on Launchpad and, for Orbit, have Quincy launch
+   that code there. Move traffic to the verified ready revision. Only Quincy launches Orbit,
+   including recovery and rotation; agents never launch it. Do not unpin to an unfixed
+   latest revision or treat the old revision's `/health` result as a new-revision check.
 4. **Send the client the new token** privately, never in an issue, PR, or shared
    channel: `gcloud secrets versions access latest --secret="$SECRET"`.
-5. **Confirm it works, then destroy the old version:**
+5. **Verify traffic and both tokens before retiring the old version.** Confirm traffic
+   has finished moving to the verified replacement, the new token works and the old
+   token receives 401, following the operations guide. Set `HOST` from `PROD_HOST` or
+   `DEV_HOST`, and capture `NEW_TOKEN` privately before the check below. Only after all
+   checks pass, retire the old version:
 
    ```bash
+   NEW_TOKEN=$(gcloud secrets versions access latest --secret="$SECRET")
    curl -fsS -H "Authorization: Bearer $NEW_TOKEN" "https://$HOST/test/clock"
    gcloud secrets versions destroy OLD_VERSION --secret="$SECRET"
    ```
+
+   Disabling or destroying a secret version does not invalidate values already cached
+   in running instances.
 
    Destroy only the old version. If a mapped secret has no version the service can
    read, new instances fail to start. Destroy rather than disable: Secret Manager bills
@@ -230,16 +244,12 @@ Before you rely on a rollback, check the following.
   Don't run this before the fix is deployed: until then, the latest revision is the
   broken one.
 - **The database is not rolled back.** The old revision runs against the current schema.
-  That works if the migration followed the backward-compatibility rule above. If it
-  didn't, reverse the migration with the migrate job, which still holds the newer
-  image that contains the migration files:
-
-  ```bash
-  gcloud run jobs execute "$SERVICE-migrate" --region "$REGION" --wait \
-    --args="manage.py,migrate,core,<last good migration>,--noinput"
-  ```
-
-  Reversing a migration that dropped data does not bring the data back.
+  Confirm the target schema remains compatible before reversing anything. The migrate
+  job's image may have changed since the failed release; verify that it contains the
+  migrations being reversed and their dependencies. Follow the
+  [operations guide's app-specific plan and rollback](operations.md#roll-back), choosing
+  `core`, `console` or `tester` and a target migration, and reviewing dependent apps
+  before execution. Reversing a migration that dropped data does not bring the data back.
 - **Old images expire.** The cleanup policy keeps only the 2 most recent images per
   environment, so the previous deploy is normally still available. For anything older,
   check that the revision's image still exists before relying on it:
@@ -354,7 +364,7 @@ project (billed separately by Neon). Then check Billing → Reports for anything
 |---|---|
 | **Max 1 instance** | `--max-instances 1` on both services, so Cloud Run never scales out. |
 | **Scale to zero** | `--min-instances 0` and `--cpu-throttling`: no instance runs while idle, and CPU is billed only while a request is in flight. |
-| **$10 Cloud Run spend cap** | If Cloud Run spend reaches $10, the cap stops serving. It does not reset on its own, so someone has to lift it manually (see [Known limitations](#known-limitations)). |
+| **Recorded $10 Cloud Run spend cap** | Live budget type, scope, period and enforcement need Quincy's confirmation. Built-in spend-cap budgets reset next period; alerts-only budgets do not stop usage. See the [operations recovery procedure](operations.md#lift-the-spend-cap). |
 | **$1 alert budget** | A budget alert fires at $1 of spend, long before the cap. |
 | **5xx email alert** | Cloud Monitoring policies "Team 17: server errors on team17-prod" and "... on team17-dev" email the platform owner when a service returns any 5xx in a 5-minute window (`run.googleapis.com/request_count`, `response_code_class="5xx"`); the incident closes after 30 minutes without server errors. Created and updated by `scripts/create_5xx_alert.sh EMAIL` (PR #118); rerunning it updates the policies in place. Read the error in Cloud Logging with `severity>=ERROR` for that service. |
 | **Image cleanup** | Artifact Registry policy (`deploy/cleanup.json`): keep the 2 newest images per environment, delete the rest once they're 7 days old. See [Container images](#container-images). |
@@ -379,8 +389,11 @@ project (billed separately by Neon). Then check Billing → Reports for anything
 - **`/health` doesn't check the database.** A 200 means the container is up and Django
   loaded. It doesn't mean Neon is reachable or migrations are applied. The deploy smoke
   test has the same limit.
-- **The spend cap stops Orbit.** If the $10 Cloud Run cap ever triggers, Orbit stops
-  serving until someone lifts the cap manually.
+- **Cost controls can interrupt Orbit.** Confirm which control is enforced before
+  recovery. Google's built-in spend-cap budgets resume paused usage next budget period
+  or after manual lifting; custom shutdown automation can differ. Live settings are
+  not captured here; Quincy checks them using the
+  [operations guide](operations.md#lift-the-spend-cap).
 - **One hostname per service.** Django accepts only the hostname in `DEV_HOST`/
   `PROD_HOST`. Cloud Run also gives each service a second URL of the form
   `https://team17-ENV-<project number>.us-central1.run.app`. That URL reaches the same

@@ -4,41 +4,35 @@
 
 ## Where things stand
 
-All three of Richard's Phase 5 PRs are merged and on Launchpad: own-system model
-coverage (#106), the HTTP-gap cases (#107), and the operation-table fixes (#108), each
-with review fixes from Quincy's agent. The mapping URL is pinned in #114, so own-system
-reports carry numeric `coverage.model` counts. Quincy's agent built the AC-18 load script
-(#110).
+Phase 5 results and report are published on main (#122): see `docs/system.md` and
+`docs/reports/phase5.md`. Quincy's handoff records Orbit's tested release `c875f14`,
+our suite 233/241 against Team 21 and their published tester 17/17 against Orbit.
+Richard's #106, #107, #108 and AC-13 safety follow-up #120 are merged. #120 passed
+1,706 CI tests and independent review; do not claim it was in that Orbit release.
 
 ## In progress
 
-`codex/phase5-malformed-safety`: separate draft follow-up to #113 (5.9 / AC-13).
-Failure exports omit target bodies and arbitrary diagnostic text; report-write errors
-cannot bypass reset or clock release. 22 local synthetic regression cases and both
-existing generation/response/state checks pass (Python 3.14/SQLite), with lint/format
-and migration checks. Independent review and Python 3.12/Postgres CI are
-required before merge. No deployment or remote reset run is authorized by this work.
+`codex/phase5-operations-corrections`: separate docs-only follow-up to the four #117
+audit findings (5.5). Corrects pinned-traffic rotation, app-specific migration rollback,
+Orbit authority and budget reset wording in `docs/operations.md` and `docs/platform.md`.
+Draft PR, CI and fresh independent review before handoff; no merge authorized here.
 
 ## Next up
 
-1. 5.10 leftovers: the shared fixtures with Team 21 (4.T2). The pod's 422 question is
-   settled (a 422 lists every problem, contract 0.3.0).
-
-(Updated by Quincy's agent, 2026-11-22: the AC-13 safety PR merged as #120, and the 5.6
-cross-team results are recorded in `docs/system.md` and the Phase 5 report: our suite
-233 of 241 against Team 21, Team 21's tester 17 of 17 against Orbit.)
+1. Richard's own Q8.1 GenAI-use paragraph for the Phase 5 report; Quincy is waiting for
+   Richard and Ann before submission.
+2. Hand off the operations-docs draft. Quincy must confirm actual live spend-cap
+   settings; the repository records $10 but contains no budget configuration.
+3. 5.10 shared fixtures with Team 21 (4.T2). The 422 question is settled in contract 0.3.0.
 
 ## Waiting on
 
-Team 21: shared fixtures.
+Quincy: live budget mechanism/settings and operations procedures. Team 21: shared fixtures.
 
 ## Notes for the next session
 
-- Model coverage counts evaluated design scenarios, not passes: don't present the counts
-  as delivered or passing requirements.
-- The clock-release case compares against the runner's wall clock with 120 s skew;
-  keep the runner and target clocks in sync.
-- New HTTP-gap cases have no model bindings yet; add them only with a design-version
-  update.
-- The #117 operations-guide audit has separate follow-ups; they are outside this code
-  draft. Refresh the public tester copy with Quincy's release process after a merge.
+- This session edits docs only. No cloud commands, secret reads, token rotation,
+  migrations, deployments or remote tests were executed.
+- Model coverage counts evaluated scenarios, not passing requirements. New HTTP-gap
+  bindings need a design-version update.
+- Only Quincy launches Orbit. Shared tester refresh follows his release coordination.
