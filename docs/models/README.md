@@ -21,6 +21,7 @@ checked all three against the code on 2026-11-01; its findings were fixed before
 | B. Report status (state machine) | No | Unchanged. | `model-b-report-status.*` |
 | C. Required fields per draft (table) | Yes | The early warning's member states may be exactly `["unknown"]`, which counts as filled in, because Art. 14(2)(a) asks for them only "where applicable" (Q9, contract 0.3.0). | `docs/spec.md` |
 | D. Deadline examples (table) | No (wording) | The examples are unchanged; the fix time is now defined as the first corrective or mitigating measure (Q8), which changes no example. | `docs/spec.md` |
+| E. Deployed tester run (state machine) | New | The behavioral model for Phase 5's tester changes: `ready` → `running` → `finished`, one running session at a time, a heartbeat, and recovery of a run cut off by a restart; failure paths dotted. | `model-e-tester-run.*` |
 | Section 7.1 architecture and data flow (component diagram) | Yes | Adds what Phase 5 delivered: gzip in the middleware, the console's sign-in lockout (`SignInFailure` table) and in-place saves, the deployed tester's one-run rule, heartbeat and cleanup, kept database connections, and the Cloud Monitoring alert that emails Team 17 on any 5xx. | `architecture.*` |
 
 | Model | Changed in Phase 4 | What changed and why | Files |

@@ -27,7 +27,7 @@ REQ-16 - Test controls │ Status: complete │ Demonstrated by: AC-17; our depl
 
 ## Q1.2 Comparison with the Phase 2 plan
 
-We delivered the Phase 5 milestone in Phase 2, Section 6.3: the performance target with 1,000 tickets (REQ-17, AC-18, p95 736 ms on the evaluation deployment), persistence across restarts (REQ-18, AC-19, recorded), each team's own intake channel (our console, finished now), and a stable final version with the full suite running in CI on every change and against Team 21 before the deadline, plus the four items that slipped from Phase 4 (our own generated malformed requests for AC-13, the server-error alert, the early performance check, and the pod follow-ups Q7 to Q9). Nothing planned for Phase 5 was left out, and there were no instructor-required scope changes. One plan item needed rework for a concrete reason: AC-18 first failed on our development deployment early on November 22 (p95 1.37 s) because every request opened a new database connection (about 190 ms) and the full ticket list was 1.7 MB, so we kept connections open and compressed responses, after which it passed. One process deviation also had a concrete cause: Team 21 didn't review the contract PRs or answer the workaround question after their November 1 email, so on November 22 Team 17 merged the 0.2.0 freeze (pod-k-shared #14) and 0.3.0 (#20) itself, citing that email, and recorded the workaround answer as its own decision (Q3.2).
+We delivered the Phase 5 milestone in Phase 2, Section 6.3: the performance target with 1,000 tickets (REQ-17, AC-18, p95 736 ms on the evaluation deployment), persistence across restarts (REQ-18, AC-19, recorded), each team's own intake channel (our console, finished now), and a stable final version with the full suite running in CI on every change and against Team 21 on November 22, plus the four items that slipped from Phase 4 (our own generated malformed requests for AC-13, the server-error alert, the early performance check, and the pod follow-ups Q7 to Q9). Nothing planned for Phase 5 was left out, and there were no instructor-required scope changes. One plan item needed rework for a concrete reason: AC-18 first failed on our development deployment early on November 22 (p95 1.37 s) because every request opened a new database connection, which made even a simple read take about 190 ms on the server, and the full ticket list was 1.7 MB, so we kept connections open and compressed responses, after which a simple read took about 40 ms and AC-18 passed. One process deviation also had a concrete cause: Team 21 didn't review the contract PRs or answer the workaround question after their November 1 email, so on November 22 Team 17 merged the 0.2.0 freeze (pod-k-shared #14) and 0.3.0 (#20) itself, citing that email, and recorded the workaround answer as its own decision (Q3.2).
 
 ## Q2.1 Deployed web service
 
@@ -41,7 +41,7 @@ Team documentation: https://github.com/team17-ece30861/pod-k-shared/blob/main/te
 
 ## Q2.3 Operational experience supported by observability evidence
 
-Our Phase 2 plan held through the final phase: tickets, recorded reports and audit entries live in a persistent Neon PostgreSQL database that survives restarts and redeploys (shown by the AC-19 recording) and change only through the API, the console, or the pod's test reset, which clears tickets, reports and audit entries but keeps test sessions; our deployed tester now resets the target and releases its clock after each run. Secrets live in Google Secret Manager [6] and are injected at deploy time, one API token per client, and GitHub Actions deploys through Workload Identity Federation without stored keys; no secret is in the repository or this report. To detect failures, the access log records every request with the name of the client whose token matched (never the token), the application logs rejected requests and a stack trace without request data for any server error, Cloud Run's request log records status and latency, and, new this phase, a Cloud Monitoring alert [7] emails the team within 5 minutes of any 5xx response on either deployment (the one change from the Phase 2 plan, which had no automated alert). From the Phase 5 release to 1:33 PM Eastern on November 22, the evaluation deployment logged 0 server errors and 1,908 client errors, all from deliberate test runs (for example, the 683 malformed requests).
+Our Phase 2 plan held through the final phase with one addition, described below: tickets, recorded reports and audit entries live in a persistent Neon PostgreSQL database that survives restarts and redeploys (shown by the AC-19 recording) and change only through the API, the console, or the pod's test reset, which clears tickets, reports and audit entries but keeps test sessions; our deployed tester now resets the target and releases its clock after each run. Secrets live in Google Secret Manager [6] and are injected at deploy time, one API token per client, and GitHub Actions deploys through Workload Identity Federation without stored keys; no secret is in the repository or this report. To detect failures, the access log records every request with the name of the client whose token matched (never the token), the application logs rejected requests and a stack trace without request data for any server error, Cloud Run's request log records status and latency, and, new this phase, a Cloud Monitoring alert [7] emails the team within 5 minutes of any 5xx response on either deployment (the addition: the Phase 2 plan had no automated alert). From the Phase 5 release to 1:33 PM Eastern on November 22, the evaluation deployment logged 0 server errors and 1,908 client errors, all from deliberate test runs (for example, the 683 malformed requests).
 
 Excerpt from the evaluation deployment, November 22, 2026, end of the AC-18 run (12:26 PM Eastern; times in UTC):
 
@@ -55,7 +55,7 @@ Alert policy "Team 17: server errors on team17-prod" (any 5xx in 5 min → email
 
 ## Q3.1 Operation status
 
-Generated by our tester from its command-line run against the evaluation deployment at `c875f14` on November 22, 2026 (240 of 241 tests passed; the one error was a client-side network timeout, see Q4.5). "Checked" lists the status codes the tester observed for each operation, every response body was validated against the contract, and nothing is reported as passing that wasn't observed.
+Generated by our tester from its command-line run against the evaluation deployment at `c875f14` on November 22, 2026 (240 of 241 passed, see Q4.5), where "checked" lists the status codes it observed, every response body was validated against the contract, and nothing unobserved is reported as passing.
 
 GET /health │ Requirement(s): none (public health check) │ Implemented: yes │ Success responses conform: yes │ Error responses conform: none defined in the contract
 
@@ -95,19 +95,17 @@ Integration: Phase 5 added no new operations. The future-fix-time rule and `["un
 
 **Pod agreement:** Team 21 agreed to Q1 to Q6, Q10, Q7 and Q9 by email on November 1, 2026 (replying to our October 27 email), while Q8 and the 422 rule went unanswered and are Team 17's decisions; because Team 21 didn't review the pull requests, Team 17 merged both (pod-k-shared #14 for 0.2.0 and #20 for 0.3.0) on November 22, 2026, with a merge note citing the November 1 email and stating that either change reopens if Team 21 objects.
 
-**Intentional deviations and resolution plan:** None; the evaluation deployment at `c875f14` implements contract 0.3.0 as published.
+**Intentional deviations and resolution plan:** None; the evaluation deployment at `c875f14` implements contract 0.3.0 as published, and the two interface-related limitations in Q7.2 aren't deviations: LIM-10 happens in Google's front end for a request the contract never defines (a GET with a body), and LIM-07 concerns audit detail the contract leaves open.
 
 ## Q4.1 Test runner and execution instructions
 
 **Base URL override:** Point the suite at https://team17-prod-7zneiwx4ba-uc.a.run.app (the base URL, no path prefix) and send "Authorization: Bearer <token>" on every request except GET /health. Our own tester takes any team's base URL through the CRA_BASE_URL environment variable or the --base-url option, with no code changes, and our deployed tester takes it as `target_url` in POST https://team17-prod-7zneiwx4ba-uc.a.run.app/tester/test/setup. │ **Response received:** GET /health → 200 `{"status": "ok"}`; an authenticated GET /tickets → 200 with a JSON array of tickets (captured November 22, 2026) │ **Conforms to spec:** yes
 
-**Known deviations from the OpenAPI spec:** none (contract 0.3.0, as in Q3.2).
+**Known deviations from the OpenAPI spec:** none (contract 0.3.0; LIM-07 and LIM-10 are not deviations, for the reasons in Q3.2).
 
 ## Q4.2 Tests for new functionality
 
-Every AC of the REQs completed in Phase 5 maps to a named test. All run through the common interface except where marked CI only.
-
-Carried-forward ACs of the REQs we touched this phase, all rerun over HTTP in the 241-test suite (`acceptance/cases.py` and `acceptance/submission_cases.py`; Q4.5):
+Every AC of the REQs in Q1.1, with its named tests; the carried-forward ones rerun over HTTP in the 241-test suite (`acceptance/cases.py`, `acceptance/submission_cases.py`):
 
 AC-01 │ Requirement(s): REQ-01, REQ-13 │ Test(s): `test_ac01_intake_has_unique_ids_and_fixed_receipt_time` │ Type: success │ Automated: yes
 
@@ -131,8 +129,6 @@ AC-07 │ Requirement(s): REQ-06 │ Test(s): `acceptance/http_gap_cases.py`: `t
 
 Q7 (REQ-01), Q9 (REQ-08) │ Test(s): `tests/test_contract_030.py::TestSubmitFutureFixTime` (`test_later_than_now_is_422_and_stores_nothing`, `test_equal_to_or_before_now_is_accepted`), `::TestUnknownMemberStates` (`test_submit_accepts_and_echoes_unknown`, `test_unknown_mixed_or_repeated_is_400_on_member_states`), `::TestUnknownMemberStatesInReports`, `::test_update_422_lists_every_rule_problem` │ Type: failure (422), boundary (equal to now), success (`["unknown"]`) │ Automated: yes (CI only, through the API with Django's test client; kept out of the cross-team suite until Team 21 deploys 0.3.0)
 
-Console lockout (LIM-12) and in-place saves (5.7) │ Test(s): `tests/test_console_lockout.py` (for example `test_the_fifth_failure_locks_with_the_generic_message`, `test_the_test_clock_has_no_effect`), `tests/test_console_forms.py` and `tests/test_console_reports.py` (saves return the updated page, refused saves change nothing) │ Type: success, failure │ Automated: yes (server tests), plus browser screenshots at 1280 and 390 px
-
 **Oracles:** Every run starts with `POST /test/reset` and a fixed test clock, so results are deterministic, and as in earlier phases expected values come from the pod spec worked out by hand, never from our service's output: deadlines from Model D, required fields from Model C, status codes and their order from the OpenAPI contract, which our tester uses to validate every response. AC-18's oracle is the spec's own threshold (p95 ≤ 1 s) on latencies measured by the client, with a status check on every request so a fast error can't pass; AC-19 compares the raw responses before and after the restart byte-for-byte; AC-13's oracle is the contract itself (any 2xx or 5xx, an undocumented status, a non-problem+json body, or a changed row count fails).
 
 ## Q4.3 Regression and static checks
@@ -143,7 +139,7 @@ CI run: https://github.com/team17-ece30861/cra-service/actions/runs/45046366880
 
 ## Q4.4 Static checks
 
-Our static checks are unchanged since Phase 3 except for one addition: CI still runs ruff (linting and formatting), a check for missing migrations, Django's system checks, and contract validation of every tester response, and Dependabot alerts and secret scanning with push protection are on; new this phase, Schemathesis [8] reads the OpenAPI file and generates requests from it in CI. We still don't use a type checker or pre-commit hooks. A failing check blocks merging and deploying.
+Our static checks are unchanged since Phase 4: CI runs ruff (linting and formatting) and a check for missing migrations, then Django's system checks, on every push and pull request, and GitHub's Dependabot alerts and secret scanning with push protection run on every push. We still don't use a type checker or pre-commit hooks. A failing check blocks merging, and since the evaluation release step reruns CI, it also blocks deploying.
 
 CI run: https://github.com/team17-ece30861/cra-service/actions/runs/45046366880
 
@@ -161,34 +157,36 @@ Model B: Report status (state machine) │ Changed: no │ What changed and why:
 
 Model C: Required fields per draft (table) │ Changed: yes │ What changed and why: the early warning's member states may now be `["unknown"]`, which counts as filled in, because Art. 14(2)(a) [1] asks for them only "where applicable" (pod Q9). │ Location: https://github.com/team17-ece30861/pod-k-shared/blob/main/spec.md (Model C table, `member_states` row)
 
-Model D: Deadline examples (table) │ Changed: no (wording) │ What changed and why: the examples are unchanged; the definition of the fix time now says "first corrective or mitigating measure" (Q8), which doesn't change any example. │ Location: pod-k-shared spec.md
+Model D: Deadline examples (table) │ Changed: no │ What changed and why: no example changed; only the wording of the definition of the fix time now says "first corrective or mitigating measure" (Q8), which doesn't change any example. │ Location: pod-k-shared spec.md
 
 Architecture and data flow (component diagram, Section 7.1) │ Changed: yes │ What changed and why: adds what Phase 5 delivered: compression in the middleware, the console's sign-in lockout (new `SignInFailure` table) and in-place saves, the deployed tester's one-run rule, heartbeat and cleanup, kept database connections, and the Cloud Monitoring alert that emails the team on any 5xx. Every element and arrow is labeled, with a legend. │ Location: https://github.com/team17-ece30861/cra-service/blob/main/docs/models/architecture.png
 
+Model E: Deployed tester run (state machine, new) │ Changed: yes (added) │ What changed and why: the behavioral model for this phase's tester changes: a session is ready after a successful setup, running while its suite runs (one session at a time across both workers, with a heartbeat), and finished once its report is stored; failure paths are drawn as dotted arrows (setup refused with 400 or 409, a second run refused with 409, a run cut off by a restart finished from its saved outcomes without cleanup). │ Location: https://github.com/team17-ece30861/cra-service/blob/main/docs/models/model-e-tester-run.png
+
 Information model: the tables in the diagram (Ticket, AuditEntry, ReportSubmission, FixedClock, SystemSession, TesterSession, SignInFailure) are defined in `core/models.py`, `tester/models.py` and `console/models.py`.
 
-Design requirements and model coverage: our 44 design requirements and how each maps to tests are in https://github.com/team17-ece30861/cra-service/blob/e4e8e33cfadfd29a9e71137a94a37593258f6b5d/docs/model-coverage.md; our tester reported `coverage.model` 20 of 44 against our own system at `c875f14` (a requirement counts only when every scenario bound to it was evaluated).
+Design requirements and model coverage: our 44 design requirements and how each maps to tests are in https://github.com/team17-ece30861/cra-service/blob/e4e8e33cfadfd29a9e71137a94a37593258f6b5d/docs/model-coverage.md; our tester reported `coverage.model` 20 of 44 against our own system at `c875f14` (a requirement counts only when every scenario in its frozen list was evaluated).
 
 ## Q5.2 Model-implementation consistency
 
-Our deployed tester now checks model consistency on every run against our own system: each of our 44 design requirements is bound to named test scenarios, and a requirement counts only when every scenario bound to it ran (20 of 44 at `c875f14`), while for the changed models a fresh AI session that hadn't written the code traced each changed element (the Model C `member_states` row and each new box in the architecture diagram) to the code and tests before merge. The divergence found this phase was in Model C, which required at least one Member State code in the early warning, stricter than Art. 14(2)(a) [1], which asks for them only "where applicable", so a manufacturer who didn't yet know the affected states couldn't record an on-time early warning. We corrected the model and the code together (contract 0.3.0, PR #111), because the model, not the regulation, was wrong. A grader can match it in the `member_states` row of Model C, in `tests/test_contract_030.py::TestUnknownMemberStates`, and on the evaluation deployment, where `POST /tickets` with `"member_states": ["unknown"]` returns 201 and echoes the value back.
+Our deployed tester checks part of this on every run against our own system: each of our 44 design requirements has a frozen list of test scenarios, and a requirement counts only when every scenario in its list was evaluated (20 of 44 at `c875f14`); for the diagrams, we compared the Phase 4 versions with the Phase 5 code, and a fresh AI session that hadn't drawn them then traced every element of the updated models to the code. The comparison found a divergence between the implementation and the Phase 4 architecture diagram: the code (since PR #116) keeps each worker's database connection for 5 minutes and compresses API responses, and the console (since #109) writes failed sign-ins to a `SignInFailure` table, none of which the diagram showed. We corrected the model, not the code, because the code was right: AC-18 only passed once connections were kept open, and the lockout closes LIM-12. A grader can match it: the database box and the middleware box in `docs/models/architecture.png` against `DB_CONN_MAX_AGE` in `cra_service/settings.py`, `ApiGZipMiddleware`, and `console/models.py`.
 
 ## Q6.1 Cross-team test
 
 [Q6.1 OUR SUITE vs TEAM 21: after 11 PM ET]
 
-Team 21 tests → our service │ Date: November 22, 2026, 12:30 PM Eastern │ Run/passed: 17/17 │ Main problem and owner: none │ Coverage: code: not reported (our deployed service isn't instrumented for code coverage); component: not measured (the pod spec defines no component list); system: 17 of 19 acceptance criteria, one test each for AC-01 to AC-17, including 500 malformed requests for AC-13 with no server errors │ Note: Team 21 didn't run it this phase, so Team 17 ran Team 21's published tester (pod-k-shared `team21/tester`, version 0.4.2, unchanged since November 1) on our own machine, pointed at our evaluation deployment at `c875f14` with Team 17's own token
+Team 21 tests → our service │ Date: November 22, 2026, 12:30 PM Eastern │ Run/passed: 17/17 │ Main problem and owner: Team 21 didn't run its tester against us this phase (owner: Team 21), so Team 17 ran Team 21's published tester itself; no test failed │ Coverage: code: not reported (our deployed service isn't instrumented for code coverage); component: not measured (the pod spec defines no component list); system: 17 of 19 acceptance criteria, one test each for AC-01 to AC-17, including 500 malformed requests for AC-13 with no server errors │ Note: Team 21 didn't run it this phase, so Team 17 ran Team 21's published tester (pod-k-shared `team21/tester`, version 0.4.2, last changed by Team 21 on November 1) on our own machine, pointed at our evaluation deployment at `c875f14` with Team 17's own token
 
 ## Q6.2 Specification issues discovered
 
-Issue: The final report deadline (REQ-04, `fix.available_at`): Art. 14(2)(c) [1] starts the 14-day clock when a corrective or mitigating measure is available, but the spec only said "fix". │ Effect: a team that recorded a workaround as something other than the fix would compute a final report due date later than the regulation allows; tests based on Model D couldn't tell the difference. │ Pod decision or plan: defined as the first corrective or mitigating measure in contract 0.3.0 (pod-k-shared #20, merged November 22, 2026; wording only, no example changes). Asked in our October 27 email; Team 21 didn't answer, so this is Team 17's decision, and it reopens if Team 21 objects.
+Issue: The final report deadline (REQ-04, `fix.available_at`): Art. 14(2)(c) [1] starts the 14-day clock when a corrective or mitigating measure is available, but the spec only said "fix". │ Effect: a team that recorded a workaround as something other than the fix would compute a final report due date later than the regulation allows; tests based on Model D couldn't tell the difference. │ Pod decision or plan: Team 17's decision, not a joint one: defined as the first corrective or mitigating measure in contract 0.3.0 (pod-k-shared #20, merged November 22, 2026; wording only, no example changes). Asked in our October 27 email; Team 21 didn't answer, so this is Team 17's decision, and it reopens if Team 21 objects.
 
 ## Q7.1 What changed and what remains incomplete
 
 Changed since Phase 2:
-- Deployed on Google Cloud Run with Neon PostgreSQL, per-client tokens, X-Actor, a 64 KB limit and contract-format errors in the agreed precedence (REQ-12, REQ-14; AC-02, AC-15); intake, triage, deadlines and updates (REQ-01 to REQ-04, REQ-06; AC-01, AC-03 to AC-05, AC-07, AC-14) in Phase 3.
-- The full reporting workflow in Phase 4 (REQ-05, REQ-07 to REQ-11, REQ-15; AC-06, AC-08 to AC-12, AC-16) and the console.
-- New in Phase 5: performance measured with 1,000 tickets (REQ-17; AC-18), persistence shown across a restart (REQ-18; AC-19), our own generated malformed-request run (REQ-12; AC-13), the Q7/Q8/Q9 contract changes (REQ-01, REQ-04, REQ-08), the server-error alert, the console's in-place saves and sign-in lockout, and the tester's model coverage, run lock, restart recovery and cleanup (REQ-16).
+- Deployed on Google Cloud Run with Neon PostgreSQL, per-client tokens, X-Actor, a 64 KB limit and contract-format errors in the agreed precedence (REQ-12, REQ-14; AC-02, AC-15); intake, triage, deadlines and updates (REQ-01 to REQ-04, REQ-06; AC-01, AC-03 to AC-05, AC-07; REQ-13, AC-14) in Phase 3.
+- The full reporting workflow in Phase 4 (REQ-05, REQ-07 to REQ-11, REQ-15; AC-06, AC-08 to AC-12, AC-16) and the console, our own intake channel (Phase 2, Section 6.3; outside the shared REQ list).
+- New in Phase 5: performance measured with 1,000 tickets (REQ-17; AC-18), persistence shown across a restart (REQ-18; AC-19), our own generated malformed-request run (REQ-12; AC-13), the Q7/Q8/Q9 contract changes (REQ-01, REQ-04, REQ-08), the server-error alert (REQ-12's server-error handling, now monitored), the console's in-place saves and sign-in lockout (own intake channel, LIM-12), and the tester's model coverage, run lock, restart recovery and cleanup (REQ-16, LIM-13).
 
 Remaining incomplete:
 - Nothing from the pod's planned scope remains incomplete (REQ-01 to REQ-18 complete; AC-01 to AC-19 demonstrated).
@@ -213,6 +211,7 @@ Phase 5 is the last milestone in Phase 2, Section 6 (6.1 to 6.3 cover Phases 3 t
 - Risk 1 (our reading of the CRA): reduced. The two findings from our CRA review are now in the contract: early warnings can be sent with unknown member states, and the final report clock starts at the first corrective or mitigating measure [1, Art. 14(2)].
 - Risk 2 (cross-team compatibility): [RISK 2 after tonight's run] Team 21's tester passed 17 of 17 against our final version.
 - Hosting performance: closed. AC-18 passed on the evaluation deployment (p95 736 ms against the 1 s target) after kept connections and compression cut a simple read from about 190 ms to about 40 ms on the server.
+- Contract drift (new in Phase 4): closed. The agreed answers and the two contract changes are now in the published contract (pod-k-shared #14 and #20, merged November 22).
 - New risk, now realized and handled: pod responsiveness at the end of the course. Team 21 didn't review the contract PRs or answer the last open question, so Team 17 merged the agreed changes and recorded Q8 as its own decision; a podmate could still disagree after the deadline.
 
 ## Q8.1 Actual GenAI use

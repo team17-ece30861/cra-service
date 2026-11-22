@@ -1,0 +1,19 @@
+flowchart TB
+  start((" ")) -->|"POST /tester/test/setup:<br/>approved target, no run going,<br/>target's /test/setup answers 201<br/>with the same session ID"| R(["<b>ready</b><br/>session stored, can run once"])
+  start -.->|"setup refused, no session stored:<br/>400 bad or unapproved target_url ·<br/>409 another run is going ·<br/>target's own error passed on"| X1["<b>no session</b>"]
+  R -->|"POST /tester/test/run:<br/>claimed under a table lock<br/>(no other session running)"| RUN(["<b>running</b><br/>suite runs against the target;<br/>heartbeat every 30 s,<br/>outcomes saved as they come"])
+  R -.->|"run while another session runs:<br/>409, stays ready"| R
+  RUN -->|"suite ends: target reset,<br/>clock released, report<br/>stored (200)"| F(["<b>finished</b><br/>report kept"])
+  RUN ---->|"cut off (restart or crash):<br/>no heartbeat for 180 s;<br/>report built from saved<br/>outcomes, no cleanup"| F
+  F -.->|"run again: 409<br/>(a session runs once)"| F
+  subgraph legend["Legend"]
+    direction TB
+    l1["Rounded boxes are the states stored in TesterSession.state (ready, running, finished);<br/>the plain box means nothing was stored. Solid arrows change or keep state on success;<br/>dotted arrows are refused requests (failure paths). GET /tester/test/report returns 200<br/>with the report once finished and 409 before that; a cut-off run is detected on the next<br/>setup, run or report request, and its interrupted test is marked error, the rest skip; an unknown session ID returns 404 for run and report.<br/>Only one session across both gunicorn workers can be running at a time."]
+  end
+  X1 ~~~ legend
+  classDef state fill:#eef3fb,stroke:#3b5b8c,color:#111
+  classDef none fill:#ffffff,stroke:#b33,color:#111
+  classDef note fill:#ffffff,stroke:#999,color:#333
+  class R,RUN,F state
+  class X1 none
+  class l1 note
