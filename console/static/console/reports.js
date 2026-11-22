@@ -145,6 +145,7 @@
       if (token !== swapToken) return;
       var doc = r[0], next = doc.getElementById('rp-swap'); if (!next) throw new Error('no draft');
       swap.innerHTML = next.innerHTML; swap.setAttribute('data-kind', next.getAttribute('data-kind'));
+      if (L.adopt) L.adopt(doc);
       document.title = doc.title;
       /* This report type's Record Submission sheet */
       var layer = $('sheet-layer'), nl = doc.getElementById('sheet-layer'), open = L.openCard && L.openCard();

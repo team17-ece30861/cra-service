@@ -964,7 +964,9 @@
   window.Ledger = {
     toast: toast, nowMs: nowMs, relStr: relStr, reduceMotion: reduceMotion,
     openSheetHref: showSheet, closeSheet: closeSheet, openCard: function () { return sheet.card; }, cardReady: cardReady,
-    /* reports.js switches the page it shows in place (report types) */
-    shown: function (url) { shown = pathOf(url); }
+    /* reports.js switches the page it shows in place (report types): the address, and what the server sent for it, so the
+       next refresh compares with the report type on screen */
+    shown: function (url) { shown = pathOf(url); },
+    adopt: function (doc) { var next = doc.querySelector('.screen-in'); if (next) source.screen = copyOf(next); }
   };
 })();
