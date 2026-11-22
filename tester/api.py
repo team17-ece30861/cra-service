@@ -124,12 +124,36 @@ def run(request):
             aborted = "The tester failed while running the suite"
             report = runner.failed_report(session.session_id, session.target_url, aborted)
         # Before the session stops counting as running, so the cleanup can't reset a
-        # target that the next run is already using.
-        if sessions.still_running(session.session_id):
-            runner.clean_up_target(session.target_url, session.session_id)
+        # target that the next run is already using. If its state can't be read, the
+        # run is most likely still ours: clean up anyway.
+        if not heartbeat.cancelled:
+            try:
+                sessions.fresh_connection()
+                ours = sessions.still_running(session.session_id)
+            except Exception as error:
+                logger.error(
+                    "Tester session %s: state unreadable: %s",
+                    session.session_id,
+                    type(error).__name__,
+                )
+                ours = True
+            if ours:
+                runner.clean_up_target(session.target_url, session.session_id)
     finally:
         heartbeat.stop()
-    if not sessions.finish(session.session_id, report):
+    if heartbeat.cancelled:  # recovery stored a report while the suite was still going
+        return interface_problem(500, sessions.CUT_OFF, "tester")
+    try:
+        sessions.fresh_connection()
+        stored = sessions.finish(session.session_id, report)
+    except Exception as error:
+        # The session stays running until its heartbeat goes stale; recovery then
+        # stores the outcomes the heartbeat saved.
+        logger.error(
+            "Tester session %s: report not stored: %s", session.session_id, type(error).__name__
+        )
+        return interface_problem(500, "The tester could not store its report", "tester")
+    if not stored:
         return interface_problem(500, sessions.CUT_OFF, "tester")
     if aborted:
         return interface_problem(500, aborted, "tester")

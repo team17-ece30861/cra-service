@@ -289,6 +289,23 @@ description is [`docs/interface/tester.yaml`](interface/tester.yaml).
   this service. After each run (also after an abort) the tester calls the target's
   `DELETE /test/clock` and then `POST /test/reset`, best effort, before freeing the slot;
   a failure is logged as `target cleanup incomplete` and doesn't change the report.
+  If a heartbeat finds the session already recovered (no beat got through for 3
+  minutes), it stops the suite, and the run stores nothing and doesn't clean up. After
+  the suite, the run opens a fresh database connection, since the old one may have been
+  dropped during the run.
+- **Time budget of one run request** (gunicorn and Cloud Run stop it at 1,800 s): listing
+  the tests up to 60 s, the suite up to 1,680 s, the coverage read up to 30 s, cleanup up
+  to 2 x 10 s, and stopping the heartbeat up to 10 s. Two rare extras can push past 1,800 s:
+  recovering a cut-off session with no saved test list (one left over from before
+  heartbeats, or one cut off in its first seconds) lists the tests again, up to 60 s, at
+  the start of the request that finds it (setup, run or report); and a tester crash lists
+  them again for its report, up to 60 s. Recovery otherwise uses the saved list and
+  doesn't run pytest. A request stopped at 1,800 s leaves its session running; it is
+  recovered 3 minutes later.
+- **Deploys and runs:** don't deploy Launchpad (merge to `main`) or launch Orbit while a
+  deployed-tester run is going. The new revision replaces the instance and cuts the run
+  off. A run started on a revision from before heartbeats (before PR #112) has no
+  heartbeat and is taken for cut off as soon as the new revision sees it.
 
 ## Console accounts
 

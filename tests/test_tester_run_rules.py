@@ -3,6 +3,7 @@ both gunicorn workers; recovery of a run cut off by a restart; and cleaning up t
 target after each run (LIM-13)."""
 
 import json
+import sys
 import threading
 import time
 from datetime import timedelta
@@ -435,3 +436,85 @@ def test_the_heartbeat_survives_a_dropped_connection(monkeypatch, caplog):
     finally:
         heartbeat.stop()
     assert "heartbeat failed" in caplog.text
+
+
+# --- after a long run --------------------------------------------------------------------
+
+
+def _terminate_own_connection():
+    """Ends this thread's database connection from another connection, as a pooler or
+    network might during a long run."""
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_backend_pid()")
+        pid = cursor.fetchone()[0]
+
+    def terminate():
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_terminate_backend(%s)", [pid])
+
+    thread, _ = _in_thread(terminate)
+    thread.join(10)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_run_survives_its_connection_dropping_during_the_suite(target, monkeypatch):
+    def run_suite(session_id, target_url, **kwargs):
+        _terminate_own_connection()
+        report = {"session_id": session_id, "target_url": target_url, "results": []}
+        return {**report, "coverage": {}}, None
+
+    monkeypatch.setattr(runner, "run_suite", run_suite)
+    client = Client(headers={"Authorization": f"Bearer {TOKEN}"})
+    session_id = _setup(client).json()["session_id"]
+    run = _run(client, session_id)
+    assert run.status_code == 200, run.content
+    assert _report(client, session_id).json() == run.json()
+    assert _calls(target)[1:] == CLEANUP
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_run_taken_for_cut_off_while_going_is_stopped(target, no_target, monkeypatch):
+    """Recovery took the run for cut off (its heartbeat didn't get through for minutes)
+    while the suite was still going. The next beat stops the suite; the run stores
+    nothing over the recovered report and doesn't clean up the target."""
+    monkeypatch.setattr(sessions, "HEARTBEAT_INTERVAL", 0.1)
+    sleeper = [sys.executable, "-c", "import time; time.sleep(30)"]
+    monkeypatch.setattr(
+        runner,
+        "_pytest",
+        lambda *args, env=None, timeout: runner._run_child(sleeper, env=None, timeout=timeout),
+    )
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+    session_id = _setup(Client(headers=headers)).json()["session_id"]
+    started = time.monotonic()
+    thread, result = _in_thread(lambda: _run(Client(headers=headers), session_id))
+    try:
+        deadline = time.monotonic() + 10
+        while not runner._children:  # wait until the suite is going
+            assert time.monotonic() < deadline
+            time.sleep(0.02)
+        # Another request finds it stale (heartbeats may still slip in: retry).
+        while Session.objects.get(pk=session_id).state == "running":
+            assert time.monotonic() < deadline
+            Session.objects.filter(pk=session_id).update(heartbeat_at=None)
+            sessions.recover_stale()
+        recovered = Session.objects.get(pk=session_id).report
+    finally:
+        thread.join(20)
+    assert time.monotonic() - started < 15  # stopped, not left to sleep 30 s
+    response = result["value"]
+    _assert_interface_error(response, 500, "tester")
+    assert response.json()["message"] == sessions.CUT_OFF
+    assert Session.objects.get(pk=session_id).report == recovered
+    assert _calls(target)[1:] == []  # no cleanup
+    assert not runner._children
+
+
+def test_run_child_works_like_subprocess_run():
+    done = runner._run_child([sys.executable, "-c", "print('hi')"], env=None, timeout=10)
+    assert (done.returncode, done.stdout) == (0, "hi\n")
+    with pytest.raises(runner.subprocess.TimeoutExpired):
+        runner._run_child(
+            [sys.executable, "-c", "import time; time.sleep(5)"], env=None, timeout=0.2
+        )
+    assert not runner._children

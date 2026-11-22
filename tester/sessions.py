@@ -105,6 +105,15 @@ def claim(session_id: str) -> str:
     return CLAIMED
 
 
+def fresh_connection() -> None:
+    """Drop this thread's database connection before using it again after a long run:
+    a pooler or network may have closed it during the suite's 28 minutes, and Django
+    only replaces a broken connection between requests. The tester's routes run outside
+    a transaction (cra_service.middleware); inside one (a test's), it is left alone."""
+    if not connection.in_atomic_block:
+        connection.close()
+
+
 def still_running(session_id: str) -> bool:
     return TesterSession.objects.filter(pk=session_id, state="running").exists()
 
@@ -136,6 +145,8 @@ class Heartbeat:
 
     def __init__(self, session_id: str):
         self.session_id = session_id
+        self.cancelled = False  # the session was taken for cut off: the run was stopped
+        self._owner = threading.get_ident()  # the request thread running the suite
         self._paths = None
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, name="tester-heartbeat", daemon=True)
@@ -160,7 +171,17 @@ class Heartbeat:
             entries = runner._recorded_entries(*self._paths)
             if entries:
                 fields["progress"] = _trimmed(entries)
-        TesterSession.objects.filter(pk=self.session_id, state="running").update(**fields)
+        if not TesterSession.objects.filter(pk=self.session_id, state="running").update(**fields):
+            # Recovery already took this run for cut off and stored its report, and the
+            # slot may belong to another run now: stop the suite, and the run finishes
+            # without storing anything or cleaning up (tester.api.run).
+            logger.error(
+                "Tester session %s was taken for cut off while running; stopping it",
+                self.session_id,
+            )
+            self.cancelled = True
+            self._stop.set()
+            runner.stop_child(self._owner)
 
     def _loop(self) -> None:
         while not self._stop.wait(HEARTBEAT_INTERVAL):

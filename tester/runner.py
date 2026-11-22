@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
@@ -49,6 +50,11 @@ MESSAGE_LIMIT = 500
 
 class CommunicationError(Exception):
     pass
+
+
+# The pytest process each request thread is waiting on, so the run's heartbeat can stop
+# it (tester.sessions.Heartbeat). Only ever read within this process.
+_children: dict[int, subprocess.Popen] = {}
 
 
 def allowed_target(target_url: str) -> bool:
@@ -119,14 +125,32 @@ def _pytest(*args: str, env: dict | None = None, timeout: int) -> subprocess.Com
     # The test path goes before the suite's own options (--base-url and so on), so
     # pytest loads acceptance/conftest.py, which defines them, before parsing them.
     command = [sys.executable, "-m", "pytest", str(ROOT / "acceptance"), "-c", str(ACCEPTANCE_INI)]
-    return subprocess.run(
-        [*command, "-p", "no:cacheprovider", *args],
-        cwd=ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    return _run_child([*command, "-p", "no:cacheprovider", *args], env=env, timeout=timeout)
+
+
+def _run_child(command: list[str], *, env: dict | None, timeout: float):
+    """subprocess.run(capture_output=True, text=True, timeout=...), except that
+    stop_child() from another thread can stop the process early."""
+    owner = threading.get_ident()
+    with subprocess.Popen(
+        command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    ) as process:
+        _children[owner] = process
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise
+        finally:
+            _children.pop(owner, None)
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def stop_child(owner: int) -> None:
+    """Stop the pytest process that thread `owner` is waiting on, if any."""
+    if (process := _children.get(owner)) is not None:
+        process.kill()
 
 
 def planned_tests() -> list[str]:
