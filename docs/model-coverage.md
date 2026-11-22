@@ -141,13 +141,12 @@ Configuration uses nonsecret settings:
   deployment identities with Quincy before release. Scheme, nondefault port and
   base path matter; hostnames alone are insufficient. This setting does not alter
   allowed targets, credentials or authentication.
-- `TESTER_MODEL_MAPPING_URL`: the actual published, preferably commit-pinned URL
-  of this version's mapping. It defaults to empty while this change is local.
-  Until published/configured, own reports include model with null counts and
-  explicitly say the mapping is unavailable. Do not use a local Windows path or
-  claim a future GitHub URL already exists. The link must be accessible to course
-  staff and podmates; use a reviewed public shared-repo copy if the service repo
-  is private, and publish the matching scenario manifest with it.
+- `TESTER_MODEL_MAPPING_URL`: the published, commit-pinned URL of this version's
+  mapping. It defaults to this file at the commit that merged PR #106
+  (`e4e8e33`), which also holds the matching manifest
+  (`acceptance/model_requirements.json`); the repository is public. Pin a new commit
+  whenever the design version changes. With the setting empty, own reports carry
+  model with null counts and say the mapping is unavailable.
 
 The runner writes a separate `--model-progress FILE` JSON Lines journal in its
 temporary directory. Its version header precedes tests, and each reached oracle
