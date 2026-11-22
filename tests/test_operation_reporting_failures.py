@@ -25,10 +25,17 @@ from acceptance.client import ROOT
         "ignored-file",
         "ignored-glob",
         "collection-error",
+        "transport-failure",
+        "broader-selection",
     ],
 )
 def test_report_retains_setup_failures_and_identifies_incomplete_runs(tmp_path, mode):
-    (tmp_path / "pytest.ini").write_text("[pytest]\naddopts = -p no:django\n", encoding="utf-8")
+    ini = tmp_path / "pytest.ini"
+    if mode == "broader-selection":
+        # The configured suite is a subdirectory; the run names its parent instead.
+        (tmp_path / "suite").mkdir()
+        ini = tmp_path / "suite" / "pytest.ini"
+    ini.write_text("[pytest]\naddopts = -p no:django\n", encoding="utf-8")
     fixture = (
         "import pytest\n"
         "from acceptance.client import Response, Service\n"
@@ -37,6 +44,8 @@ def test_report_retains_setup_failures_and_identifies_incomplete_runs(tmp_path, 
     )
     if mode == "service-fixture-failure":
         fixture += '        return Response(500, "application/problem+json", b"{}")\n'
+    elif mode == "transport-failure":
+        fixture += '        raise ConnectionRefusedError("synthetic connection failure")\n'
     else:
         fixture += (
             '        if path == "/test/reset":\n'
@@ -122,7 +131,7 @@ def test_report_retains_setup_failures_and_identifies_incomplete_runs(tmp_path, 
             "-m",
             "pytest",
             "-c",
-            str(tmp_path / "pytest.ini"),
+            str(ini),
             "--rootdir",
             str(tmp_path),
             "-p",
@@ -150,7 +159,20 @@ def test_report_retains_setup_failures_and_identifies_incomplete_runs(tmp_path, 
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     markdown = (tmp_path / "operations.md").read_text(encoding="utf-8")
     assert len(report["operations"]) == 14
-    if "fixture-failure" in mode or mode == "setup-assertion-failure":
+    if mode == "transport-failure":
+        # No response: the setup check is inconclusive, not a failed reset.
+        assert report["failed"] == 3
+        assert report["run_complete"] is True
+        assert all(
+            [check["actual_status"] for check in entry["operation_checks"]] == [None]
+            for entry in report["results"]
+        )
+        reset = next(row for row in report["operations"] if row["path"] == "/test/reset")
+        assert reset["success"]["failed_statuses"] == []
+        assert reset["success"]["inconclusive_statuses"] == [204]
+        assert reset["implementation"] != "success_observed"
+        assert "ConnectionRefusedError" in report["results"][0]["message"]
+    elif "fixture-failure" in mode or mode == "setup-assertion-failure":
         assert report["failed"] == 3
         assert report["run_complete"] is True
         assert "Run: finished" in markdown
@@ -193,6 +215,14 @@ def test_report_retains_setup_failures_and_identifies_incomplete_runs(tmp_path, 
         elif mode == "filtered":
             assert report["tests_selected"] == report["tests_completed"] == 1
             assert report["tests_deselected"] == 2
+        elif mode == "broader-selection":
+            assert report["broader_selection"] is True
+            assert report["partial_selection"] is True
+            assert any(
+                "broader than the configured suite" in reason
+                for reason in report["incomplete_reasons"]
+            )
+            assert "broader than the configured suite" in markdown
         elif mode.endswith("selection"):
             assert report["partial_selection"] is True
             assert report["tests_deselected"] == 0

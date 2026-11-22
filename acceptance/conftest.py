@@ -15,6 +15,7 @@ PLANNED_TESTS = []
 DESELECTED_TESTS = 0
 COLLECTION_ERRORS = 0
 PARTIAL_SELECTION = False
+BROADER_SELECTION = False
 COLLECTION_EXCLUSIONS = False
 SETUP_CHECKS = pytest.StashKey[list[dict]]()
 STARTED = None
@@ -41,7 +42,7 @@ def pytest_addoption(parser):
 
 def pytest_sessionstart(session):
     global STARTED, PROGRESS, DESELECTED_TESTS, COLLECTION_ERRORS, PARTIAL_SELECTION
-    global COLLECTION_EXCLUSIONS
+    global COLLECTION_EXCLUSIONS, BROADER_SELECTION
     config = session.config
     STARTED = None
     PROGRESS = None
@@ -50,6 +51,7 @@ def pytest_sessionstart(session):
     DESELECTED_TESTS = 0
     COLLECTION_ERRORS = 0
     PARTIAL_SELECTION = False
+    BROADER_SELECTION = False
     COLLECTION_EXCLUSIONS = False
     if config.option.collectonly:
         return
@@ -78,15 +80,20 @@ def service(pytestconfig):
 
 
 def pytest_collection_finish(session):
-    global PARTIAL_SELECTION, COLLECTION_EXCLUSIONS
+    global PARTIAL_SELECTION, BROADER_SELECTION, COLLECTION_EXCLUSIONS
     PLANNED_TESTS[:] = [item.nodeid for item in session.items]
     config = session.config
     COLLECTION_EXCLUSIONS = bool(config.getoption("--ignore") or config.getoption("--ignore-glob"))
     PARTIAL_SELECTION = True
+    BROADER_SELECTION = False
     if config.inipath is not None and len(config.args) == 1:
         argument = str(config.args[0])
         requested = (Path(config.invocation_params.dir) / argument.split("::", 1)[0]).resolve()
-        PARTIAL_SELECTION = "::" in argument or requested != config.inipath.parent.resolve()
+        suite = config.inipath.parent.resolve()
+        PARTIAL_SELECTION = "::" in argument or requested != suite
+        # e.g. `pytest -c acceptance/pytest.ini` from the repository root with no path:
+        # pytest collects from the root, which reaches beyond the suite.
+        BROADER_SELECTION = "::" not in argument and requested in suite.parents
 
 
 def pytest_deselected(items):
@@ -193,7 +200,12 @@ def _run_summary(exitstatus):
         reasons.append("no tests selected")
     if DESELECTED_TESTS:
         reasons.append(f"filtered selection: {DESELECTED_TESTS} tests deselected")
-    if PARTIAL_SELECTION:
+    if BROADER_SELECTION:
+        reasons.append(
+            "selection is broader than the configured suite directory, so it can collect "
+            "tests outside the suite"
+        )
+    elif PARTIAL_SELECTION:
         reasons.append("positional selection does not identify the full configured suite directory")
     if COLLECTION_EXCLUSIONS:
         reasons.append("collection exclusion options are active")
@@ -209,6 +221,7 @@ def _run_summary(exitstatus):
         "tests_completed": len(selected & completed),
         "tests_deselected": DESELECTED_TESTS,
         "partial_selection": PARTIAL_SELECTION or COLLECTION_EXCLUSIONS,
+        "broader_selection": BROADER_SELECTION,
         "collection_exclusions": COLLECTION_EXCLUSIONS,
         "collection_errors": COLLECTION_ERRORS,
         "tests_not_run": len(selected - RESULTS.keys()),

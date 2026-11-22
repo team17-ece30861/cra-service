@@ -96,9 +96,10 @@ actor, resource identifier, request body, or response body.
 - **`partial`:** some declared statuses passed; others remain untested.
   **`not_tested`:** no observations for the category. **`not_defined`:** the
   contract declares no statuses in that category, as with health-check errors.
-- **`failed`:** a reached status/schema check failed (including communication
-  failure). **`inconclusive`:** the response checked successfully but its enclosing
-  test failed or skipped, or teardown failed/interrupted without completion.
+- **`failed`:** the target answered and its status or schema check failed.
+  **`inconclusive`:** no response arrived (connection failure or timeout), or the
+  response checked successfully but its enclosing test failed or skipped, or
+  teardown failed/interrupted without completion.
   Those are not passing evidence; passing observations require completed teardown.
 
 Successful fixture setup/reset calls are excluded. On a setup failure, checked
@@ -119,12 +120,15 @@ Selecting an individual file, node ID, subdirectory or multiple positional targe
 is a partial selection, even when pytest emits no deselection event. A full-scope
 run names the directory containing the selected pytest configuration, as the
 documented command above does with `acceptance/pytest.ini` and `acceptance`.
+Running with no path from a parent directory (for example `pytest -c
+acceptance/pytest.ini` from the repository root) collects beyond the suite; the
+report marks that `broader_selection` and says so in its reason.
 Explicit `--ignore` and `--ignore-glob` exclusions also mark a run incomplete;
 their paths are not copied into report metadata.
 
 JSON adds `run_complete`, `tests_selected`, `tests_completed`, `tests_deselected`,
-`tests_not_run`, `partial_selection`, `collection_exclusions`, `collection_errors`
-and `incomplete_reasons`; existing result and
+`tests_not_run`, `partial_selection`, `broader_selection`, `collection_exclusions`,
+`collection_errors` and `incomplete_reasons`; existing result and
 count fields are unchanged. Markdown and terminal summaries show the same counts
 and reasons. `tests_not_run` counts selected IDs with no phase report; a test
 interrupted after setup is started but not completed. Unobserved statuses remain
