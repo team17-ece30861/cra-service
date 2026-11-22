@@ -1,5 +1,11 @@
 # Models as delivered (Phase 4)
 
+Phase 5's [model-coverage mapping](../model-coverage.md) versions the design
+requirements derived from these models, the architecture and milestone targets.
+Its executable scenario manifest keeps incomplete checks visible. This is a
+design-to-test mapping, not a claim that every proposed Phase 5 feature or updated
+diagram has been delivered.
+
 The Phase 2 models (Sections 3.2 and 7.1), redrawn to match the system as actually
 delivered at the end of Phase 4. Each `.mmd` file is the Mermaid source; each `.png` is its
 render (mermaid-cli 11.4.2), checked by eye for overlaps and against the code for accuracy.
