@@ -39,6 +39,8 @@ class Field:
 
 
 TIME_FORMAT = "Use the format 2026-10-29 14:00:00."
+# Q9: member states may be exactly "unknown" (the same copy as forms.js, UNKNOWN_ALONE).
+UNKNOWN_ALONE = "Use unknown on its own, or only EU country codes."
 FIELDS = [
     Field("title", "Title", missing="Enter a title."),
     Field("source", "Source", "select", missing="Choose a source."),
@@ -60,7 +62,7 @@ FIELDS = [
         "member_states",
         "Member states",
         "list",
-        format="Use EU country codes, such as DE. Greece is GR.",
+        format="Use EU country codes, such as DE (Greece is GR), or unknown on its own.",
     ),
     Field("severity", "Severity", "select"),
     Field("sensitivity", "Sharing (TLP)", "select"),
@@ -280,6 +282,8 @@ def _say(f: Field | None, message: str, now: datetime) -> str:
         return f.format
     if message == "must contain unique member states":
         return "Each member state can appear once."
+    if message == '"unknown" must be the only value':
+        return UNKNOWN_ALONE
     text = message[:1].upper() + message[1:]
     return text if text.endswith(".") else text + "."
 

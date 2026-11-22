@@ -8,6 +8,7 @@
   function nowMs() { return L.nowMs ? L.nowMs() : NaN; }
   var TIME_FORMAT = 'Use the format 2026-10-29 14:00:00.';
   var CVE = /^CVE-\d{4}-\d{4,}$/;
+  var UNKNOWN_ALONE = 'Use unknown on its own, or only EU country codes.'; /* the same as console/forms.py (_say) */
 
   /* One rule for typed times, the same as console/forms.py (_INPUT_TIME): date, space or T, hh:mm, optional :ss, optional UTC or Z, any case */
   function parseUtc(s) { var m = /^\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?\s*(?:UTC|Z)?\s*$/i.exec(s || ''); if (!m) return NaN; return Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)); }
@@ -62,8 +63,11 @@
     function add(raw) {
       var v = raw.trim().replace(/,$/, '').trim(); if (!v) return true;
       if (eu) {
-        v = v.toUpperCase();
-        if (eu.indexOf(v) < 0) { setErr(field, v === 'EL' ? 'Use GR for Greece.' : v + " isn't an EU member state code."); return false; }
+        /* Exactly "unknown", on its own, when the member states aren't known yet (Q9) */
+        v = v.toLowerCase() === 'unknown' ? 'unknown' : v.toUpperCase();
+        if (v !== 'unknown' && eu.indexOf(v) < 0) { setErr(field, v === 'EL' ? 'Use GR for Greece.' : v + " isn't an EU member state code."); return false; }
+        var mixed = values.length && values.indexOf(v) < 0 && (v === 'unknown' || values.indexOf('unknown') >= 0);
+        if (mixed) { setErr(field, UNKNOWN_ALONE); return false; }
       }
       setErr(field, null);
       if (values.indexOf(v) < 0) { values.push(v); chip(v); sync(); }

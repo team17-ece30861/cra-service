@@ -191,6 +191,32 @@ def test_new_ticket_error_keeps_the_input_and_shows_the_field_error(api, console
     assert 'class="input invalid" id="tn-ttl"' in html
 
 
+def test_new_ticket_takes_unknown_member_states(api, console):
+    # Q9 (contract 0.3.0): exactly "unknown" when the member states aren't known yet.
+    response = console.post("/console/tickets/new", {**NEW, "member_states": "unknown"})
+    assert response.status_code == 302
+    assert Ticket.objects.get().data["member_states"] == ["unknown"]
+
+
+def test_new_ticket_with_unknown_and_codes_says_why(api, console):
+    response = console.post("/console/tickets/new", {**NEW, "member_states": "DE\nunknown"})
+    assert response.status_code == 400
+    assert Ticket.objects.count() == 0 and AuditEntry.objects.count() == 0
+    html = response.content.decode()
+    assert forms.UNKNOWN_ALONE in html
+    assert re.search(r'id="tn-ms-in"[^>]*aria-invalid="true"', html)
+
+
+def test_new_ticket_with_a_future_fix_time_says_why(api, console):
+    # Q7 (contract 0.3.0): the API now rejects it on create, as Edit already did.
+    response = console.post(
+        "/console/tickets/new", {**NEW, "fix.available_at": "2026-10-29 14:00:01"}
+    )
+    assert response.status_code == 422
+    assert Ticket.objects.count() == 0 and AuditEntry.objects.count() == 0
+    assert "That&#x27;s later than now." in response.content.decode()
+
+
 # --- Edit Ticket ---
 
 
