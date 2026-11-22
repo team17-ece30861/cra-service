@@ -195,7 +195,7 @@ def test_an_aborted_run_report_is_described(authed, target, no_target, monkeypat
 
 
 def test_a_tester_crash_report_is_described(authed, target, no_target, monkeypatch):
-    def crash(session_id, target_url):
+    def crash(session_id, target_url, **kwargs):
         raise RuntimeError("tester bug")
 
     monkeypatch.setattr(runner, "run_suite", crash)

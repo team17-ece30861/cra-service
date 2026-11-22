@@ -28,6 +28,9 @@ ACCEPTANCE_INI = ROOT / "acceptance" / "pytest.ini"
 SETUP_TIMEOUT = 60
 SUITE_TIMEOUT = 1680
 REPORT_TIMEOUT = 30
+# Each of the two cleanup calls after a run. Collecting (60), the suite (1,680), the
+# coverage read (30) and cleanup (2 x 10) stay within gunicorn's 1,800 s timeout.
+CLEANUP_TIMEOUT = 10
 
 # Our own client name in settings.API_TOKENS, used when the tester targets this service.
 SELF_CLIENT = "team17"
@@ -88,6 +91,28 @@ def call(target_url: str, method: str, path: str, body=None, *, timeout: int):
         except (ValueError, OSError):
             parsed = {}
     return response.code, parsed if isinstance(parsed, dict) else {}
+
+
+def clean_up_target(target_url: str, session_id: str) -> list[str]:
+    """LIM-13: after a run, release the target's test clock and reset its data, best
+    effort. Returns what went wrong (also logged); it never changes test outcomes."""
+    problems = []
+    for method, path in (("DELETE", "/test/clock"), ("POST", "/test/reset")):
+        try:
+            status, _ = call(target_url, method, path, None, timeout=CLEANUP_TIMEOUT)
+        except CommunicationError as error:
+            problems.append(str(error))
+            continue
+        except Exception as error:
+            problems.append(f"{method} {path} failed: {type(error).__name__}")
+            continue
+        if not 200 <= status < 300:
+            problems.append(f"{method} {path} returned {status}")
+    if problems:
+        logger.warning(
+            "Tester session %s: target cleanup incomplete: %s", session_id, "; ".join(problems)
+        )
+    return problems
 
 
 def _pytest(*args: str, env: dict | None = None, timeout: int) -> subprocess.CompletedProcess:
@@ -216,14 +241,38 @@ def _mark_abort(results: list[dict], entries: dict[str, dict], aborted: str) -> 
     return marked
 
 
-def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
-    """Run the whole suite once. Returns the report and, if the tester aborted, why."""
+def cut_off_report(
+    session_id: str, target_url: str, aborted: str, planned: list[str], entries: dict[str, dict]
+) -> dict:
+    """The report for a run whose process stopped before it finished (a restart): the
+    outcomes it had recorded, the test it was running marked as interrupted, the rest
+    skipped. Code coverage isn't read: the target's session may be long gone."""
+    results = _mark_abort([_result(t, entries.get(t)) for t in planned], entries, aborted)
+    unavailable = {"covered": None, "total": None, "basis": f"Not measured: {aborted}"}
+    return {
+        "session_id": session_id,
+        "target_url": target_url,
+        "results": results,
+        "coverage": {
+            "code": unavailable,
+            "component": unavailable,
+            "system": _system_coverage(results),
+        },
+    }
+
+
+def run_suite(session_id: str, target_url: str, on_start=None) -> tuple[dict, str | None]:
+    """Run the whole suite once. Returns the report and, if the tester aborted, why.
+    `on_start(planned, report_path, progress_path)` is called just before the suite
+    starts, so the caller can follow its progress (tester.sessions.Heartbeat)."""
     planned = planned_tests()
     aborted = None
     with tempfile.TemporaryDirectory() as tmp:
         report_path = Path(tmp) / "report.json"
         progress_path = Path(tmp) / "progress.jsonl"
         token = target_token(target_url) or "no-token-configured"
+        if on_start is not None:
+            on_start(planned, report_path, progress_path)
         try:
             done = _pytest(
                 "-q",
