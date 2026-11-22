@@ -36,9 +36,15 @@ Times are derived from the service's own clock (``GET /test/clock``), read once 
 loading, and always lie in the past, so the script never sets the clock. A fixed clock
 left by an earlier run is used as it is.
 
-Latency is the wall time of one HTTP request, from sending it to reading the whole
-response body. The transport opens a new connection per request (as the acceptance
-runner does), so against HTTPS each sample includes a TCP and TLS handshake.
+Latency is the wall time of one HTTP request, from sending it to reading and
+decompressing the whole response body. The transport behaves like a normal HTTP client:
+it keeps one keep-alive connection per thread, asks for gzip (``Accept-Encoding:
+gzip``) and opens a new connection only when the server closed the old one. A
+connection the server closed while it sat idle is noticed before the next request is
+written and reopened without counting as a retry; a connection that drops after a
+request was sent is a failure in the measured phase, as before. Connections opened are
+counted and recorded. ``--no-keepalive`` restores the earlier method: a new TCP (and
+TLS) connection per request and no compression, as the acceptance runner does.
 
 Percentiles use the nearest-rank method: p95 of 200 samples is the 190th fastest.
 
@@ -48,10 +54,13 @@ start or the load failed. Afterwards the deployment holds the loaded tickets; a 
 """
 
 import argparse
+import gzip
+import http.client
 import json
 import math
 import os
 import random
+import select
 import subprocess
 import sys
 import threading
@@ -60,9 +69,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from fractions import Fraction
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 
-from acceptance.client import ROOT, Contract, HTTPTransport
+from acceptance.client import ROOT, Contract, HTTPTransport, Response
 
 ACTOR = "perf-ac18"
 P95_LIMIT_SECONDS = 1.0
@@ -342,6 +351,88 @@ def build_plan(seed: int, mix: dict, category_sizes: dict) -> list[dict]:
 
 
 # ---------------------------------------------------------------- HTTP
+
+CONNECTION_KEEPALIVE = "keep-alive, gzip"
+CONNECTION_PER_REQUEST = "new TCP (and TLS for https) connection per request"
+
+
+class KeepAliveTransport(HTTPTransport):
+    """HTTPTransport's checks and send() signature, sent over one persistent connection
+    per thread (http.client connections aren't thread-safe; the load runs in a few
+    threads) with Accept-Encoding: gzip. Never resends a request that was written."""
+
+    def __init__(self, base_url: str, token: str, timeout: float = 30):
+        super().__init__(base_url, token)
+        parsed = urlsplit(self.base_url)
+        self._https = parsed.scheme == "https"
+        self._host, self._port = parsed.hostname, parsed.port
+        self._prefix = parsed.path.rstrip("/")
+        self._timeout = timeout
+        self._local = threading.local()
+        self._count_lock = threading.Lock()
+        self.connections_opened = 0
+
+    def send(
+        self,
+        method,
+        path,
+        *,
+        body=None,
+        raw=None,
+        actor="phase3-tests",
+        authenticated=True,
+        token=None,
+    ):
+        if body is not None and raw is not None:
+            raise ValueError("provide JSON body or raw bytes, not both")
+        data = json.dumps(body).encode("utf-8") if body is not None else raw
+        headers = {"Content-Type": "application/json", "Accept-Encoding": "gzip"}
+        if actor is not None:
+            headers["X-Actor"] = actor
+        if authenticated:
+            headers["Authorization"] = "Bearer " + (token if token is not None else self.token)
+        connection = self._connection()
+        try:
+            connection.request(method, self._prefix + path, body=data, headers=headers)
+            response = connection.getresponse()
+            payload = response.read()
+        except Exception:
+            self._discard()
+            raise
+        if response.will_close:
+            self._discard()
+        if response.getheader("Content-Encoding", "").strip().lower() == "gzip":
+            payload = gzip.decompress(payload)
+        return Response(response.status, response.getheader("Content-Type", ""), payload)
+
+    def _connection(self) -> http.client.HTTPConnection:
+        """This thread's open connection, reopened first if the server closed it while
+        it was idle (nothing has been sent on it yet, so this is not a retry)."""
+        connection = getattr(self._local, "connection", None)
+        if connection is not None and (connection.sock is None or _closed_by_peer(connection)):
+            self._discard()
+            connection = None
+        if connection is None:
+            cls = http.client.HTTPSConnection if self._https else http.client.HTTPConnection
+            connection = cls(self._host, self._port, timeout=self._timeout)
+            connection.connect()
+            with self._count_lock:
+                self.connections_opened += 1
+            self._local.connection = connection
+        return connection
+
+    def _discard(self):
+        connection = getattr(self._local, "connection", None)
+        if connection is not None:
+            connection.close()
+        self._local.connection = None
+
+
+def _closed_by_peer(connection) -> bool:
+    """An idle keep-alive socket is readable only if the server closed it (or sent
+    something unasked), either way it can't carry the next request."""
+    readable, _, _ = select.select([connection.sock], [], [], 0)
+    return bool(readable)
 
 
 def _timed(transport, method, path, body=None, actor=ACTOR):
@@ -764,6 +855,14 @@ def _print_summary(result):
         f"at the start, {result['ticket_count_at_end']} at the end; "
         f"validated: {str(result['validated']).lower()})"
     )
+    opened = result.get("connections_opened") or {}
+    if opened.get("total") is None:
+        print(f"Connection: {result['connection']}")
+    else:
+        print(
+            f"Connection: {result['connection']} ({opened['total']} opened in all, "
+            f"{opened['measured']} during the measured requests)"
+        )
     warm = result["summary"]["warmup"]
     if warm["requests"]:
         print(
@@ -823,6 +922,11 @@ def parse_args(argv=None):
     parser.add_argument(
         "--tested-version", default=os.environ.get("CRA_TESTED_VERSION", "unspecified")
     )
+    parser.add_argument(
+        "--no-keepalive",
+        action="store_true",
+        help="the earlier method: a new connection per request and no gzip",
+    )
     parser.add_argument("--out", help="write the JSON result here")
     args = parser.parse_args(argv)
     if not args.base_url:
@@ -835,7 +939,11 @@ def parse_args(argv=None):
 
 
 def run(args) -> int:
-    transport = HTTPTransport(args.base_url, os.environ["CRA_API_TOKEN"])
+    token = os.environ["CRA_API_TOKEN"]
+    if args.no_keepalive:
+        transport = HTTPTransport(args.base_url, token)
+    else:
+        transport = KeepAliveTransport(args.base_url, token)
     mix = apportion(MEASURED_MIX, args.requests)
     load_count = load_size(args.tickets, mix, exact_limit=args.exact_limit)
     validated = not args.no_validate
@@ -854,7 +962,7 @@ def run(args) -> int:
         "requests": args.requests,
         "mix": mix,
         "percentile_method": "nearest rank",
-        "connection": "new TCP (and TLS for https) connection per request",
+        "connection": CONNECTION_PER_REQUEST if args.no_keepalive else CONNECTION_KEEPALIVE,
         "reset": args.reset,
     }
     loader = None
@@ -896,7 +1004,12 @@ def run(args) -> int:
         print(f"Measuring {args.requests} requests, one at a time...")
         contract = Contract() if validated else None
         model = model_from_load(specs, loaded)
+        opened_before = _opened(transport)
         measured = run_measured(transport, plan, ids, base, model, contract, clock_read_at)
+        result["connections_opened"] = {
+            "total": _opened(transport),
+            "measured": _opened(transport) - opened_before if opened_before is not None else None,
+        }
     except SetupError as error:
         result["error"] = str(error)
         _note_retries(result, loader)
@@ -920,6 +1033,11 @@ def run(args) -> int:
         "operator's call. The script did not set the test clock."
     )
     return 0 if result["summary"]["passed"] else 1
+
+
+def _opened(transport):
+    """Connections the transport opened so far; None for one connection per request."""
+    return getattr(transport, "connections_opened", None)
 
 
 def _note_retries(result, loader):

@@ -1,9 +1,14 @@
 """The AC-18 script's pure parts (acceptance/perf.py): percentiles, the fixed mix and
 load profile, and determinism of the generated plan."""
 
+import gzip
+import http.client
 import json
+import threading
+import time
 from collections import Counter
 from datetime import UTC, datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import URLError
 
 import pytest
@@ -404,3 +409,112 @@ def test_measured_changes_update_the_model_for_later_list_checks():
     assert model["late"]["state"] == "closed"
     perf.update_model(model, {"op": "create"}, ids, {"title": "x"}, {"id": "new"})
     assert model["new"]["state"] == "received"
+
+
+# ---------------------------------------------------------------- keep-alive transport
+
+
+class _Handler(BaseHTTPRequestHandler):
+    """HTTP/1.1 with keep-alive. The path picks the behavior: /gzip answers gzip-encoded
+    when asked; /close says Connection: close; /quiet-close closes the connection after
+    answering without saying so; /drop reads the request and closes without answering."""
+
+    protocol_version = "HTTP/1.1"
+
+    def setup(self):
+        super().setup()
+        self.server.connections += 1
+
+    def do_GET(self):
+        self.server.requests.append((self.path, dict(self.headers)))
+        if self.path == "/drop":
+            self.close_connection = True
+            return
+        body = json.dumps({"path": self.path, "pad": "x" * 500}).encode()
+        gzipped = self.path == "/gzip" and "gzip" in self.headers.get("Accept-Encoding", "")
+        if gzipped:
+            body = gzip.compress(body)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        if gzipped:
+            self.send_header("Content-Encoding", "gzip")
+        if self.path == "/close":
+            self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+        if self.path == "/quiet-close":
+            self.close_connection = True
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture
+def server():
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    httpd.connections, httpd.requests = 0, []
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    yield httpd
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def _transport(server):
+    return perf.KeepAliveTransport(f"http://127.0.0.1:{server.server_port}", "tok")
+
+
+def test_keepalive_reuses_one_connection_and_decompresses_gzip(server):
+    transport = _transport(server)
+    for path in ("/a", "/gzip", "/b"):
+        response = transport.send("GET", path, actor=None)
+        assert response.status == 200
+        assert json.loads(response.body)["path"] == path
+    assert transport.connections_opened == server.connections == 1
+    path, headers = server.requests[1]
+    assert headers["Accept-Encoding"] == "gzip"
+    assert headers["Authorization"] == "Bearer tok"
+
+
+def test_server_connection_close_opens_a_new_connection_next_time(server):
+    transport = _transport(server)
+    transport.send("GET", "/close", actor=None)
+    transport.send("GET", "/a", actor=None)
+    assert transport.connections_opened == server.connections == 2
+    assert len(server.requests) == 2
+
+
+def test_idle_connection_closed_by_the_server_is_reopened_before_sending(server):
+    transport = _transport(server)
+    transport.send("GET", "/quiet-close", actor=None)
+    time.sleep(0.2)  # let the server's close reach the client
+    response = transport.send("GET", "/a", actor=None)
+    assert response.status == 200
+    assert transport.connections_opened == 2
+    assert [path for path, _ in server.requests] == ["/quiet-close", "/a"]
+
+
+def test_a_request_dropped_after_sending_fails_and_is_never_resent(server):
+    transport = _transport(server)
+    with pytest.raises(http.client.HTTPException):
+        transport.send("GET", "/drop", actor=None)
+    assert [path for path, _ in server.requests] == ["/drop"]
+    assert transport.send("GET", "/a", actor=None).status == 200
+    assert transport.connections_opened == 2
+
+
+def test_each_thread_gets_its_own_connection(server):
+    transport = _transport(server)
+    transport.send("GET", "/a", actor=None)
+    thread = threading.Thread(target=lambda: transport.send("GET", "/b", actor=None))
+    thread.start()
+    thread.join()
+    transport.send("GET", "/c", actor=None)
+    assert transport.connections_opened == server.connections == 2
+
+
+def test_no_keepalive_flag_keeps_the_earlier_transport(monkeypatch):
+    monkeypatch.setenv("CRA_API_TOKEN", "tok")
+    assert perf.parse_args(["--base-url", "http://127.0.0.1:1"]).no_keepalive is False
+    assert perf.parse_args(["--base-url", "http://127.0.0.1:1", "--no-keepalive"]).no_keepalive
