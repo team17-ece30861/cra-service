@@ -406,3 +406,32 @@ def test_the_heartbeat_thread_beats_until_stopped(monkeypatch):
     finally:
         heartbeat.stop()
     assert not heartbeat._thread.is_alive()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_heartbeat_survives_a_dropped_connection(monkeypatch, caplog):
+    """The first beat finds its database connection dropped (as a pooler or network
+    might); later beats still get through on a new one."""
+    monkeypatch.setattr(sessions, "HEARTBEAT_INTERVAL", 0.05)
+    _running("run-1", heartbeat_age=100)
+    before = Session.objects.get(pk="run-1").heartbeat_at
+    beat, dropped = sessions.Heartbeat.beat, []
+
+    def beat_after_a_drop(self):
+        if not dropped:
+            dropped.append(True)
+            connection.ensure_connection()
+            connection.connection.close()  # behind Django's back
+        beat(self)
+
+    monkeypatch.setattr(sessions.Heartbeat, "beat", beat_after_a_drop)
+    heartbeat = sessions.Heartbeat("run-1")
+    heartbeat.start()
+    try:
+        deadline = time.monotonic() + 5
+        while Session.objects.get(pk="run-1").heartbeat_at == before:
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+    finally:
+        heartbeat.stop()
+    assert "heartbeat failed" in caplog.text

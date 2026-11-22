@@ -163,15 +163,17 @@ class Heartbeat:
         TesterSession.objects.filter(pk=self.session_id, state="running").update(**fields)
 
     def _loop(self) -> None:
-        try:
-            while not self._stop.wait(HEARTBEAT_INTERVAL):
-                try:
-                    self.beat()
-                except Exception as error:
-                    logger.warning(
-                        "Tester session %s: heartbeat failed: %s",
-                        self.session_id,
-                        type(error).__name__,
-                    )
-        finally:
-            connection.close()  # this thread's own connection
+        while not self._stop.wait(HEARTBEAT_INTERVAL):
+            try:
+                self.beat()
+            except Exception as error:
+                logger.warning(
+                    "Tester session %s: heartbeat failed: %s",
+                    self.session_id,
+                    type(error).__name__,
+                )
+            finally:
+                # This thread's own connection. Django only replaces a broken connection
+                # between requests, so a fresh one each beat survives a dropped one
+                # (and the pooler wants connections short anyway).
+                connection.close()
