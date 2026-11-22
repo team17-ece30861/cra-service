@@ -118,6 +118,27 @@ do not masquerade as GET audit 405 observations in this table. Its 405 status
 therefore remains explicitly untested here. Statuses and list filters are covered by
 `listing_cases.py` (PR #84).
 
+## Malformed requests (AC-13)
+
+`malformed.py` sends 577 malformed requests that Schemathesis generates from
+`openapi.yaml` (fixed seed, so every run sends the same requests; the corpus fingerprint is
+printed). Each must get the status the contract's precedence gives (404 for an unknown
+report type, 413 over 64 KB, otherwise 400) as problem+json matching the contract, never a
+5xx, and the stored data must be unchanged afterwards. CI runs the same corpus in-process
+(`tests/test_malformed_requests.py`). Unlike the suite above it needs the dev requirements
+(`pip install -r requirements-dev.txt`).
+
+```bash
+export CRA_BASE_URL=https://<deployment-base-url>
+export CRA_API_TOKEN=<token>        # never printed
+python -m acceptance.malformed --out malformed.json            # target must be empty
+python -m acceptance.malformed --reset --out malformed.json    # wipes the whole deployment first and after
+```
+
+Without `--reset` it refuses to run against a target that holds tickets, and it leaves its
+two seed tickets behind. With `--reset` it resets before and after the run and releases the
+clock. It exits 0 only if every response matched and nothing was stored.
+
 ## Results
 
 The suite collects 222 cases (59 Phase 3/audit, 32 drafts, 63 submissions, 34 closure, 22
