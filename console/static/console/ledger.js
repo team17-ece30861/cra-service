@@ -667,8 +667,8 @@
   var pages = {}, PAGE_TTL = 10000;
   function fetchDoc(path) {
     var hit = pages[path];
-    if (!hit || Date.now() - hit.at > PAGE_TTL) {
-      hit = pages[path] = { at: Date.now(), doc: fetch(path, { credentials: 'same-origin', headers: { Accept: 'text/html' } }).then(function (res) {
+    if (!hit || performance.now() - hit.at > PAGE_TTL) {
+      hit = pages[path] = { at: performance.now(), doc: fetch(path, { credentials: 'same-origin', headers: { Accept: 'text/html' } }).then(function (res) {
         if (res.redirected || !res.ok) throw new Error('not a page');
         return res.text();
       }).then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); }) };
