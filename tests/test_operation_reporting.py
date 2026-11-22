@@ -217,6 +217,11 @@ def test_resource_identifiers_are_replaced_by_the_explicit_template_in_evidence(
 def report_state(monkeypatch):
     monkeypatch.setattr(hooks, "STARTED", 1_792_800_000.0)
     monkeypatch.setattr(hooks, "RESULTS", {})
+    monkeypatch.setattr(hooks, "PLANNED_TESTS", [])
+    monkeypatch.setattr(hooks, "DESELECTED_TESTS", 0)
+    monkeypatch.setattr(hooks, "COLLECTION_ERRORS", 0)
+    monkeypatch.setattr(hooks, "PARTIAL_SELECTION", False)
+    monkeypatch.setattr(hooks, "COLLECTION_EXCLUSIONS", False)
 
 
 def test_teardown_failure_prevents_call_phase_success_from_becoming_passing_evidence(report_state):
@@ -248,6 +253,12 @@ def test_json_and_markdown_exports_include_all_operations_and_run_context(
         "--tested-version": "synthetic-only",
     }
     config = SimpleNamespace(getoption=options.get)
+    hooks.PLANNED_TESTS.append("test_example")
+    hooks.RESULTS["test_example"] = {
+        "test": "test_example",
+        "outcome": "passed",
+        "teardown_complete": True,
+    }
     hooks.pytest_sessionfinish(SimpleNamespace(config=config), exitstatus)
     report = json.loads((tmp_path / "nested/results.json").read_text(encoding="utf-8"))
     markdown = (tmp_path / "nested/operations.md").read_text(encoding="utf-8")
@@ -276,6 +287,7 @@ def test_collect_only_clears_prior_session_state_and_writes_no_reports(tmp_path,
     hooks.pytest_sessionfinish(SimpleNamespace(config=config), 0)
     assert hooks.STARTED is None
     assert hooks.RESULTS == {}
+    assert hooks.PLANNED_TESTS == []
     assert not (tmp_path / "unwanted.json").exists()
 
 
@@ -283,6 +295,7 @@ def test_collect_only_clears_prior_session_state_and_writes_no_reports(tmp_path,
 def test_real_pytest_hooks_exclude_fixture_calls_and_withhold_failed_test_evidence(
     tmp_path, interrupted
 ):
+    (tmp_path / "pytest.ini").write_text("[pytest]\naddopts = -p no:django\n", encoding="utf-8")
     (tmp_path / "conftest.py").write_text(
         "import pytest\n"
         "from acceptance.client import Response, Service\n"
@@ -328,10 +341,10 @@ def test_real_pytest_hooks_exclude_fixture_calls_and_withhold_failed_test_eviden
             "-m",
             "pytest",
             "-c",
-            str(ROOT / "acceptance/pytest.ini"),
+            str(tmp_path / "pytest.ini"),
             "-p",
             "acceptance.conftest",
-            str(tmp_path / "test_synthetic.py"),
+            str(tmp_path),
             "--base-url=https://synthetic.example.invalid",
             "--allow-reset",
             "--report=" + str(tmp_path / "report.json"),
@@ -357,10 +370,14 @@ def test_real_pytest_hooks_exclude_fixture_calls_and_withhold_failed_test_eviden
         assert report["results"][0]["teardown_complete"] is False
         assert report["exit_code"] == 2
         assert progress == []  # its teardown never finished
+        assert report["run_complete"] is False
+        assert "Run: incomplete" in (tmp_path / "operations.md").read_text(encoding="utf-8")
     else:
         assert (report["passed"], report["failed"], report["skipped"]) == (1, 1, 1)
         # One line per test as it finished, matching the final report's entries.
         assert progress == report["results"]
+        assert report["run_complete"] is True
+        assert "Run: finished" in (tmp_path / "operations.md").read_text(encoding="utf-8")
     health = next(row for row in report["operations"] if row["path"] == "/health")
     reset = next(row for row in report["operations"] if row["path"] == "/test/reset")
     assert health["success"]["status"] == "inconclusive"

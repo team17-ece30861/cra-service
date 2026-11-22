@@ -8,9 +8,17 @@ import pytest
 
 from acceptance.client import Contract, HTTPTransport, Service
 from acceptance.model_coverage import DESIGN_VERSION, ModelJournal, record_model_test
+from acceptance.observations import capture_operation_checks
 from acceptance.reporting import operation_statuses, render_operation_table
 
 RESULTS = {}
+PLANNED_TESTS = []
+DESELECTED_TESTS = 0
+COLLECTION_ERRORS = 0
+PARTIAL_SELECTION = False
+BROADER_SELECTION = False
+COLLECTION_EXCLUSIONS = False
+SETUP_CHECKS = pytest.StashKey[list[dict]]()
 STARTED = None
 PROGRESS = None  # --progress path: one JSON line per finished test, written as it finishes
 MODEL_JOURNAL = None
@@ -39,12 +47,19 @@ def pytest_addoption(parser):
 
 
 def pytest_sessionstart(session):
-    global STARTED, PROGRESS, MODEL_JOURNAL
+    global STARTED, PROGRESS, MODEL_JOURNAL, DESELECTED_TESTS, COLLECTION_ERRORS
+    global PARTIAL_SELECTION, COLLECTION_EXCLUSIONS, BROADER_SELECTION
     config = session.config
     STARTED = None
     PROGRESS = None
     MODEL_JOURNAL = None
     RESULTS.clear()
+    PLANNED_TESTS.clear()
+    DESELECTED_TESTS = 0
+    COLLECTION_ERRORS = 0
+    PARTIAL_SELECTION = False
+    BROADER_SELECTION = False
+    COLLECTION_EXCLUSIONS = False
     if config.option.collectonly:
         return
     if not config.getoption("--base-url"):
@@ -72,6 +87,43 @@ def service(pytestconfig):
     return Service(HTTPTransport(pytestconfig.getoption("--base-url"), os.environ["CRA_API_TOKEN"]))
 
 
+def pytest_collection_finish(session):
+    global PARTIAL_SELECTION, BROADER_SELECTION, COLLECTION_EXCLUSIONS
+    PLANNED_TESTS[:] = [item.nodeid for item in session.items]
+    config = session.config
+    COLLECTION_EXCLUSIONS = bool(config.getoption("--ignore") or config.getoption("--ignore-glob"))
+    PARTIAL_SELECTION = True
+    BROADER_SELECTION = False
+    if config.inipath is not None and len(config.args) == 1:
+        argument = str(config.args[0])
+        requested = (Path(config.invocation_params.dir) / argument.split("::", 1)[0]).resolve()
+        suite = config.inipath.parent.resolve()
+        PARTIAL_SELECTION = "::" in argument or requested != suite
+        # e.g. `pytest -c acceptance/pytest.ini` from the repository root with no path:
+        # pytest collects from the root, which reaches beyond the suite.
+        BROADER_SELECTION = "::" not in argument and requested in suite.parents
+
+
+def pytest_deselected(items):
+    global DESELECTED_TESTS
+    DESELECTED_TESTS += len(items)
+
+
+def pytest_collectreport(report):
+    global COLLECTION_ERRORS
+    if report.failed:
+        COLLECTION_ERRORS += 1
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item):
+    with capture_operation_checks() as checks:
+        try:
+            yield
+        finally:
+            item.stash[SETUP_CHECKS] = checks
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):
     journal = MODEL_JOURNAL if MODEL_JOURNAL is not None else ModelJournal()
@@ -87,11 +139,14 @@ def pytest_runtest_makereport(item, call):
     if report.when == "call" and MODEL_RECORDER in item.stash:
         report.user_properties.append(("model_evidence", item.stash[MODEL_RECORDER].evidence()))
     service = item.funcargs.get("service")
-    if service is None:
-        return
     if report.when == "setup":
-        service.operation_checks.clear()
-    elif report.when == "call":
+        if report.failed:
+            report.user_properties.append(
+                ("operation_checks", item.stash.get(SETUP_CHECKS, []).copy())
+            )
+        if service is not None:
+            service.operation_checks.clear()
+    elif report.when == "call" and service is not None:
         report.user_properties.append(("operation_checks", service.operation_checks.copy()))
 
 
@@ -103,8 +158,9 @@ def pytest_runtest_logreport(report):
     entry["seconds"] += report.duration
     if report.when == "teardown":
         entry["teardown_complete"] = True
-    if report.when == "call":
+    if report.when == "call" or report.when == "setup" and report.failed:
         entry["operation_checks"] = dict(report.user_properties).get("operation_checks", [])
+    if report.when == "call":
         entry["model_evidence"] = dict(report.user_properties).get("model_evidence")
     if report.failed and "message" not in entry:
         crash = getattr(report.longrepr, "reprcrash", None)
@@ -140,6 +196,7 @@ def pytest_sessionfinish(session, exitstatus):
         "operations": operations,
         "model_evidence_version": DESIGN_VERSION,
         "model_evidence_available": MODEL_JOURNAL is not None and MODEL_JOURNAL.available,
+        **_run_summary(exitstatus),
     }
     if destination is not None:
         path = Path(destination)
@@ -151,12 +208,64 @@ def pytest_sessionfinish(session, exitstatus):
         path.write_text(_operation_report(session.config, exitstatus, operations), encoding="utf-8")
 
 
+def _run_summary(exitstatus):
+    selected = set(PLANNED_TESTS)
+    completed = {
+        test_id
+        for test_id, result in RESULTS.items()
+        if result["outcome"] in {"passed", "failed", "skipped"}
+        and result.get("teardown_complete", False)
+    }
+    missing = selected - completed
+    reasons = []
+    if not selected:
+        reasons.append("no tests selected")
+    if DESELECTED_TESTS:
+        reasons.append(f"filtered selection: {DESELECTED_TESTS} tests deselected")
+    if BROADER_SELECTION:
+        reasons.append(
+            "selection is broader than the configured suite directory, so it can collect "
+            "tests outside the suite"
+        )
+    elif PARTIAL_SELECTION:
+        reasons.append("positional selection does not identify the full configured suite directory")
+    if COLLECTION_EXCLUSIONS:
+        reasons.append("collection exclusion options are active")
+    if COLLECTION_ERRORS:
+        reasons.append(f"{COLLECTION_ERRORS} collection errors")
+    if missing:
+        reasons.append(f"{len(missing)} selected tests did not complete")
+    if exitstatus not in (0, 1):
+        reasons.append(f"pytest stopped with exit code {int(exitstatus)}")
+    return {
+        "run_complete": not reasons,
+        "tests_selected": len(selected),
+        "tests_completed": len(selected & completed),
+        "tests_deselected": DESELECTED_TESTS,
+        "partial_selection": PARTIAL_SELECTION or COLLECTION_EXCLUSIONS,
+        "broader_selection": BROADER_SELECTION,
+        "collection_exclusions": COLLECTION_EXCLUSIONS,
+        "collection_errors": COLLECTION_ERRORS,
+        "tests_not_run": len(selected - RESULTS.keys()),
+        "incomplete_reasons": reasons,
+    }
+
+
 def _operation_report(config, exitstatus, operations):
     version = config.getoption("--tested-version")
-    completed = "finished" if exitstatus in (0, 1) else "incomplete"
+    summary = _run_summary(exitstatus)
+    completed = "finished" if summary["run_complete"] else "incomplete"
+    reason = (
+        "Incomplete because: " + "; ".join(summary["incomplete_reasons"]) + ".\n\n"
+        if summary["incomplete_reasons"]
+        else ""
+    )
     return (
         f"# Operation status\n\nVersion label: {version}\n\n"
         f"Run: {completed}; pytest exit code {int(exitstatus)}.\n\n"
+        f"Tests: {summary['tests_completed']}/{summary['tests_selected']} selected completed; "
+        f"{summary['tests_deselected']} deselected.\n\n"
+        + reason
         + render_operation_table(operations)
         + "\n"
     )

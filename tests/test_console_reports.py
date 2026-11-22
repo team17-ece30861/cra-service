@@ -2,6 +2,7 @@
 show what the API returns, make exactly one change per POST as the signed-in person, and keep
 reporter details to the ticket page."""
 
+import re
 from copy import deepcopy
 
 import pytest
@@ -348,7 +349,7 @@ def test_ticket_page_links_to_drafts_record_and_close(api, console):
     html = console.get(f"/console/tickets/{ticket_id}").content.decode()
     assert f'href="/console/tickets/{ticket_id}/reports/early_warning"' in html
     assert f'href="/console/tickets/{ticket_id}/reports/early_warning/record?from=ticket"' in html
-    assert f'data-sheet-open="/console/tickets/{ticket_id}/close"' in html
+    assert f'data-sheet-href="/console/tickets/{ticket_id}/close"' in html
     assert 'data-sheet="close"' in html  # ready to open in place
     assert 'data-soon="View Draft"' not in html and 'data-soon="Close Ticket"' not in html
     listing = console.get("/console/").content.decode()
@@ -399,22 +400,82 @@ def test_report_tabs_have_a_name_at_every_width(api, console):
     assert "aria-hidden" not in tabs
 
 
-def test_the_page_script_learns_where_a_change_landed_from_a_header(api, console):
+def test_the_page_script_gets_the_toast_as_json_and_nothing_waits(api, console):
+    """Saved from the page's script (5.7): the answer is the toast, the page refreshes in
+    place, and no toast is left in the session for a later page."""
     ticket_id = _ready_to_close(api)
     response = console.post(f"/console/tickets/{ticket_id}/close", headers={"X-Ledger-Sheet": "1"})
-    assert response.status_code == 204
-    assert response["X-Ledger-Done"] == f"/console/tickets/{ticket_id}"
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/json"
+    assert response.json() == {
+        "saved": True,
+        "toast": {
+            "title": "Ticket closed",
+            "body": "Heap overflow in OTA update parser is resolved. The audit trail records it.",
+        },
+    }
     assert Ticket.objects.get(pk=ticket_id).state == "closed"
-    landed = console.get(f"/console/tickets/{ticket_id}").content.decode()
-    assert 'data-flash-title="Ticket closed"' in landed
+    assert AuditEntry.objects.get(ticket_id=ticket_id, action="closed").actor == "m.okafor"
+    assert "ledger_toast" not in console.session
+    assert "data-flash-title" not in console.get(f"/console/tickets/{ticket_id}").content.decode()
     other = _complete_ticket(api)
     response = console.post(
         f"/console/tickets/{other}/reports/early_warning/record",
-        {"submitted_at": "2026-10-29 12:00:00"},
+        {"submitted_at": "2026-10-29 12:00:00", "from": "ticket"},
         headers={"X-Ledger-Sheet": "1"},
     )
-    assert response.status_code == 204
-    assert response["X-Ledger-Done"] == f"/console/tickets/{other}"
+    assert response.status_code == 200
+    assert response.json()["toast"] == {
+        "title": "Early warning recorded",
+        "body": "Submitted on time. The report is locked as it read now.",
+    }
+    submission = ReportSubmission.objects.get(ticket_id=other)
+    assert submission.actor == "m.okafor"
+    assert "ledger_toast" not in console.session
+
+
+def test_a_failed_change_from_the_page_script_answers_with_the_sheet(api, console):
+    """The API says no: the page's script gets the page with the sheet and its errors (not
+    JSON), and nothing changed."""
+    ticket_id = _complete_ticket(api)
+    response = console.post(
+        f"/console/tickets/{ticket_id}/reports/early_warning/record",
+        {"submitted_at": "2026-10-29 07:00:00", "from": "ticket"},
+        headers={"X-Ledger-Sheet": "1"},
+    )
+    assert response.status_code == 422
+    assert response["Content-Type"].startswith("text/html")
+    html = response.content.decode()
+    assert 'data-sheet="record"' in html
+    assert "Enter a time between when your team became aware" in html
+    assert 'value="2026-10-29 07:00:00"' in html
+    assert not ReportSubmission.objects.filter(ticket_id=ticket_id).exists()
+    assert "ledger_toast" not in console.session
+    blocked = _create(api)
+    _triage(api, blocked)
+    response = console.post(f"/console/tickets/{blocked}/close", headers={"X-Ledger-Sheet": "1"})
+    assert response.status_code == 409
+    assert 'data-sheet="close"' in response.content.decode()
+    assert Ticket.objects.get(pk=blocked).state == "reportable"
+
+
+def test_the_page_script_still_needs_the_csrf_token(api):
+    user = User.objects.create_user("m.okafor", password=PASSWORD)
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(user)
+    ticket_id = _ready_to_close(api)
+    response = client.post(f"/console/tickets/{ticket_id}/close", headers={"X-Ledger-Sheet": "1"})
+    assert response.status_code == 403
+    assert Ticket.objects.get(pk=ticket_id).state == "reportable"
+    page = client.get(f"/console/tickets/{ticket_id}/close").content.decode()
+    token = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', page).group(1)
+    response = client.post(
+        f"/console/tickets/{ticket_id}/close",
+        {"csrfmiddlewaretoken": token},
+        headers={"X-Ledger-Sheet": "1"},
+    )
+    assert response.status_code == 200 and response.json()["saved"] is True
+    assert Ticket.objects.get(pk=ticket_id).state == "closed"
 
 
 def _obligations(statuses):

@@ -56,7 +56,6 @@
 </div>
 {% block sheets %}{% endblock %}
 {% include "console/_sheets.html" %}
-{% for m in messages %}{% if "ledger-toast" in m.tags %}<span hidden data-flash="{{ m.message }}"></span>{% endif %}{% endfor %}
 <div class="toast" id="toast" role="status" aria-live="polite"{% if flash %} data-flash-title="{{ flash.title }}" data-flash-body="{{ flash.body }}"{% endif %}><svg class="i" aria-hidden="true"><use href="#i-hourglass"/></svg><div><div class="t-headline toast-title" id="toast-title">Not available yet</div><div class="t-footnote muted" id="toast-body"></div></div></div>
 <script src="{% static 'console/ledger.js' %}"></script>
 {% if tf_new %}<script src="{% static 'console/forms.js' %}"></script>{% endif %}

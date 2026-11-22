@@ -9,6 +9,8 @@ Optional: DJANGO_DEBUG (default false), ALLOWED_HOSTS (comma-separated),
           TESTER_ALLOWED_HOSTS (comma-separated systems our tester may target),
           TESTER_OWN_SYSTEM_URLS (JSON list: exact own-system bases for model coverage),
           TESTER_MODEL_MAPPING_URL (published versioned design-to-test mapping)
+          DB_CONN_MAX_AGE (seconds a worker keeps its database connection; default 0,
+          the Docker image sets 300)
 """
 
 import json
@@ -83,7 +85,14 @@ TESTER_OWN_SYSTEM_URLS = env_own_system_urls(
         '"https://team17-prod-7zneiwx4ba-uc.a.run.app"]',
     )
 )
-TESTER_MODEL_MAPPING_URL = os.environ.get("TESTER_MODEL_MAPPING_URL", "")
+# The published design-to-test mapping for model coverage, pinned to the commit that
+# merged it (PR #106). The repository is public, so staff and podmates can open it.
+# Change it together with acceptance/model_requirements.json's design version.
+TESTER_MODEL_MAPPING_URL = os.environ.get(
+    "TESTER_MODEL_MAPPING_URL",
+    "https://github.com/team17-ece30861/cra-service/blob/"
+    "e4e8e33cfadfd29a9e71137a94a37593258f6b5d/docs/model-coverage.md",
+)
 
 # Other teams' systems our tester may target, besides this service itself (the
 # course spec: "approved pod service URLs"). Anything else is rejected with 400.
@@ -108,6 +117,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # First, so it compresses the final response after every other middleware has
+    # written the body (PlatformMiddleware rewrites error bodies). API responses only;
+    # console pages are never compressed (see cra_service/compression.py).
+    "cra_service.compression.ApiGZipMiddleware",
     "django.middleware.security.SecurityMiddleware",
     # Auth (401) and body size (413) run before routing so they take precedence
     # over 404/405, and every error response leaves as application/problem+json.
@@ -142,12 +155,49 @@ TEMPLATES = [
     },
 ]
 
-# Neon: use the pooled connection string, which includes ?sslmode=require.
-# The pooler runs in transaction mode, so Django must not hold connections
-# open or use server-side cursors.
-DATABASES = {"default": dj_database_url.parse(os.environ["DATABASE_URL"], conn_max_age=0)}
-if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
-    DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
+
+# Neon: use the pooled connection string, which includes ?sslmode=require. The pooler
+# is PgBouncer in transaction mode: each transaction (each autocommit query, or each
+# atomic block) may run on a different Postgres backend. So nothing may rely on state
+# that outlives a transaction, and that is true within one request as much as across
+# requests; closing the connection after every request never protected it. What the
+# code relies on, and why each is safe here:
+# - No server-side cursors (they live across fetches): disabled below.
+# - No prepared statements (named per backend): psycopg's prepare_threshold is None,
+#   which Django already defaults to; set explicitly so it stays that way. Queries use
+#   client-side binding (Django's default; server_side_binding stays off).
+# - Locks: only transaction-scoped ones (SELECT ... FOR UPDATE, LOCK TABLE and
+#   pg_advisory_xact_lock inside transaction.atomic). Never session-level advisory
+#   locks or SET (only SET LOCAL).
+# - Django's own TimeZone (SET at connect when it differs) and client_encoding (a
+#   startup parameter) are parameters PgBouncer tracks per client and re-applies on
+#   whichever backend serves it.
+# So each gunicorn worker keeps its connection to the pooler (saving a TLS handshake and
+# login per request, about 190 ms on Launchpad) for DB_CONN_MAX_AGE seconds since it
+# opened; the first request after that reconnects. The Docker image sets 300. The
+# default stays 0 because runserver handles each connection in a new thread, and
+# connections kept by finished threads are never closed: locally they pile up until
+# Postgres refuses clients (Django's docs say not to use persistent connections with
+# the development server). Health checks run SELECT 1 before a reused connection's first
+# query in each request and reconnect if the pooler or Neon dropped it, instead of
+# failing that request. connect_timeout bounds each connection attempt (seconds), so an
+# unreachable pooler fails the request instead of stalling a worker, and the tester's
+# heartbeat, indefinitely.
+def database_settings(environ: Mapping[str, str]) -> dict:
+    database = dj_database_url.parse(
+        environ["DATABASE_URL"],
+        conn_max_age=int(environ.get("DB_CONN_MAX_AGE", "0")),
+        conn_health_checks=True,
+    )
+    if database["ENGINE"] == "django.db.backends.postgresql":
+        database["DISABLE_SERVER_SIDE_CURSORS"] = True
+        database.setdefault("OPTIONS", {}).update(
+            prepare_threshold=None, server_side_binding=False, connect_timeout=10
+        )
+    return database
+
+
+DATABASES = {"default": database_settings(os.environ)}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -1,4 +1,4 @@
-{# Sheets (PR 2): tasks that slide up over the page they belong to. Closed until opened in place (ledger.js) or by URL (console/views_forms.py). #}
+{# New Ticket, Edit Ticket and Triage: sheets that slide up over the page they belong to. Closed until opened in place (ledger.js, "Sheets") or by URL (console/views_forms.py). Record Submission and Close Ticket live in the page's #sheet-layer; ledger.js runs both layers the same way. #}
 {% if tf_new or tf_edit or tr %}
 <div class="sheet-layer{% if open_sheet %} open{% if sheet_enter %} entering{% endif %}{% endif %}" id="form-sheets"{% if not open_sheet %} hidden{% endif %}>
   <div class="sheet-scrim" data-close></div>

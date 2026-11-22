@@ -1,8 +1,12 @@
 FROM python:3.12-slim
 
+# DB_CONN_MAX_AGE: each gunicorn worker keeps its database connection for 300 s
+# instead of opening one per request (cra_service/settings.py explains why that is safe
+# with Neon's pooler, and why local runserver keeps the default of 0).
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8080
+    PORT=8080 \
+    DB_CONN_MAX_AGE=300
 
 WORKDIR /app
 

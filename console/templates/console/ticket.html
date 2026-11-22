@@ -25,7 +25,7 @@
         <div class="menu tk-menu" role="menu" id="tk-menu" hidden>
           <button role="menuitem" type="button" data-copy="{{ t.id }}"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy Ticket ID</button>
           {% if t.state != "closed" %}<hr>
-          <button role="menuitem" type="button" class="danger" data-sheet-open="{% url 'console:close' t.id %}"><svg class="i" aria-hidden="true"><use href="#i-archive"/></svg>Close Ticket…</button>{% endif %}
+          <button role="menuitem" type="button" class="danger" data-sheet-href="{% url 'console:close' t.id %}"><svg class="i" aria-hidden="true"><use href="#i-archive"/></svg>Close Ticket…</button>{% endif %}
         </div>
       </div>
     </div>
@@ -39,7 +39,7 @@
     <p class="tk-count"><span class="{% if next.late %}late{% endif %}" data-hms2="{{ next.due_at }}">{{ next.count }}</span><small data-left>{% if next.late %}overdue{% else %}left{% endif %}</small></p>
     <p class="t-footnote muted mono">Due {{ next.due }}{% if next.window %} · {{ next.window.total }} after {{ next.window.since }}{% endif %}</p>
   </div>
-  <a class="btn primary lg" href="{% url 'console:record' t.id next.type %}?from=ticket" data-sheet-open>Record {{ next.title }}</a>
+  <a class="btn primary lg" href="{% url 'console:record' t.id next.type %}?from=ticket" data-sheet-href="{% url 'console:record' t.id next.type %}?from=ticket">Record {{ next.title }}</a>
 </section>
 {% elif t.state == "received" %}
 <section class="tk-next" aria-label="Triage">

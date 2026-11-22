@@ -4,7 +4,8 @@
 Targets are limited to this service and the approved pod systems
 (tester.runner.allowed_target). These routes run outside the request transaction
 (cra_service.middleware), so a session's state is visible to other requests while
-its suite runs.
+its suite runs. One run at a time, and recovery of runs cut off by a restart:
+tester.sessions.
 """
 
 import logging
@@ -18,7 +19,7 @@ from pydantic import Field
 from core import clock
 from cra_service.errors import BadRequest, field_error, interface_problem
 from cra_service.validation import RequestSchema, parse_body
-from tester import runner
+from tester import runner, sessions
 from tester.models import TesterSession
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,8 @@ logger = logging.getLogger(__name__)
 router = Router(tags=["tester"])
 
 SOURCES = {"tester", "system", "communication", "unknown"}
+
+ANOTHER_RUN = "Another test run is in progress; try again when it ends"
 
 
 class SetupIn(RequestSchema):
@@ -67,6 +70,9 @@ def setup(request):
         return _invalid([field_error("target_url", "must be an HTTP(S) base URL")])
     if not runner.allowed_target(target):
         return _invalid([field_error("target_url", "is not an approved pod system")])
+    # A target's setup may reset it, so not while a run is using the shared database.
+    if sessions.run_in_progress():
+        return interface_problem(409, ANOTHER_RUN, "tester")
     session_id = f"run-{uuid.uuid4()}"
     try:
         status, body = runner.call(
@@ -98,23 +104,57 @@ def run(request):
         payload = parse_body(request, RunIn)
     except BadRequest as error:
         return _invalid(error.errors)
-    claimed = TesterSession.objects.filter(pk=payload.session_id, state="ready").update(
-        state="running"
-    )
-    if not claimed:
-        if TesterSession.objects.filter(pk=payload.session_id).exists():
-            return interface_problem(409, "This session has already run", "tester")
+    claimed = sessions.claim(payload.session_id)
+    if claimed == sessions.UNKNOWN:
         return interface_problem(404, "Unknown session", "tester")
+    if claimed == sessions.USED:
+        return interface_problem(409, "This session has already run", "tester")
+    if claimed == sessions.BUSY:
+        return interface_problem(409, ANOTHER_RUN, "tester")
     session = TesterSession.objects.get(pk=payload.session_id)
+    heartbeat = sessions.Heartbeat(session.session_id)
+    heartbeat.start()
     try:
-        report, aborted = runner.run_suite(session.session_id, session.target_url)
+        try:
+            report, aborted = runner.run_suite(
+                session.session_id, session.target_url, on_start=heartbeat.started
+            )
+        except Exception as error:
+            logger.error("Tester session %s crashed: %s", session.session_id, type(error).__name__)
+            aborted = "The tester failed while running the suite"
+            report = runner.failed_report(session.session_id, session.target_url, aborted)
+        # Before the session stops counting as running, so the cleanup can't reset a
+        # target that the next run is already using. If its state can't be read, the
+        # run is most likely still ours: clean up anyway.
+        if not heartbeat.cancelled:
+            try:
+                sessions.fresh_connection()
+                ours = sessions.still_running(session.session_id)
+            except Exception as error:
+                logger.error(
+                    "Tester session %s: state unreadable: %s",
+                    session.session_id,
+                    type(error).__name__,
+                )
+                ours = True
+            if ours:
+                runner.clean_up_target(session.target_url, session.session_id)
+    finally:
+        heartbeat.stop()
+    if heartbeat.cancelled:  # recovery stored a report while the suite was still going
+        return interface_problem(500, sessions.CUT_OFF, "tester")
+    try:
+        sessions.fresh_connection()
+        stored = sessions.finish(session.session_id, report)
     except Exception as error:
-        logger.error("Tester session %s crashed: %s", session.session_id, type(error).__name__)
-        aborted = "The tester failed while running the suite"
-        report = runner.failed_report(session.session_id, session.target_url, aborted)
-    session.report = report
-    session.state = "finished"
-    session.save(update_fields=["report", "state"])
+        # The session stays running until its heartbeat goes stale; recovery then
+        # stores the outcomes the heartbeat saved.
+        logger.error(
+            "Tester session %s: report not stored: %s", session.session_id, type(error).__name__
+        )
+        return interface_problem(500, "The tester could not store its report", "tester")
+    if not stored:
+        return interface_problem(500, sessions.CUT_OFF, "tester")
     if aborted:
         return interface_problem(500, aborted, "tester")
     return report
@@ -128,6 +168,9 @@ def report(request):
     session = TesterSession.objects.filter(pk=session_id).first()
     if session is None:
         return interface_problem(404, "Unknown session", "tester")
+    if session.state == "running":
+        sessions.recover_stale()
+        session.refresh_from_db()
     if session.state != "finished":
         return interface_problem(409, "The suite has not finished", "tester")
     return session.report
