@@ -15,11 +15,11 @@ REQ-17 - Performance │ Status: complete │ Demonstrated by: AC-18 (`acceptanc
 
 REQ-18 - Persistence │ Status: complete │ Demonstrated by: AC-19 (recorded demo of `scripts/restart_demo.sh prod`: a new Cloud Run revision replaced every instance, and the ticket, early-warning report and audit log read back byte-for-byte unchanged; video: https://purdue0-my.sharepoint.com/:v:/g/personal/qdeklerk_purdue_edu/IQCXXwEfxLuSQ49vvVBqK75hAWZo_IIdPbXZwQyBD67BozA?e=eBzr8P)
 
-REQ-12 - Error handling │ Status: complete │ Demonstrated by: AC-02, AC-04, AC-13 (683 generated malformed requests against the evaluation deployment with `acceptance/malformed.py`; 664 in CI in `tests/test_malformed_requests.py`), AC-14
+REQ-12 - Error handling │ Status: complete │ Demonstrated by: AC-02, AC-13 (683 generated malformed requests against the evaluation deployment with `acceptance/malformed.py`; 664 in CI in `tests/test_malformed_requests.py`)
 
 REQ-01 - Intake │ Status: complete │ Demonstrated by: AC-01, plus the new future-fix-time rule (422) in `tests/test_contract_030.py::TestSubmitFutureFixTime`
 
-REQ-04 - Deadlines │ Status: complete │ Demonstrated by: AC-03, AC-07; `fix.available_at` now means the first corrective or mitigating measure (wording change, no behavior change)
+REQ-04 - Deadlines │ Status: complete │ Demonstrated by: AC-03 (AC-07 also checks that an update recalculates every deadline); `fix.available_at` now means the first corrective or mitigating measure (wording change, no behavior change)
 
 REQ-08 - Submission recording │ Status: complete │ Demonstrated by: AC-09, plus `["unknown"]` member states for the early warning in `tests/test_contract_030.py::TestUnknownMemberStates` and `::TestUnknownMemberStatesInReports`
 
@@ -106,6 +106,20 @@ Integration: Phase 5 added no new operations. The future-fix-time rule and `["un
 ## Q4.2 Tests for new functionality
 
 Every AC of the REQs completed in Phase 5 maps to a named test. All run through the common interface except where marked CI only.
+
+Carried-forward ACs of the REQs we touched this phase, all rerun over HTTP in the 241-test suite (`acceptance/cases.py` and `acceptance/submission_cases.py`; Q4.5):
+
+AC-01 │ Requirement(s): REQ-01, REQ-13 │ Test(s): `test_ac01_intake_has_unique_ids_and_fixed_receipt_time` │ Type: success │ Automated: yes
+
+AC-02 │ Requirement(s): REQ-01, REQ-12 │ Test(s): `test_ac02_invalid_intake_preserves_ticket_count`, `test_ac02_malformed_intake_preserves_ticket_count` │ Type: failure │ Automated: yes
+
+AC-03 │ Requirement(s): REQ-02, REQ-04 │ Test(s): `test_ac03_model_d_exact_deadlines_and_statuses` │ Type: success, boundary │ Automated: yes
+
+AC-09 │ Requirement(s): REQ-08 │ Test(s): `test_ac09_records_locked_content_and_one_audit_entry`, `test_ac09_submission_interval_is_inclusive`, `test_ac09_duplicate_precedes_missing_fields_and_future_time` │ Type: success, boundary, failure │ Automated: yes
+
+AC-17 │ Requirement(s): REQ-16 │ Test(s): `test_ac17_reset_deletes_tickets`, `test_ac17_clock_stays_fixed_and_controls_receipt` │ Type: success │ Automated: yes
+
+New in Phase 5:
 
 AC-18 │ Requirement(s): REQ-17 │ Test(s): `acceptance/perf.py` (1,000 tickets, 200 sequential mixed requests across 11 operations, every status checked; fails on p95 > 1 s or any unexpected status); `tests/test_perf_script.py` (percentiles, mix, a fast 500 still fails); `tests/test_query_counts.py` (list and detail stay at a fixed number of queries at 1,000 tickets) │ Type: boundary (1,000 tickets), failure (unexpected status) │ Automated: yes (run against a deployment on demand, not in CI, because it loads 1,000 tickets)
 
