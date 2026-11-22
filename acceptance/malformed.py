@@ -68,11 +68,12 @@ BUDGET = {
 }
 MINIMUM_FAULTS = 500  # AC-13
 # The corpus this repository expects (Python 3.12 and requirements-dev.txt's pins), per
-# operating system: with the same seed and versions, Hypothesis draws different random
-# values on Linux (CI, Cloud Run) than on macOS. Both corpora cover the same 133 fault
-# categories; only the invalid values differ. Another Python or library version also
-# generates different requests. If openapi.yaml or the generator changes on purpose,
-# regenerate on both systems and update the values:
+# operating system: Linux and macOS generate different corpora even with the same Python
+# patch release and identical package versions (cause inside Hypothesis/Schemathesis not
+# identified). Both cover the same 133 fault categories; only the invalid values differ.
+# CI checks only the Linux pin; the macOS pin is checked only on a Mac. Another Python or
+# library version also generates different requests. If openapi.yaml or the generator
+# changes on purpose, regenerate on both systems and update the values:
 #   python -c "from acceptance.malformed import *; c = generate()[0]; print(len(c), fingerprint(c))"
 PYTHON = (3, 12)
 EXPECTED = {  # sys.platform: (requests, fingerprint)

@@ -191,11 +191,15 @@ different invalid input; different invalid values for the same field count separ
 requests sent, distinct invalid inputs (always equal), and fault categories, keyed by
 operation, location and field (array indices collapsed), and rule. The JSON summary lists
 the categories per operation.
-The seed is fixed, so every run on one operating system sends the same corpus. With the
-same seed and versions, Hypothesis draws different values on Linux and macOS: Linux (CI,
-Cloud Run) sends 664 requests (`34824b069854e3e9`), macOS sends 683 (`562ec91fbc181557`).
-Both cover the same 133 fault categories. The sizes and fingerprints are recorded in
-`malformed.py` and checked in CI and by the CLI. Each request must
+The seed is fixed, so every run on one operating system sends the same corpus. Linux and
+macOS generate different corpora even with the same Python patch release (3.12.16) and
+identical installed package versions (checked on 2026-11-22 in a `python:3.12-slim`
+container against CI's install log): Linux sends 664 requests (`34824b069854e3e9`), macOS
+sends 683 (`562ec91fbc181557`). Both cover the same 133 fault categories; only the invalid
+values differ. The corpus is generated wherever the CLI or CI runs (the production image
+doesn't include Schemathesis). Both sizes and fingerprints are recorded in `malformed.py`.
+CI checks only the Linux one; the macOS one is checked only when the test or the CLI runs
+on a Mac, so it can go stale unnoticed. Each request must
 get the status the contract's precedence gives (404 for an unknown report type, 413 over
 64 KB, otherwise 400) as problem+json matching the contract, never a 5xx, and the stored
 data must be unchanged afterwards. CI runs the Linux corpus in-process
