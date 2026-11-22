@@ -173,7 +173,9 @@ Our deployed tester checks part of this on every run against our own system: eac
 
 ## Q6.1 Cross-team test
 
-[Q6.1 OUR SUITE vs TEAM 21: after 11 PM ET]
+On November 22, 2026, we ran both directions against the final versions: our deployed tester (at `c875f14`) against Team 21's deployment, and Team 21's published tester against ours. All 8 of our failures against Team 21 trace to contract rules both teams agreed on that their deployment doesn't follow, so they are Team 21's to fix, not spec gaps; Team 21's tester found no problem with ours.
+
+Our tests → Team 21 service │ Date: November 22, 2026, 1:52 to 2:00 PM Eastern │ Run/passed: 241 run, 233 passed │ Main problem and owner: Team 21's deployment doesn't follow three agreed rules (owner: Team 21): four requests to an unknown ticket with a bad body returned 400 instead of 404 (the contract's order is 401, 413, 404, 400), three closure tests got 404 reading a resolved ticket's draft, which the contract says stays readable (Q3), and an awareness change without a reason returned 400 instead of 422 (AC-07) │ Coverage: code: 322 of 964 source lines (33%, reported by Team 21's /test/report); component: not measured (the pod spec defines no component list); system: 16 of 19 acceptance criteria (AC-13, AC-18 and AC-19 have their own tools)
 
 Team 21 tests → our service │ Date: November 22, 2026, 12:30 PM Eastern │ Run/passed: 17/17 │ Main problem and owner: Team 21 didn't run its tester against us this phase (owner: Team 21), so Team 17 ran Team 21's published tester itself; no test failed │ Coverage: code: not reported (our deployed service isn't instrumented for code coverage); component: not measured (the pod spec defines no component list); system: 17 of 19 acceptance criteria, one test each for AC-01 to AC-17, including 500 malformed requests for AC-13 with no server errors │ Note: Team 21 didn't run it this phase, so Team 17 ran Team 21's published tester (pod-k-shared `team21/tester`, version 0.4.2, last changed by Team 21 on November 1) on our own machine, pointed at our evaluation deployment at `c875f14` with Team 17's own token
 
@@ -209,7 +211,7 @@ No test failed in Q4.5; the one error in the command-line run was a laptop-side 
 
 Phase 5 is the last milestone in Phase 2, Section 6 (6.1 to 6.3 cover Phases 3 to 5), so there is no next milestone to adjust and nothing needs pod agreement; the final version is `c875f14`. Priority risks from Phase 2, Section 9.1:
 - Risk 1 (our reading of the CRA): reduced. The two findings from our CRA review are now in the contract: early warnings can be sent with unknown member states, and the final report clock starts at the first corrective or mitigating measure [1, Art. 14(2)].
-- Risk 2 (cross-team compatibility): [RISK 2 after tonight's run] Team 21's tester passed 17 of 17 against our final version.
+- Risk 2 (cross-team compatibility): reduced. Team 21's tester passed 17 of 17 against our final version and ours passed 233 of 241 against theirs; the 8 failures are Team 21 deviations from agreed rules (error precedence, drafts of resolved tickets, 422 for a missing reason), recorded in the shared repository for Team 21.
 - Hosting performance: closed. AC-18 passed on the evaluation deployment (p95 736 ms against the 1 s target) after kept connections and compression cut a simple read from about 190 ms to about 40 ms on the server.
 - Contract drift (new in Phase 4): closed. The agreed answers and the two contract changes are now in the published contract (pod-k-shared #14 and #20, merged November 22).
 - New risk, now realized and handled: pod responsiveness at the end of the course. Team 21 didn't review the contract PRs or answer the last open question, so Team 17 merged the agreed changes and recorded Q8 as its own decision; a podmate could still disagree after the deadline.

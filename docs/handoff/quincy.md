@@ -12,6 +12,7 @@ Phase 5 is released. Orbit runs `c875f14` (launched 2026-11-22 17:12 UTC; revisi
 - AC-13: 683 malformed requests, 0 server errors, data unchanged
 - Team 21's published tester: 17 of 17
 - AC-19: recorded by Quincy (video linked in the Phase 5 report)
+- our suite against Team 21's deployment: 233 of 241 (8 Team 21 deviations from agreed rules)
 
 `pod-k-shared` #20 (contract 0.3.0), #19 (interface descriptions) and #21 (tester copy,
 TESTING.md, SYSTEM.md, status chart) are merged. Task status is in
@@ -22,20 +23,16 @@ pod items itself, and Quincy chose not to message them first (2026-11-22).
 
 ## In progress
 
-- Our suite against Team 21's deployment after 11 PM ET on 2026-11-22 (resets their data;
-  approved 2026-11-21).
-- The Phase 5 report (`docs/reports/phase5.md` and the Word document).
+- The Phase 5 report (`docs/reports/phase5.md`, and the Word document in the team's
+  OneDrive): everything filled except each teammate's Q8.1.
 
 ## Next up
 
-1. Run our suite against Team 21; record the result (5.6) in the report and
-   `docs/system.md`.
-2. Finish and submit the Phase 5 report.
-3. After grading: tear down the billable resources (`docs/platform.md`, "End of the course").
+1. Submit the Phase 5 report once Q8.1 is in.
+2. After grading: tear down the billable resources (`docs/platform.md`, "End of the course").
 
 ## Waiting on
 
-- **Richard:** the final cross-team results write-up (5.6) after tonight's run.
 - **Ann and Richard:** their own Q8.1 (GenAI use) paragraphs for the report.
 
 ## Notes for the next session

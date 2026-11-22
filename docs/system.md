@@ -238,6 +238,7 @@ is in `pod-k-shared` (`tests/`) and has been checked by Team 21.
 | AC-13 malformed requests (`acceptance/malformed.py`, macOS corpus) | Evaluation deployment at `c875f14` | 683 requests, 683 distinct invalid inputs, 133 fault categories: 0 server errors, 0 contract mismatches, stored data unchanged | 2026-11-22 17:26 to 17:29 UTC |
 | Team 21's published tester (17 tests, AC-01 to AC-17), run by Team 17 | Evaluation deployment at `c875f14` | 17 of 17 passed, including 500 malformed requests for AC-13 with no server errors | 2026-11-22 17:30 UTC |
 | AC-19 restart demo (`scripts/restart_demo.sh prod`, recorded) | Evaluation deployment, revision `team17-prod-00011-qqg` replaced by `team17-prod-00012-wnv` | Ticket, early-warning report, and audit log read back byte-for-byte unchanged | 2026-11-22 18:14 UTC |
+| Deployed tester (241 tests), run from the evaluation deployment | Team 21's deployment | 233 passed, 8 failed, all Team 21 deviations from agreed rules: 400 instead of 404 for an unknown ticket with a bad body (4), 404 reading a resolved ticket's draft instead of 200 (Q3; 3), 400 instead of 422 for an awareness change without a reason (1). Team 21 reported 322 of 964 source lines covered | 2026-11-22 18:52 to 19:00 UTC |
 | AC-18 performance | Development deployment after #116 | PASS: p95 828 ms (the run before #116 failed at p95 1,373 ms) | 2026-11-22 16:40 UTC |
 | CI at `c875f14` | Linux, Python 3.12, PostgreSQL 18 | 1,684 tests, lint, migration and Django checks passed ([run](https://github.com/team17-ece30861/cra-service/actions/runs/45046366880)) | 2026-11-22 |
 | Acceptance suite (222 tests) | Development deployment at `ec62594` | 222 passed, 0 failed | 2026-11-01 15:56 to 16:15 UTC |
@@ -253,7 +254,7 @@ is in `pod-k-shared` (`tests/`) and has been checked by Team 21.
 
 Team 17 runs its suite against the development deployment and Team 21's deployment. It ran
 against the evaluation deployment right after each release (Phases 3, 4 and 5), for the report.
-Our suite's final run against Team 21's deployment is in the Phase 5 report. The Phase 3 runs (55 of 55 on both deployments) are
+ The Phase 3 runs (55 of 55 on both deployments) are
 recorded in [phase3.md](phase3.md).
 
 **GenAI corrections caught by checking:** an independent AI session, one that hadn't drawn
