@@ -573,12 +573,18 @@
   var screen = document.querySelector('.screen');
   if (screen && !reduceMotion.matches) screen.classList.add('entering');
 
-  /* ---------- Toasts the server left for this page (a change made without this script, then redirected) ---------- */
+  /* ---------- Toasts left for this page: by the server (a change made without this script, then redirected), or by this
+     script when a save's refresh in place had to fall back to loading the page (see refresh) ---------- */
+  var KEPT_TOAST = 'ledger-toast';
   (function () {
-    var t = $('toast'), title = t && t.getAttribute('data-flash-title');
+    var t = $('toast'), title = t && t.getAttribute('data-flash-title'), body = t && t.getAttribute('data-flash-body');
+    if (t) t.removeAttribute('data-flash-title');
+    try {
+      var kept = JSON.parse(sessionStorage.getItem(KEPT_TOAST) || 'null'); sessionStorage.removeItem(KEPT_TOAST);
+      if (!title && kept && kept.title) { title = kept.title; body = kept.body; }
+    } catch (err) { /* storage blocked: nothing kept */ }
     if (!title) return;
-    t.removeAttribute('data-flash-title');
-    setTimeout(function () { toast(title, t.getAttribute('data-flash-body'), true); }, reduceMotion.matches ? 0 : 280);
+    setTimeout(function () { toast(title, body, true); }, reduceMotion.matches ? 0 : 280);
   })();
 
   /* ================= Sheets =================
@@ -656,16 +662,19 @@
   }
 
   /* Fetching a sheet from its address: its page arrives with the sheet open, and the card joins this page's layer */
-  var pages = {};
+  /* A press starts the fetch and the click uses it. An entry lives 10 s at most, and every save empties the cache, so a sheet
+     never opens with what the ticket said before a change (e.g. "Not ready to close" after it became ready). */
+  var pages = {}, PAGE_TTL = 10000;
   function fetchDoc(path) {
-    if (!pages[path]) {
-      pages[path] = fetch(path, { credentials: 'same-origin', headers: { Accept: 'text/html' } }).then(function (res) {
+    var hit = pages[path];
+    if (!hit || Date.now() - hit.at > PAGE_TTL) {
+      hit = pages[path] = { at: Date.now(), doc: fetch(path, { credentials: 'same-origin', headers: { Accept: 'text/html' } }).then(function (res) {
         if (res.redirected || !res.ok) throw new Error('not a page');
         return res.text();
-      }).then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); });
-      pages[path].catch(function () { delete pages[path]; });
+      }).then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); }) };
+      hit.doc.catch(function () { if (pages[path] === hit) delete pages[path]; });
     }
-    return pages[path];
+    return hit.doc;
   }
   function loadCard(path) {
     return fetchDoc(path).then(function (doc) {
@@ -800,9 +809,10 @@
     }).catch(function () { again("Couldn't reach Ledger. Check your connection and try again."); });
   }
   function saved(card, page, t) {
+    pages = {};
     if (sheet.card === card) closeSheet();
     if (t) toast(t.title, t.body, true);
-    refresh(page);
+    refresh(page, t);
   }
   document.addEventListener('submit', function (e) {
     var form = e.target, card = form.closest && form.closest('.sheet-layer > .sheet-card');
@@ -937,6 +947,7 @@
   }
   function routeOf(el) { return (/\broute-\S+/.exec(el.className) || [''])[0]; }
   function applyPage(doc) {
+    pages = {};
     var next = doc.getElementById('app');
     if (!next || routeOf(next) !== routeOf(app)) throw new Error('a different page');
     setNow(next.getAttribute('data-now')); app.setAttribute('data-now', next.getAttribute('data-now'));
@@ -950,7 +961,7 @@
     });
   }
   var refreshing = 0;
-  function refresh(page) {
+  function refresh(page, t) {
     var token = ++refreshing;
     var got = fetch(page, { credentials: 'same-origin', headers: { Accept: 'text/html' } }).then(function (res) {
       if (res.redirected || !res.ok) throw new Error('not the page');
@@ -958,7 +969,12 @@
     }).then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); });
     /* The sheet leaves first (260 ms), then the page changes */
     return Promise.all([got, wait(280)]).then(function (r) { if (token === refreshing) return applyPage(r[0]); })
-      .catch(function () { if (token === refreshing) location.assign(page); });
+      .catch(function () {
+        if (token !== refreshing) return;
+        /* Loading the page instead: its toast comes along and shows there */
+        try { if (t) sessionStorage.setItem(KEPT_TOAST, JSON.stringify({ title: t.title, body: t.body || '' })); } catch (err) { /* storage blocked */ }
+        location.assign(page);
+      });
   }
 
   window.Ledger = {
