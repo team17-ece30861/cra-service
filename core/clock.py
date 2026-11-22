@@ -2,6 +2,7 @@
 
 Returns the fixed test time when one is set (PUT /test/clock), otherwise real UTC
 time. Either way the value is an aware UTC datetime truncated to the second.
+clock.real_now() always returns real time; only security timing uses it.
 """
 
 from datetime import datetime
@@ -31,6 +32,13 @@ def fix(at: datetime) -> datetime:
 def release() -> None:
     """Return to real time."""
     FixedClock.objects.filter(pk=_PK).delete()
+
+
+def real_now() -> datetime:
+    """Real UTC time, truncated to the second, ignoring the fixed test clock. The sanctioned
+    accessor for security timing that a test clock must not move, such as the console
+    sign-in lockout (console/lockout.py). Everything else uses now()."""
+    return _real_now()
 
 
 def _real_now() -> datetime:
