@@ -6,7 +6,9 @@ Optional: DJANGO_DEBUG (default false), ALLOWED_HOSTS (comma-separated),
           GET /health; when none is set, every protected request is rejected),
           API_TOKEN (older single token, accepted as client "default"),
           TESTER_TARGET_TOKENS (JSON: tokens our tester sends to other systems),
-          TESTER_ALLOWED_HOSTS (comma-separated systems our tester may target)
+          TESTER_ALLOWED_HOSTS (comma-separated systems our tester may target),
+          TESTER_OWN_SYSTEM_URLS (JSON list: exact own-system bases for model coverage),
+          TESTER_MODEL_MAPPING_URL (published versioned design-to-test mapping)
 """
 
 import json
@@ -62,6 +64,26 @@ def env_tester_tokens(raw: str) -> dict[str, str]:
 
 
 TESTER_TARGET_TOKENS = env_tester_tokens(os.environ.get("TESTER_TARGET_TOKENS", ""))
+
+
+def env_own_system_urls(raw: str) -> list[str]:
+    try:
+        values = json.loads(raw)
+    except ValueError:
+        return []
+    if not isinstance(values, list):
+        return []
+    return [value for value in values if isinstance(value, str)]
+
+
+TESTER_OWN_SYSTEM_URLS = env_own_system_urls(
+    os.environ.get(
+        "TESTER_OWN_SYSTEM_URLS",
+        '["https://team17-dev-7zneiwx4ba-uc.a.run.app",'
+        '"https://team17-prod-7zneiwx4ba-uc.a.run.app"]',
+    )
+)
+TESTER_MODEL_MAPPING_URL = os.environ.get("TESTER_MODEL_MAPPING_URL", "")
 
 # Other teams' systems our tester may target, besides this service itself (the
 # course spec: "approved pod service URLs"). Anything else is rejected with 400.

@@ -1,6 +1,6 @@
 """Ticket input schemas from the common OpenAPI contract."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
 
@@ -41,6 +41,10 @@ MemberState = Literal[
     "ES",
     "SE",
 ]
+# Q9 (agreed with Team 21, 2026-11-01; contract 0.3.0): exactly ["unknown"] records that the
+# Member States aren't known yet. "unknown" can't be mixed with codes.
+UNKNOWN_MEMBER_STATES = "unknown"
+MemberStateOrUnknown = Literal[(*get_args(MemberState), UNKNOWN_MEMBER_STATES)]
 Severity = Literal["low", "medium", "high", "critical"]
 Sensitivity = Literal["CLEAR", "GREEN", "AMBER", "AMBER+STRICT", "RED"]
 TicketState = Literal["received", "reportable", "closed"]
@@ -92,6 +96,8 @@ class _MemberStates(RequestSchema):
     def unique_member_states(cls, value):
         if value is not None and len(set(value)) != len(value):
             raise ValueError("must contain unique member states")
+        if value is not None and UNKNOWN_MEMBER_STATES in value and len(value) > 1:
+            raise ValueError('"unknown" must be the only value')
         return value
 
 
@@ -101,7 +107,7 @@ class TicketCreate(_MemberStates):
     description: LongText
     product: ProductIn
     reporter: ReporterIn = Field(default=None)
-    member_states: list[MemberState] = Field(default=None)
+    member_states: list[MemberStateOrUnknown] = Field(default=None)
     vulnerability: VulnerabilityIn = Field(default=None)
     exploit: ExploitIn = Field(default=None)
     mitigations: MitigationsIn = Field(default=None)
@@ -117,7 +123,7 @@ class TicketUpdate(_MemberStates):
     description: LongText = Field(default=None)
     product: ProductPatch = Field(default=None)
     reporter: ReporterIn | None = None
-    member_states: list[MemberState] | None = None
+    member_states: list[MemberStateOrUnknown] | None = None
     vulnerability: VulnerabilityIn | None = None
     exploit: ExploitIn | None = None
     mitigations: MitigationsIn | None = None
