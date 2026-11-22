@@ -97,9 +97,12 @@ def _try_sign_in(request) -> str:
     """Signs the person in and returns "", or returns the one line to show. A locked
     username (console/lockout.py) is refused before its password is checked."""
     key = lockout.username_key(request.POST.get("username", ""))
+    if key:
+        # Read the time only once this username is ours, so a request that waited here
+        # can't read a time earlier than the failure that locked it.
+        lockout.hold(key)
     now = clock.now()
     if key:
-        lockout.hold(key)
         if minutes := lockout.minutes_locked(key, now):
             return lockout.message(minutes)
     form = AuthenticationForm(request, data=request.POST)
