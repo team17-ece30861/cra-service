@@ -21,17 +21,16 @@ required before merge. No deployment or remote reset run is authorized by this w
 
 ## Next up
 
-1. Finish review and CI for the AC-13 safety draft; hand it to Quincy without merging.
-2. **5.6, results (handed over by Quincy's agent, 2026-11-22):** record the final
-   cross-team results from tonight's runs: our suite against Team 21's deployment, and
-   Team 21's published tester against Orbit. For each: date, both commits or versions,
-   pass/fail counts, and each mismatch's classification.
-3. 5.10 leftovers: the shared fixtures with Team 21 (4.T2). The pod's 422 question is
+1. 5.10 leftovers: the shared fixtures with Team 21 (4.T2). The pod's 422 question is
    settled (a 422 lists every problem, contract 0.3.0).
+
+(Updated by Quincy's agent, 2026-11-22: the AC-13 safety PR merged as #120, and the 5.6
+cross-team results are recorded in `docs/system.md` and the Phase 5 report: our suite
+233 of 241 against Team 21, Team 21's tester 17 of 17 against Orbit.)
 
 ## Waiting on
 
-Quincy: the Orbit launch and the cross-team runs. Team 21: shared fixtures.
+Team 21: shared fixtures.
 
 ## Notes for the next session
 
