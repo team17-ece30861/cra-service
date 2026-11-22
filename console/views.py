@@ -5,6 +5,7 @@ from urllib.parse import unquote, urlencode, urlsplit
 from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.forms import AuthenticationForm
+from django.db import transaction
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -12,7 +13,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods, require_POST
 
-from console import forms, present, present_reports
+from console import forms, lockout, present, present_reports
 from console.api_calls import call_api
 from console.flash import take as take_flash
 from console.mark import MARK_PATH, MARK_VIEWBOX
@@ -63,12 +64,13 @@ def sign_in(request):
     next_url = _safe_next(request, request.POST.get("next") or request.GET.get("next", ""))
     if request.method == "GET" and request.user.is_authenticated:
         return redirect(next_url)
-    failed = False
+    error = ""
     username = ""
     if request.method == "POST":
-        form = AuthenticationForm(request, data=request.POST)
-        if form.is_valid():
-            login(request, form.get_user())
+        username = request.POST.get("username", "")[:150]
+        with transaction.atomic():
+            error = _try_sign_in(request)
+        if not error:
             response = redirect(next_url)
             response.set_cookie(
                 WAS_SIGNED_IN_COOKIE,
@@ -80,17 +82,34 @@ def sign_in(request):
                 samesite="Lax",
             )
             return response
-        failed = True
-        username = request.POST.get("username", "")[:150]
     context = {
         "next": next_url,
         "username": username,
-        "error": BAD_SIGN_IN if failed else "",
-        "signed_out": request.GET.get("signed-out") == "1" and not failed,
+        "error": error,
+        "signed_out": request.GET.get("signed-out") == "1" and not error,
         "mark_path": MARK_PATH,
         "mark_viewbox": MARK_VIEWBOX,
     }
     return render(request, "console/sign_in.html", context)
+
+
+def _try_sign_in(request) -> str:
+    """Signs the person in and returns "", or returns the one line to show. A locked
+    username (console/lockout.py) is refused before its password is checked."""
+    key = lockout.username_key(request.POST.get("username", ""))
+    now = clock.now()
+    if key:
+        lockout.hold(key)
+        if minutes := lockout.minutes_locked(key, now):
+            return lockout.message(minutes)
+    form = AuthenticationForm(request, data=request.POST)
+    if form.is_valid():
+        login(request, form.get_user())
+        lockout.clear(key)
+        return ""
+    if key and (minutes := lockout.record_failure(key, now, lockout.client_ip(request))):
+        return lockout.message(minutes)
+    return BAD_SIGN_IN
 
 
 @require_POST
