@@ -472,6 +472,8 @@ def test_keepalive_reuses_one_connection_and_decompresses_gzip(server):
         assert response.status == 200
         assert json.loads(response.body)["path"] == path
     assert transport.connections_opened == server.connections == 1
+    # Asked for gzip every time, but only /gzip answered compressed.
+    assert (transport.responses_received, transport.gzip_responses) == (3, 1)
     path, headers = server.requests[1]
     assert headers["Accept-Encoding"] == "gzip"
     assert headers["Authorization"] == "Bearer tok"
@@ -518,3 +520,18 @@ def test_no_keepalive_flag_keeps_the_earlier_transport(monkeypatch):
     monkeypatch.setenv("CRA_API_TOKEN", "tok")
     assert perf.parse_args(["--base-url", "http://127.0.0.1:1"]).no_keepalive is False
     assert perf.parse_args(["--base-url", "http://127.0.0.1:1", "--no-keepalive"]).no_keepalive
+
+
+def test_a_failed_setup_still_records_connections_opened(server, monkeypatch, tmp_path):
+    # The fake server's GET /tickets answers a non-empty body, so setup stops with
+    # "the deployment already holds tickets" before loading anything.
+    monkeypatch.setenv("CRA_API_TOKEN", "tok")
+    out = tmp_path / "result.json"
+    args = perf.parse_args(
+        ["--base-url", f"http://127.0.0.1:{server.server_port}", "--warmup", "0", "--out", str(out)]
+    )
+    assert perf.run(args) == 2
+    result = json.loads(out.read_text())
+    assert "already holds" in result["error"]
+    assert result["connections_opened"] == {"total": 1, "measured": None}
+    assert result["connection"].startswith("keep-alive, gzip requested")

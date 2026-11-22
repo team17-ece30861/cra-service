@@ -352,7 +352,7 @@ def build_plan(seed: int, mix: dict, category_sizes: dict) -> list[dict]:
 
 # ---------------------------------------------------------------- HTTP
 
-CONNECTION_KEEPALIVE = "keep-alive, gzip"
+CONNECTION_KEEPALIVE = "keep-alive, gzip requested (Accept-Encoding: gzip)"
 CONNECTION_PER_REQUEST = "new TCP (and TLS for https) connection per request"
 
 
@@ -371,6 +371,9 @@ class KeepAliveTransport(HTTPTransport):
         self._local = threading.local()
         self._count_lock = threading.Lock()
         self.connections_opened = 0
+        # What actually arrived, as opposed to what was asked for.
+        self.responses_received = 0
+        self.gzip_responses = 0
 
     def send(
         self,
@@ -401,8 +404,12 @@ class KeepAliveTransport(HTTPTransport):
             raise
         if response.will_close:
             self._discard()
-        if response.getheader("Content-Encoding", "").strip().lower() == "gzip":
+        gzipped = response.getheader("Content-Encoding", "").strip().lower() == "gzip"
+        if gzipped:
             payload = gzip.decompress(payload)
+        with self._count_lock:
+            self.responses_received += 1
+            self.gzip_responses += gzipped
         return Response(response.status, response.getheader("Content-Type", ""), payload)
 
     def _connection(self) -> http.client.HTTPConnection:
@@ -863,6 +870,12 @@ def _print_summary(result):
             f"Connection: {result['connection']} ({opened['total']} opened in all, "
             f"{opened['measured']} during the measured requests)"
         )
+    gzipped = result.get("gzip_responses") or {}
+    if gzipped.get("measured") is not None:
+        print(
+            f"Gzip-encoded responses: {gzipped['measured']} of "
+            f"{gzipped['measured_received']} measured responses received"
+        )
     warm = result["summary"]["warmup"]
     if warm["requests"]:
         print(
@@ -1005,13 +1018,24 @@ def run(args) -> int:
         contract = Contract() if validated else None
         model = model_from_load(specs, loaded)
         opened_before = _opened(transport)
+        received_before = _counter(transport, "responses_received")
+        gzip_before = _counter(transport, "gzip_responses")
         measured = run_measured(transport, plan, ids, base, model, contract, clock_read_at)
         result["connections_opened"] = {
             "total": _opened(transport),
             "measured": _opened(transport) - opened_before if opened_before is not None else None,
         }
+        result["gzip_responses"] = {
+            "measured": _counter(transport, "gzip_responses") - gzip_before
+            if gzip_before is not None
+            else None,
+            "measured_received": _counter(transport, "responses_received") - received_before
+            if received_before is not None
+            else None,
+        }
     except SetupError as error:
         result["error"] = str(error)
+        result["connections_opened"] = {"total": _opened(transport), "measured": None}
         _note_retries(result, loader)
         print(f"Not measured: {error}", file=sys.stderr)
         _write(args.out, result)
@@ -1033,6 +1057,11 @@ def run(args) -> int:
         "operator's call. The script did not set the test clock."
     )
     return 0 if result["summary"]["passed"] else 1
+
+
+def _counter(transport, name):
+    """A KeepAliveTransport counter; None for the one-connection-per-request transport."""
+    return getattr(transport, name, None)
 
 
 def _opened(transport):
