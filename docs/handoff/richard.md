@@ -1,90 +1,55 @@
 # Handoff: Richard (Domain Logic and Testing)
 
-**Last updated:** 2026-11-20 by Codex with Richard.
+**Last updated:** 2026-11-22 by Quincy's agent (Claude Code), applying the review fixes
+on Richard's two Phase 5 PRs. Richard's last session was 2026-11-20 (Codex).
 
 ## Where things stand
 
-Phase 4 PRs #77-83 are merged; the team's handoffs record the November 1 release
-and successful cross-team runs. Do not revive the old draft-PR blockers. Latest
-fetched main is `ecb59a7` (November 2). No live release/registry check was performed
-this session.
+Phase 4 is delivered. Both Phase 5 test PRs are published, with CI passing on Richard's
+own heads; review fixes were applied by Quincy's agent on 2026-11-22. Quincy approved
+Team 17's agent resolving and merging them: #106 first, then #107.
 
-Richard approved the 44-requirement Phase 5 model-coverage baseline for local
-implementation on November 19, then authorized a branch, commit, push, draft PR
-and PostgreSQL CI on November 20. Merging, deployment and shared resets remain
-separate actions. See
-[model-coverage.md](../model-coverage.md) and the full Phase 5 owners in
-[plan.md](../plan.md).
+- **[PR #106](https://github.com/team17-ece30861/cra-service/pull/106)** (5.4,
+  `codex/phase5-model-coverage`): own-system `coverage.model` from the approved
+  44-requirement design ([model-coverage.md](../model-coverage.md)). CI passed 1,494
+  tests at `81a05eb`. Review fixes: failed oracle groups now name each failed
+  comparison in the report message (`OracleChecks`), an own-system example report in
+  `docs/interface/tester.yaml`, and the "unexpected 5xx = not evaluated" rule in
+  model-coverage.md.
+- **[PR #107](https://github.com/team17-ece30861/cra-service/pull/107)** (5.10,
+  `codex/phase5-http-gaps`): 19 portable cases for AC-07, PATCH/triage 404 and 413,
+  and `DELETE /test/clock`. CI passed 1,424 tests at `5c616b7`. Review fixes: the AC-07
+  audit check no longer asserts nested field naming or the change count, a missing
+  `change_reason` may name `change_reason` or `aware_at`, and clock release compares
+  parsed times with 1 s slack. #106 is merged into this branch, so it holds both.
 
 ## In progress
 
-- Draft [PR #106](https://github.com/team17-ece30861/cra-service/pull/106) is open
-  from `codex/phase5-model-coverage` into main, based on `ecb59a7`, in the reused
-  `work/cra-publish-t5` checkout. Current Linux/PostgreSQL 18 CI is attached to the
-  PR; inspect checks for its exact current head. Original Phase 4 branches and
-  the user's original checkout are preserved.
-- Own-system `coverage.model` uses 44 fixed requirements, 266 scenarios and exact
-  test bindings. 141 scenarios are bound; 125 stay unbound/incomplete. A reached
-  failed oracle is evaluated, not passing conformance. CI/manual/name inference
-  does not supply credit.
-- Same-team identity uses exact configured full base URLs, not tokens/host guesses.
-  `TESTER_MODEL_MAPPING_URL` intentionally defaults to empty: own model counts
-  are null with a reason until the mapping is published/configured. Cross-team
-  reports omit model. Quincy must confirm the own-system URL list before release.
-- Journaling retains call-phase evaluations on abort and truncated final reports;
-  invalid/version-mismatched evidence stays unavailable. Schema docs are updated
-  to tester-description version 1.1.0; the pod project contract is unchanged.
-- Final selected local regression passes **1,262 tests with four existing
-  PostgreSQL-only skips**, including 89 new model tests. Ruff lint/format checks
-  pass across 136 Python files; Django and migration checks pass. This is not
-  current Linux/PostgreSQL CI or a full Windows-suite claim.
-- The nested real-pytest/Django portable run passed 221 cases with one HTTPS probe
-  skip, recorded 140 scenarios and evaluated 19/44 requirements. This is local
-  in-process evidence with a synthetic mapping URL, not deployed HTTP evidence.
-- Independent local review found status-comparison undercount, early compound
-  predicate credit and pre-edit locking checks, plus a remaining short-circuit
-  status/deadline case. Corrections and negative regression probes are present;
-  final re-review reports no new actionable findings. The reviewer is closed.
-  No posted independent PR approval is claimed.
+Nothing half-done on either branch. The two PRs wait on CI for the new heads, an
+independent review, and the merge.
 
 ## Next up
 
-1. Check #106's current-head CI and obtain posted independent review before any
-   separately authorized merge. Quincy should review the nonsecret settings and
-   interface changes in his platform area. This is a draft, not merge approval.
-2. Coordinate with Quincy: confirm own-system bases, publish a version-pinned
-   mapping URL, configure it, verify on Launchpad with explicit reset permission,
-   and follow his Orbit/shared-copy release process.
-3. 5.10: operation-table partial-run/setup-failure fixes; AC-07 and remaining
-   PATCH/triage 404/413 and successful clock-release HTTP tests; shared fixtures
-   and the pod's multiple-problem 422 decision. These are not completed by model
-   instrumentation.
-4. 5.1: agree the performance request mix, warm-up and measurement protocol before
-   building the load script; Quincy owns the deployed stress run. 5.4/5.6: fresh
-   full regression and both-direction cross-team evidence before submission.
+1. After #106 merges: publish a commit-pinned design mapping and set
+   `TESTER_MODEL_MAPPING_URL` (it stays empty until then, so own model counts are null
+   with a reason). Confirm `TESTER_OWN_SYSTEM_URLS` with Quincy.
+2. After both merge: check them on Launchpad (with Quincy's go), then refresh the
+   `pod-k-shared` tester copy in the pod PR for Quincy's Orbit launch.
+3. 5.10 still open: the two operation-table fixes from PR #83, the shared fixtures with
+   Team 21 (4.T2), and the pod's multiple-problem 422 decision.
+4. 5.1: agree the load protocol before writing the script. 5.4/5.6: full and
+   cross-team results before submission.
 
 ## Waiting on
 
-Published mapping/configuration and release coordination (Quincy); outstanding pod
-decisions/contract work (Ann with Team 21); PostgreSQL CI and deployed verification.
-The November 20 authorization covers this draft publication and CI, not merging,
-remote reset tests, deployment, performance runs or restarts.
+Quincy: mapping URL, own-system URLs, Launchpad check and Orbit launch. Ann and
+Team 21: contract decisions and shared fixtures.
 
 ## Notes for the next session
 
-Do not turn 19/44 model evaluations into 19 delivered features or 19 passing
-requirements. Incomplete/CI-only scenarios remain in the denominator. Compound
-oracle predicates are evaluated eagerly; snapshots are checked after edits for
-all three report types. Status checkpoints preserve evaluable failures but do not
-invent evaluations from transport failures or unexpected server errors.
-
-No workflow, migration, database model, auth/token handling, pod project OpenAPI,
-Ann/Quincy handoff or shared repository was changed. Existing Windows full-suite
-blockers and the old localhost transport diagnosis were not bypassed or repaired.
-These local results do not replace Linux/PostgreSQL CI or authorized real HTTP
-acceptance.
-
-Local evidence summary is in the parent chat workspace's
-`outputs/phase5-model-coverage-local-2026-11-19.md` and `.json`; detailed parent
-results are `work/phase5-model-regression-20261119-final.xml`. These local paths
-are not public release evidence.
+- Model coverage counts evaluated design scenarios, not passes: don't present 19/44
+  as 19 delivered or passing requirements.
+- The clock-release case compares against the runner's wall clock with 120 s skew;
+  keep the runner and target clocks in sync.
+- New HTTP-gap cases have no model bindings yet; add them only with a design-version
+  update.

@@ -142,7 +142,7 @@ paths:
                     total: null
                     basis: The pod specification does not define a component list yet
                   system:
-                    covered: 15
+                    covered: 16
                     total: 19
                     basis: Pod acceptance criteria AC-01 to AC-19 with at least one executed test, identified by test name
                   model:
