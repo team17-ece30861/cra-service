@@ -20,9 +20,10 @@ deployment, shared reset, performance run or restart was performed.
   `codex/phase5-http-gaps`, head `5c616b7`; PostgreSQL 18 CI passed 1,424.
   Its 19 new cases previously passed isolated local HTTP; standalone collection
   is 241. No deployed HTTP run is claimed. Original checkout/branches are preserved.
-- Operation reporting: `codex/phase5-operation-reporting`, based on main, in the
-  reused `work/cra-publish-a4` checkout. Draft publication and PostgreSQL CI are
-  authorized; inspect its exact-head PR checks before merging. Failed setup checks
+- Operation reporting: draft [#108](https://github.com/team17-ece30861/cra-service/pull/108),
+  `codex/phase5-operation-reporting`, based on main, in the reused
+  `work/cra-publish-a4` checkout. Published November 21; inspect its exact-head
+  PostgreSQL CI before merging. Failed setup checks
   survive even if the Service fixture raises before returning. Conforming setup
   responses are inconclusive; successful fixture setup supplies no passing credit.
 - Completion uses collection, scope, outcomes and teardown. Early stops, code-0
@@ -42,10 +43,10 @@ deployment, shared reset, performance run or restart was performed.
 
 ## Next up
 
-1. Verify #106/#107 current-head CI and obtain posted independent reviews before
+1. Verify #106/#107/#108 current-head CI and obtain posted independent reviews before
    separately authorized merges. Quincy reviews model/interface configuration.
-2. Check the reporting draft's current-head Linux/PostgreSQL CI and obtain posted
-   independent review before any separately authorized merge. Draft publication
+2. As checked November 21, none of the three drafts has a posted review or PR
+   comment. Local independent review is not posted approval. Draft publication
    does not authorize merging or a release.
 3. Reconcile overlapping client/plugin and handoff changes when integrating the
    independent main-based branches; keep model journaling/call-phase evidence and
