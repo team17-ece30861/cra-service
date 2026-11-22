@@ -271,12 +271,41 @@ description is [`docs/interface/tester.yaml`](interface/tester.yaml).
 - **Time limits:** a run happens inside one HTTP request. The suite gets 1,680 s
   (`tester/runner.py`), inside Cloud Run's and gunicorn's 1,800 s request timeouts. A full
   run took about 12 minutes on Launchpad on 2026-11-01. A run holds one of the two
-  gunicorn workers for its whole length, so two runs at once hold both. A caller whose
+  gunicorn workers for its whole length; a second run is refused (run rules below). A caller whose
   connection drops (some networks cut a connection that's been silent for minutes) can
   still fetch the report with `GET /tester/test/report?session_id=...` once the run ends.
   Seen on 2026-11-01: during a deployed-tester run against Orbit, the caller's connection
   dropped at 540 s, the run finished at 655 s (222 of 222), and the report was fetched
   afterwards.
+- **Run rules** (`tester/sessions.py`): one run at a time across both workers. While a
+  session is running, a run for another session and a new setup get 409; the check and
+  the claim happen under a table lock (`LOCK TABLE ... IN EXCLUSIVE MODE`) in one short
+  transaction. The running worker refreshes the session's `heartbeat_at` every 30 s and
+  saves the planned tests and the outcomes recorded so far. A session with no heartbeat
+  for 3 minutes, or running longer than the suite limit plus 5 minutes, was cut off by a
+  restart: the next setup, run, or report request stores its report (recorded outcomes
+  kept, the running test `error`, the rest `skip`) and frees the slot. Heartbeats use the
+  database's time, not `core.clock`, because the suite fixes that clock when it targets
+  this service. After each run (also after an abort) the tester calls the target's
+  `DELETE /test/clock` and then `POST /test/reset`, best effort, before freeing the slot;
+  a failure is logged as `target cleanup incomplete` and doesn't change the report.
+  If a heartbeat finds the session already recovered (no beat got through for 3
+  minutes), it stops the suite, and the run stores nothing and doesn't clean up. After
+  the suite, the run opens a fresh database connection, since the old one may have been
+  dropped during the run.
+- **Time budget of one run request** (gunicorn and Cloud Run stop it at 1,800 s): listing
+  the tests up to 60 s, the suite up to 1,680 s, the coverage read up to 30 s, cleanup up
+  to 2 x 10 s, and stopping the heartbeat up to 10 s. Two rare extras can push past 1,800 s:
+  recovering a cut-off session with no saved test list (one left over from before
+  heartbeats, or one cut off in its first seconds) lists the tests again, up to 60 s, at
+  the start of the request that finds it (setup, run or report); and a tester crash lists
+  them again for its report, up to 60 s. Recovery otherwise uses the saved list and
+  doesn't run pytest. A request stopped at 1,800 s leaves its session running; it is
+  recovered 3 minutes later.
+- **Deploys and runs:** don't deploy Launchpad (merge to `main`) or launch Orbit while a
+  deployed-tester run is going. The new revision replaces the instance and cuts the run
+  off. A run started on a revision from before heartbeats (before PR #112) has no
+  heartbeat and is taken for cut off as soon as the new revision sees it.
 
 ## Console accounts
 
@@ -333,7 +362,7 @@ project (billed separately by Neon). Then check Billing → Reports for anything
   - Throughput is low: 2 gunicorn workers on one instance handle 2 requests at a time,
     and the rest wait in a queue. Any request that takes longer than 30 minutes times
     out. A deployed-tester run holds one worker for its whole length (up to about 28
-    minutes), and two runs at once hold both.
+    minutes); the tester refuses a second run while one is going.
 - **`/health` doesn't check the database.** A 200 means the container is up and Django
   loaded. It doesn't mean Neon is reachable or migrations are applied. The deploy smoke
   test has the same limit.
