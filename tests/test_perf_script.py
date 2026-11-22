@@ -152,3 +152,13 @@ def test_report_fails_when_p95_is_over_one_second():
     failing = [result(0.2)] * 189 + [result(1.01)] * 11
     assert perf.report(passing, warmup=[])["passed"] is True
     assert perf.report(failing, warmup=[])["passed"] is False
+
+
+def test_default_load_leaves_exactly_the_ticket_limit_after_the_measured_posts():
+    mix = perf.MEASURED_MIX
+    assert perf.load_size(1000, mix) == 990
+    assert perf.load_size(1000, mix) + mix["create"] == 1000
+    assert perf.load_size(1000, mix, exceed_limit=True) == 1000
+    with pytest.raises(ValueError):
+        perf.load_size(10, mix)
+    perf.build_plan(17, mix, perf.apportion(perf.LOAD_PROFILE, perf.load_size(1000, mix)))

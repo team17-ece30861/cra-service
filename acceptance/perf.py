@@ -14,8 +14,10 @@ Phases, in order:
    as cold-start numbers. Cloud Run and Neon may both be asleep before this.
 2. Reset (only with ``--reset``): ``POST /test/reset`` deletes every ticket on the
    deployment, for every client. Without it the deployment must already be empty.
-3. Load: ``--tickets`` valid tickets through the public API only (submit, triage,
-   record submission, close), in the fixed ``LOAD_PROFILE`` mix. Not timed.
+3. Load: valid tickets through the public API only (submit, triage, record
+   submission, close), in the fixed ``LOAD_PROFILE`` mix. Not timed. By default it
+   loads ``--tickets`` minus the measured POSTs (990), so the store holds exactly
+   ``--tickets`` (1,000, the spec's limit) after the last measured request.
 4. Measured: ``--requests`` requests sent one after another in the fixed
    ``MEASURED_MIX``, shuffled by ``--seed``. Each request has one expected status; any
    other status, a connection error or a response that breaks the contract schema is a
@@ -23,8 +25,9 @@ Phases, in order:
 
 Times are derived from the service's own clock (``GET /test/clock``), read once before
 loading, and always lie in the past, so the script never sets the clock. A fixed clock
-left by an earlier run is used as it is. The measured POSTs take the store slightly past
-``--tickets`` (1,010 by default), which is a harder test than the requirement.
+left by an earlier run is used as it is. With ``--exceed-limit`` the load is the full
+``--tickets`` and the measured POSTs take the store past it (1,010), a slightly harder
+test than the requirement.
 
 Latency is the wall time of one HTTP request, from sending it to reading the whole
 response body. The transport opens a new connection per request (as the acceptance
@@ -219,6 +222,15 @@ def ticket_body(rng: random.Random, number: int, base: datetime, *, full: bool, 
     if full:
         body.update(_full_fields(rng, number, base, aware))
     return body
+
+
+def load_size(tickets: int, mix: dict, *, exceed_limit: bool = False) -> int:
+    """How many tickets to load so the store holds `tickets` after the measured POSTs
+    (or before them, with exceed_limit)."""
+    count = tickets if exceed_limit else tickets - mix.get("create", 0)
+    if count < 1:
+        raise ValueError("--tickets must be larger than the measured POSTs")
+    return count
 
 
 def build_load_specs(seed: int, tickets: int, base: datetime) -> list[dict]:
@@ -505,7 +517,10 @@ def _ms(value) -> str:
 
 
 def _print_summary(result):
-    print(f"\nAC-18 against {result['base_url']} ({result['ticket_count_at_start']} tickets)")
+    print(
+        f"\nAC-18 against {result['base_url']} ({result['ticket_count_at_start']} tickets "
+        f"at the start, {result['ticket_count_at_end']} at the end)"
+    )
     warm = result["summary"]["warmup"]
     if warm["requests"]:
         print(
@@ -544,6 +559,11 @@ def parse_args(argv=None):
     )
     parser.add_argument("--tickets", type=int, default=1000)
     parser.add_argument("--requests", type=int, default=200)
+    parser.add_argument(
+        "--exceed-limit",
+        action="store_true",
+        help="load the full --tickets; the measured POSTs then take the store past it",
+    )
     parser.add_argument("--warmup", type=int, default=5, help="untimed cold-start requests")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--load-workers", type=int, default=4, help="concurrent loaders")
@@ -567,6 +587,7 @@ def parse_args(argv=None):
 def run(args) -> int:
     transport = HTTPTransport(args.base_url, os.environ["CRA_API_TOKEN"])
     mix = apportion(MEASURED_MIX, args.requests)
+    load_count = load_size(args.tickets, mix, exceed_limit=args.exceed_limit)
     result = {
         "criterion": "AC-18 / REQ-17: p95 <= 1 s over sequential mixed requests",
         "base_url": transport.base_url,
@@ -575,6 +596,8 @@ def run(args) -> int:
         "started_at": _now_utc(),
         "seed": args.seed,
         "tickets": args.tickets,
+        "loaded": load_count,
+        "exceed_limit": args.exceed_limit,
         "requests": args.requests,
         "mix": mix,
         "percentile_method": "nearest rank",
@@ -582,7 +605,7 @@ def run(args) -> int:
         "reset": args.reset,
     }
     try:
-        plan = build_plan(args.seed, mix, apportion(LOAD_PROFILE, args.tickets))
+        plan = build_plan(args.seed, mix, apportion(LOAD_PROFILE, load_count))
         print(f"Target: {transport.base_url}")
         print(f"Warm-up: {args.warmup} untimed requests")
         warmup = run_warmup(transport, args.warmup)
@@ -598,8 +621,8 @@ def run(args) -> int:
         clock = _call(transport, "GET", "/test/clock", 200, actor=None)["now"]
         base = datetime.fromisoformat(clock.replace("Z", "+00:00"))
         result["service_clock_at_start"] = clock
-        specs = build_load_specs(args.seed, args.tickets, base)
-        print(f"Loading {args.tickets} tickets ({args.load_workers} at a time, not timed)...")
+        specs = build_load_specs(args.seed, load_count, base)
+        print(f"Loading {load_count} tickets ({args.load_workers} at a time, not timed)...")
         load_started = time.perf_counter()
         loaded = load_all(transport, specs, args.load_workers)
         result["load_seconds"] = round(time.perf_counter() - load_started, 1)
@@ -610,6 +633,7 @@ def run(args) -> int:
             seen[spec["category"]] = index + 1
         stored = len(_call(transport, "GET", "/tickets", 200, actor=None))
         result["ticket_count_at_start"] = stored
+        result["ticket_count_at_end"] = stored + mix.get("create", 0)
         print(f"Loaded in {result['load_seconds']} s; {stored} tickets stored.")
         print(f"Measuring {args.requests} requests, one at a time...")
         contract = None if args.no_validate else Contract()
