@@ -7,7 +7,8 @@ The short version of [platform.md](platform.md), for whoever is on call. Plan ta
 Launchpad deploys automatically when a commit reaches `main` and CI passes. CI runs
 Ruff, migration checks, Django checks, and tests against PostgreSQL.
 
-Orbit is manual:
+Only Quincy launches Orbit, including releases for recovery or token rotation. Agents
+never launch it. Quincy's manual procedure is:
 
 1. Open **Actions → Launch to Orbit**.
 2. Run it on `main`.
@@ -71,25 +72,49 @@ gcloud run services update-traffic "$SERVICE" \
 
 Do not unpin to the latest revision until the fix is deployed.
 
-Rolling back traffic does not roll back the database. Reverse a migration only when it
-is backward-compatible and the bad release has been reverted:
+Rolling back traffic does not roll back the database. Before reversing a migration,
+Quincy must confirm that the resulting schema works with every revision still serving
+and that the reverse operations will not lose required data. Choose the affected app
+(`core`, `console` or `tester`) and its last good migration; do not assume `core`.
+
+Inspect the migrate job's container image in Cloud Run. It must contain the migration
+files being reversed, their dependencies and the selected target. A later deployment
+may have changed that image; stop if it is missing those files. First inspect the
+rollback plan using that job and the correct environment database:
+
+```bash
+APP=APP_LABEL
+TARGET=LAST_GOOD_MIGRATION
+
+gcloud run jobs execute "$SERVICE-migrate" \
+  --region "$REGION" \
+  --wait \
+  --args="manage.py,migrate,$APP,$TARGET,--plan"
+```
+
+Replace both placeholders before running. Read the execution logs and inspect the full
+plan, including dependent apps. After Quincy approves that plan, run the same target:
 
 ```bash
 gcloud run jobs execute "$SERVICE-migrate" \
   --region "$REGION" \
   --wait \
-  --args="manage.py,migrate,core,LAST_GOOD_MIGRATION,--noinput"
+  --args="manage.py,migrate,$APP,$TARGET,--noinput"
 ```
 
 Reversing a migration does not restore deleted data.
 
-For a lasting fix, revert the commit on `main`, let Launchpad redeploy, and then launch
-Orbit. If Orbit traffic was pinned, unpin it only after the fixed revision is live.
+For a lasting fix, revert or fix the commit on `main`, let Launchpad redeploy, and have
+Quincy launch Orbit. If traffic was pinned, inspect the new ready revision and its
+image before moving traffic; the deployment's `/health` smoke test still hits the old
+pinned revision. Do not unpin to an unfixed release.
 
 ## Rotate an API token
 
-Tell the affected client before starting. The old token stops working once a new
-instance reads the new Secret Manager version.
+Tell the affected client before starting and coordinate a window without an active
+deployed-tester run. Tokens are environment variables resolved at instance startup:
+existing instances retain their cached value, while a cold start can read the new
+`latest` version before redeployment. Plan the client handoff for this transition.
 
 ```bash
 SECRET=prod-api-token-team21
@@ -108,10 +133,26 @@ Record the old version number:
 gcloud secrets versions list "$SECRET"
 ```
 
-Redeploy the environment so its instances read the new value:
+Check Cloud Run's traffic allocation before redeploying. A redeployment refreshes the
+new revision's instances, not instances still serving a pinned revision:
 
-- Use **Launch to Orbit** for a `prod-*` secret.
+- Quincy uses **Launch to Orbit** for a `prod-*` secret; agents never launch it.
 - Re-run the latest successful CI deployment on `main` for `dev-api-token`.
+
+If traffic is pinned after a rollback, first fix or revert the bad code on `main` and
+validate that code on Launchpad. For Orbit, Quincy then launches the fixed `main` there.
+In either environment, inspect the new ready revision's image/commit and secret mapping;
+`/health` on the service URL still checks the pinned revision. Only then direct traffic
+to that verified revision,
+using its name with the rollback section's `--to-revisions` command. Do not use
+`--to-latest` merely to rotate a token: the latest revision may still contain the bug.
+If no safe replacement is ready, coordinate recovery with Quincy; do not treat a
+successful redeploy as completed rotation while traffic remains pinned.
+
+Wait for the traffic change to finish before checking the serving token. Existing
+instances can keep the old token during the transition. See Google's
+[secret startup behavior](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
+and [traffic allocation rules](https://docs.cloud.google.com/run/docs/rollouts-rollbacks-traffic-migration).
 
 Send the new token to the client privately:
 
@@ -128,13 +169,16 @@ curl -fsS \
   "https://$HOST/test/clock"
 ```
 
-Only after confirmation, disable the old version:
+Confirm requests with the old token now receive 401 on the same endpoint, without
+printing either token. Only after traffic is on the verified replacement and these
+checks pass, disable the old version:
 
 ```bash
 gcloud secrets versions disable OLD_VERSION --secret="$SECRET"
 ```
 
-Never commit or share tokens.
+Disabling a Secret Manager version does not revoke a token already cached by a running
+instance. Never commit tokens or share them outside the intended private handoff.
 
 ## Read logs
 
@@ -169,11 +213,19 @@ migration state.
 
 ## Lift the spend cap
 
-A Cloud Run spend cap may stop Orbit. It does not reset itself.
+The repository records a $10 Cloud Run cap but does not capture its live configuration.
+Quincy must confirm the budget type, scope, amount, period and enforcement status in
+Cloud Billing before recovery. An alerts-only budget does not cap usage.
+
+Google's built-in spend-cap budgets automatically reset at the next budget period;
+manual lifting resumes usage earlier and removes enforcement for the rest of that
+period unless the budget amount is increased. Custom shutdown automation may need
+different recovery. See the
+[spend-cap documentation](https://docs.cloud.google.com/billing/docs/how-to/budgets-spend-caps).
 
 Before lifting it:
 
-1. Confirm the billing and Cloud Run spend-cap status.
+1. Confirm the configured mechanism and whether it actually blocked Cloud Run.
 2. Check recent Cloud Run and Neon usage.
 3. Confirm the cap was not triggered by an unintended load or test run.
 4. Lift the cap with Quincy or the person responsible for hosting.
