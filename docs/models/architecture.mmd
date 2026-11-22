@@ -4,7 +4,7 @@ flowchart TB
   subgraph run["Google Cloud Run service (Django + Django Ninja on gunicorn)"]
     direction TB
     mw["<b>Platform middleware</b><br/>bearer token (401) for the API, 64 KB limit (413),<br/>one transaction per write (not for /tester), rolled back on error;<br/>gzip for API clients that ask"]
-    console["<b>Console</b> (/console/)<br/>Django sign-in session, no bearer token;<br/>5 failed sign-ins lock a username for 15 min;<br/>calls ticket routes in-process,<br/>signed-in username as X-Actor;<br/>saves update the page in place"]
+    console["<b>Console</b> (/console/)<br/>Django sign-in session, no bearer token;<br/>5 failed sign-ins in 15 min lock<br/>a username for 15 min;<br/>calls ticket routes in-process,<br/>signed-in username as X-Actor;<br/>saves update the page in place"]
     subgraph api["Django Ninja API"]
       direction LR
       health["<b>GET /health</b><br/>public"]
@@ -28,6 +28,7 @@ flowchart TB
   mw -->|"token checked"| testerapi
   mw -->|"session checked by the pages"| console
   console -->|"ticket operations"| tickets
+  console -->|"current time<br/>(real time for the lockout)"| clock
   console -->|"sessions, sign-in failures"| db
   run -.->|"request metrics (status, latency)"| monitor
   monitor -->|"alert email"| team
@@ -35,11 +36,11 @@ flowchart TB
   tickets -->|"current time"| clock
   controls -->|"fix or release time"| clock
   tickets -->|"read, lock, write"| db
-  controls -->|"clear tickets, reports, audit entries;<br/>test sessions"| db
+  controls -->|"reset clears tickets, reports,<br/>audit entries; /test/setup<br/>stores a SystemSession"| db
   clock -->|"fixed time"| db
   testerapi -->|"start a run"| runner
   testerapi -->|"session and report"| db
-  testerapi -->|"/test/setup, /test/report"| target
+  testerapi -->|"/test/setup, /test/report;<br/>cleanup: DELETE /test/clock,<br/>POST /test/reset"| target
   runner -->|"HTTPS requests"| target
   mw -.->|"JSON or problem+json response"| client
   subgraph legend["Legend"]
