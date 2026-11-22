@@ -155,13 +155,17 @@ skipped work, missing bindings and manual demos do not become suite evidence.
 
 ## Malformed requests (AC-13)
 
-`malformed.py` sends 577 malformed requests that Schemathesis generates from
-`openapi.yaml` (fixed seed, so every run sends the same requests; the corpus fingerprint is
-printed). Each must get the status the contract's precedence gives (404 for an unknown
-report type, 413 over 64 KB, otherwise 400) as problem+json matching the contract, never a
-5xx, and the stored data must be unchanged afterwards. CI runs the same corpus in-process
-(`tests/test_malformed_requests.py`). Unlike the suite above it needs the dev requirements
-(`pip install -r requirements-dev.txt`).
+`malformed.py` sends 683 malformed requests that Schemathesis generates from
+`openapi.yaml` (contract 0.3.0), one per distinct fault: requests that differ only in
+their valid parts (say, a missing `X-Actor` with two different valid bodies) count once.
+The seed is fixed, so every run sends the same corpus; its size and fingerprint
+(`562ec91fbc181557`) are recorded in `malformed.py` and checked in CI. Each request must
+get the status the contract's precedence gives (404 for an unknown report type, 413 over
+64 KB, otherwise 400) as problem+json matching the contract, never a 5xx, and the stored
+data must be unchanged afterwards. CI runs the same corpus in-process
+(`tests/test_malformed_requests.py`). Unlike the suite above it needs Python 3.12 and the
+dev requirements (`pip install -r requirements-dev.txt`); other versions generate a
+different corpus, so the CLI refuses them and warns if the fingerprint differs.
 
 ```bash
 export CRA_BASE_URL=https://<deployment-base-url>

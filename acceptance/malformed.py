@@ -50,19 +50,29 @@ TICKET_PLACEHOLDER = "MALFORMEDSEEDTICKET"
 # scheme; the real token is added only when sending and never stored in a request.
 AUTH_PLACEHOLDER = "Bearer generated-placeholder"
 
-# Examples requested per operation. Duplicates and requests the contract allows are
-# dropped afterwards, so the corpus is smaller than the sum (see GenerationStats).
+# Examples requested per operation. Byte-identical duplicates, requests the contract
+# allows, and requests repeating a fault already kept (same operation and same invalid
+# parts, e.g. a missing X-Actor with a different valid body) are dropped, so the corpus
+# holds one request per distinct fault and is much smaller than the sum.
 # GET /tickets/{id} and GET /tickets/{id}/audit take only a free-form ID (any non-empty
 # string is valid), so the contract leaves nothing in them to make malformed.
 BUDGET = {
-    "POST /tickets": 250,
-    "GET /tickets": 100,
-    "PATCH /tickets/{id}": 250,
-    "POST /tickets/{id}/triage": 170,
-    "GET /tickets/{id}/reports/{type}": 50,
-    "POST /tickets/{id}/reports/{type}/submission": 170,
-    "POST /tickets/{id}/close": 60,
+    "POST /tickets": 750,
+    "GET /tickets": 300,
+    "PATCH /tickets/{id}": 750,
+    "POST /tickets/{id}/triage": 510,
+    "GET /tickets/{id}/reports/{type}": 150,
+    "POST /tickets/{id}/reports/{type}/submission": 510,
+    "POST /tickets/{id}/close": 60,  # only 3 faults exist: X-Actor missing, empty, too long
 }
+MINIMUM_FAULTS = 500  # AC-13
+# The corpus this repository expects (Python 3.12 and requirements-dev.txt's pins).
+# Another Python or library version generates different requests. If openapi.yaml or
+# the generator changes on purpose, regenerate and update both values:
+#   python -c "from acceptance.malformed import *; c = generate()[0]; print(len(c), fingerprint(c))"
+PYTHON = (3, 12)
+EXPECTED_FAULTS = 683
+EXPECTED_FINGERPRINT = "562ec91fbc181557"
 UNGENERATED = {
     "GET /tickets/{id}": "only a free-form ticket ID; no input can break the contract",
     "GET /tickets/{id}/audit": "only a free-form ticket ID; no input can break the contract",
@@ -101,6 +111,7 @@ class MalformedRequest:
     headers: tuple[tuple[str, str], ...]  # never includes Authorization
     body: bytes | None
     violations: tuple[str, ...]  # what breaks the contract, e.g. "body: ...", "X-Actor: ..."
+    fault: str  # the operation and the specific violations, ignoring the valid parts
 
     @property
     def expected_status(self) -> int:
@@ -121,6 +132,7 @@ class MalformedRequest:
             "headers": dict(self.headers),
             "body": body,
             "violations": list(self.violations),
+            "fault": self.fault,
             "expected_status": self.expected_status,
         }
 
@@ -128,9 +140,10 @@ class MalformedRequest:
 @dataclass
 class GenerationStats:
     generated: Counter = field(default_factory=Counter)
-    duplicates: Counter = field(default_factory=Counter)
+    duplicates: Counter = field(default_factory=Counter)  # byte-identical requests
     allowed_by_contract: Counter = field(default_factory=Counter)
     unsendable: Counter = field(default_factory=Counter)
+    same_fault: Counter = field(default_factory=Counter)  # a new request for a fault already kept
     kept: Counter = field(default_factory=Counter)
 
 
@@ -159,7 +172,9 @@ class RequestChecker:
         params = [*item.get("parameters", []), *item[method.lower()].get("parameters", [])]
         return [self._resolve(p) for p in params]
 
-    def violations(self, operation, path_parameters, query, headers, body) -> list[str]:
+    def violations(self, operation, path_parameters, query, headers, body) -> list[tuple]:
+        """(description, fault key) for each way the request breaks the contract. Fault keys
+        name only the invalid part, so requests that differ only in valid parts match."""
         method, template = operation.split(" ", 1)
         found = []
         for param in self._parameters(template, method):
@@ -170,37 +185,45 @@ class RequestChecker:
                     continue  # replaced by a seed ticket
                 value = unquote(path_parameters[name])
                 if not self._validator(schema).is_valid(value):
-                    found.append(f"path {name}: {value!r} is not allowed")
+                    found.append((f"path {name}: {value!r} is not allowed", ("path", name, value)))
             elif location == "query":
                 for key, value in query:
                     if key == name and not self._validator(schema).is_valid(value):
-                        found.append(f"query {name}: {value!r} is not allowed")
+                        found.append(
+                            (f"query {name}: {value!r} is not allowed", ("query", name, value))
+                        )
             elif location == "header":
                 value = next((v for k, v in headers if k.lower() == name.lower()), None)
                 if value is None:
                     if param.get("required"):
-                        found.append(f"{name}: missing")
+                        found.append((f"{name}: missing", ("header", name, "missing")))
                     continue
                 # Surrounding whitespace is not part of an HTTP field value (RFC 9110 5.5).
                 value = value.strip(" \t")
                 if not self._validator(schema).is_valid(value):
-                    found.append(f"{name}: {len(value)}-character value is not allowed")
+                    kind = "empty" if not value else "too long" if len(value) > 200 else "invalid"
+                    found.append(
+                        (
+                            f"{name}: {len(value)}-character value is not allowed",
+                            ("header", name, kind),
+                        )
+                    )
         request_body = self._resolve(
             self.contract.document["paths"][template][method.lower()].get("requestBody")
         )
         if request_body:
             if not body:
                 if request_body.get("required"):
-                    found.append("body: missing")
+                    found.append(("body: missing", ("body", "missing")))
             else:
                 found.extend(self._body_violations(template, method, body))
         return found
 
-    def _body_violations(self, template, method, body: bytes) -> list[str]:
+    def _body_violations(self, template, method, body: bytes) -> list[tuple]:
         try:
             document = json.loads(body.decode("utf-8"), parse_constant=_reject_constant)
         except (ValueError, RecursionError):
-            return ["body: not valid JSON"]
+            return [("body: not valid JSON", ("body", "not JSON", _digest(body)))]
         pointer = template.replace("~", "~0").replace("/", "~1")
         validator = self._validator(
             {
@@ -209,10 +232,26 @@ class RequestChecker:
             }
         )
         errors = sorted(validator.iter_errors(document), key=lambda e: list(e.absolute_path))
-        return [
-            f"body {'.'.join(map(str, e.absolute_path)) or '(root)'}: {e.validator}"
-            for e in errors[:3]
-        ]
+        found = []
+        for error in errors:
+            where = ".".join(map(str, error.absolute_path)) or "(root)"
+            if error.validator == "additionalProperties" and isinstance(error.instance, dict):
+                allowed = error.schema.get("properties", {})
+                detail = sorted(k for k in error.instance if k not in allowed)
+            elif error.validator == "required":
+                detail = error.message
+            else:
+                detail = _digest(json.dumps(error.instance, sort_keys=True).encode())
+            found.append(
+                (f"body {where}: {error.validator}", ("body", where, error.validator, detail))
+            )
+        return found
+
+
+def _digest(data: bytes) -> str:
+    import hashlib
+
+    return hashlib.sha256(data).hexdigest()[:16]
 
 
 def _reject_constant(name):
@@ -292,6 +331,7 @@ def generate(budget=None, contract=None) -> tuple[list[MalformedRequest], Genera
         with _without_local_constants():
             collect()
         seen = set()
+        faults = set()
         for case in cases:
             stats.generated[operation] += 1
             try:
@@ -327,9 +367,18 @@ def generate(budget=None, contract=None) -> tuple[list[MalformedRequest], Genera
             if not violations:
                 stats.allowed_by_contract[operation] += 1
                 continue
+            fault = json.dumps(
+                [operation, sorted({json.dumps(key) for _, key in violations})],
+                ensure_ascii=False,
+            )
+            if fault in faults:
+                stats.same_fault[operation] += 1
+                continue
+            faults.add(fault)
             stats.kept[operation] += 1
+            descriptions = tuple(description for description, _ in violations)
             corpus.append(
-                MalformedRequest(operation, method, path, headers, body, tuple(violations))
+                MalformedRequest(operation, method, path, headers, body, descriptions[:3], fault)
             )
     return corpus, stats
 
@@ -487,6 +536,8 @@ def summarize(corpus, stats: GenerationStats, outcome, before, after, seconds) -
     ]
     return {
         "corpus_fingerprint": fingerprint(corpus),
+        "distinct_faults": len({r.fault for r in corpus}),
+        "unique_requests_generated": sum(stats.kept.values()) + sum(stats.same_fault.values()),
         "requests_sent": len(results),
         "seconds": round(seconds, 1),
         "by_status": dict(sorted(by_status.items())),
@@ -505,8 +556,9 @@ def summarize(corpus, stats: GenerationStats, outcome, before, after, seconds) -
 
 def print_summary(summary, out=sys.stdout, show=10):
     print(
-        f"Sent {summary['requests_sent']} malformed requests in {summary['seconds']} s "
-        f"(corpus {summary['corpus_fingerprint']})",
+        f"Sent {summary['requests_sent']} malformed requests, {summary['distinct_faults']} "
+        f"distinct faults (from {summary['unique_requests_generated']} unique generated "
+        f"requests), in {summary['seconds']} s (corpus {summary['corpus_fingerprint']})",
         file=out,
     )
     print("By status: " + ", ".join(f"{k}: {v}" for k, v in summary["by_status"].items()), file=out)
@@ -565,12 +617,29 @@ def main(argv=None) -> int:
     except ValueError as error:
         parser.error(str(error))
     service = Service(transport)
+    if sys.version_info[:2] != PYTHON:
+        print(
+            f"Refusing to run: this needs Python {PYTHON[0]}.{PYTHON[1]} (found "
+            f"{sys.version_info.major}.{sys.version_info.minor}). Other versions generate a "
+            "different corpus from the one CI checks.",
+            file=sys.stderr,
+        )
+        return 2
 
     corpus, stats = generate()
     print(
-        f"Generated {len(corpus)} malformed requests (seed {SEED}, corpus {fingerprint(corpus)}).",
+        f"Generated {len(corpus)} malformed requests, one per distinct fault "
+        f"(seed {SEED}, corpus {fingerprint(corpus)}).",
         flush=True,
     )
+    if (len(corpus), fingerprint(corpus)) != (EXPECTED_FAULTS, EXPECTED_FINGERPRINT):
+        print(
+            f"WARNING: this is not the corpus CI checks ({EXPECTED_FAULTS} faults, "
+            f"{EXPECTED_FINGERPRINT}). Install requirements-dev.txt exactly; results here "
+            "are not comparable with CI.",
+            file=sys.stderr,
+            flush=True,
+        )
 
     try:
         existing = service.list()  # also checks the URL and token before anything changes
@@ -594,6 +663,7 @@ def main(argv=None) -> int:
 
     started = time.monotonic()
     summary = None
+    cleanup_failed = False
     outcome = {"seeds": {}}
     try:
         seeds = seed_tickets(service)
@@ -618,13 +688,24 @@ def main(argv=None) -> int:
         if summary is None:
             print("The run stopped before it finished; see the error below.", file=sys.stderr)
         if args.reset:
-            service.expect("POST", "/test/reset", 204, actor=None)
-            service.expect("DELETE", "/test/clock", 204, actor=None)
-            print("Reset the target and released the clock.")
+            # Each step runs even if the other fails, and a failure here is reported
+            # without replacing an error already on its way out.
+            for method, path in (("POST", "/test/reset"), ("DELETE", "/test/clock")):
+                try:
+                    service.expect(method, path, 204, actor=None)
+                    print(f"Cleanup: {method} {path} done.")
+                except Exception as error:
+                    cleanup_failed = True
+                    print(f"Cleanup: {method} {path} FAILED: {error!r}", file=sys.stderr)
         elif outcome["seeds"]:
             print(f"Left seed tickets on the target: {', '.join(outcome['seeds'].values())}")
 
-    ok = not summary["failures"] and summary["data_unchanged"] and len(corpus) >= 500
+    ok = (
+        not summary["failures"]
+        and summary["data_unchanged"]
+        and summary["distinct_faults"] >= MINIMUM_FAULTS
+        and not cleanup_failed
+    )
     return 0 if ok else 1
 
 

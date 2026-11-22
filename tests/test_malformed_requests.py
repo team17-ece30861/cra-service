@@ -17,6 +17,10 @@ from django.test import Client
 
 from acceptance.client import ROOT, Response, Service
 from acceptance.malformed import (
+    EXPECTED_FAULTS,
+    EXPECTED_FINGERPRINT,
+    MINIMUM_FAULTS,
+    PYTHON,
     UNGENERATED,
     fingerprint,
     generate,
@@ -29,8 +33,6 @@ from acceptance.malformed import (
 from core.models import AuditEntry, FixedClock, ReportSubmission, Ticket
 from tests.conftest import TOKEN
 from tests.test_phase3_api import DjangoTransport
-
-MINIMUM = 500  # AC-13
 
 
 def django_sender(method, path, headers, body):
@@ -54,10 +56,25 @@ def stored_rows():
     }
 
 
-def test_generation_matches_a_fresh_interpreter():
-    """The CLI must send the corpus CI tests. Generation inside pytest once differed from
-    a plain interpreter (Hypothesis drew constants from loaded test modules)."""
-    in_process = fingerprint(generate()[0])
+@pytest.fixture(scope="module")
+def generated():
+    return generate()
+
+
+def test_corpus_is_the_recorded_one(generated):
+    """CI and the CLI must send the same requests. A different Python or library version,
+    or a change to openapi.yaml, gives a different corpus: regenerate and update the
+    recorded values in acceptance/malformed.py on purpose, never to get green."""
+    corpus, _ = generated
+    assert sys.version_info[:2] == PYTHON
+    assert len({request.fault for request in corpus}) == len(corpus) >= MINIMUM_FAULTS
+    assert (len(corpus), fingerprint(corpus)) == (EXPECTED_FAULTS, EXPECTED_FINGERPRINT)
+
+
+def test_generation_matches_a_fresh_interpreter(generated):
+    """Generation inside pytest once differed from a plain interpreter (Hypothesis drew
+    constants from loaded test modules), so check against the CLI's context directly."""
+    in_process = fingerprint(generated[0])
     fresh = subprocess.run(
         [
             sys.executable,
@@ -75,10 +92,11 @@ def test_generation_matches_a_fresh_interpreter():
 
 
 @pytest.mark.django_db(transaction=True)
-def test_ac13_generated_malformed_requests(capsys):
-    corpus, stats = generate()
+def test_ac13_generated_malformed_requests(generated, capsys):
+    corpus, stats = generated
     operations = {request.operation for request in corpus}
-    assert len(corpus) >= MINIMUM, f"only {len(corpus)} malformed requests generated"
+    distinct = len({request.fault for request in corpus})
+    assert distinct >= MINIMUM_FAULTS, f"only {distinct} distinct malformed requests"
     assert len(operations) == 7 and not operations & set(UNGENERATED)
 
     service = Service(DjangoTransport())
