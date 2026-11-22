@@ -51,9 +51,10 @@ TICKET_PLACEHOLDER = "MALFORMEDSEEDTICKET"
 AUTH_PLACEHOLDER = "Bearer generated-placeholder"
 
 # Examples requested per operation. Byte-identical duplicates, requests the contract
-# allows, and requests repeating a fault already kept (same operation and same invalid
-# parts, e.g. a missing X-Actor with a different valid body) are dropped, so the corpus
-# holds one request per distinct fault and is much smaller than the sum.
+# allows, and requests whose invalid input repeats one already kept (same operation and
+# same invalid values, e.g. a missing X-Actor with a different valid body) are dropped, so
+# each request sent has a different invalid input. Different invalid values for the same
+# field and rule (type "+" and type "Ø") count separately; fault_categories() groups them.
 # GET /tickets/{id} and GET /tickets/{id}/audit take only a free-form ID (any non-empty
 # string is valid), so the contract leaves nothing in them to make malformed.
 BUDGET = {
@@ -383,6 +384,24 @@ def generate(budget=None, contract=None) -> tuple[list[MalformedRequest], Genera
     return corpus, stats
 
 
+def fault_categories(request: MalformedRequest) -> set[tuple[str, str, str, str]]:
+    """(operation, location, field, rule) for each invalid input, ignoring the invalid
+    value itself. Array indices in body fields are shown as "*"."""
+    operation, keys = json.loads(request.fault)
+    categories = set()
+    for key in map(json.loads, keys):
+        if key[0] in ("path", "query"):
+            categories.add((operation, key[0], key[1], "not allowed by the schema"))
+        elif key[0] == "header":
+            categories.add((operation, "header", key[1], key[2]))
+        elif key[1] in ("missing", "not JSON"):
+            categories.add((operation, "body", "(root)", key[1]))
+        else:
+            field_name = ".".join("*" if part.isdigit() else part for part in key[1].split("."))
+            categories.add((operation, "body", field_name, key[2]))
+    return categories
+
+
 def fingerprint(corpus) -> str:
     """Short digest of the corpus, to show two runs sent the same requests."""
     import hashlib
@@ -536,7 +555,18 @@ def summarize(corpus, stats: GenerationStats, outcome, before, after, seconds) -
     ]
     return {
         "corpus_fingerprint": fingerprint(corpus),
-        "distinct_faults": len({r.fault for r in corpus}),
+        "distinct_invalid_inputs": len({r.fault for r in corpus}),
+        "fault_categories": len(set().union(*(fault_categories(r) for r in corpus))),
+        "fault_categories_by_operation": {
+            op: sorted(
+                f"{location} {name}: {rule}"
+                for (cat_op, location, name, rule) in set().union(
+                    *(fault_categories(r) for r in corpus)
+                )
+                if cat_op == op
+            )
+            for op in sorted({r.operation for r in corpus})
+        },
         "unique_requests_generated": sum(stats.kept.values()) + sum(stats.same_fault.values()),
         "requests_sent": len(results),
         "seconds": round(seconds, 1),
@@ -556,9 +586,10 @@ def summarize(corpus, stats: GenerationStats, outcome, before, after, seconds) -
 
 def print_summary(summary, out=sys.stdout, show=10):
     print(
-        f"Sent {summary['requests_sent']} malformed requests, {summary['distinct_faults']} "
-        f"distinct faults (from {summary['unique_requests_generated']} unique generated "
-        f"requests), in {summary['seconds']} s (corpus {summary['corpus_fingerprint']})",
+        f"Sent {summary['requests_sent']} malformed requests in {summary['seconds']} s "
+        f"(corpus {summary['corpus_fingerprint']}): {summary['distinct_invalid_inputs']} "
+        f"distinct invalid inputs, {summary['fault_categories']} fault categories "
+        "(operation, location/field, rule)",
         file=out,
     )
     print("By status: " + ", ".join(f"{k}: {v}" for k, v in summary["by_status"].items()), file=out)
@@ -628,7 +659,7 @@ def main(argv=None) -> int:
 
     corpus, stats = generate()
     print(
-        f"Generated {len(corpus)} malformed requests, one per distinct fault "
+        f"Generated {len(corpus)} malformed requests, each with a different invalid input "
         f"(seed {SEED}, corpus {fingerprint(corpus)}).",
         flush=True,
     )
@@ -703,7 +734,7 @@ def main(argv=None) -> int:
     ok = (
         not summary["failures"]
         and summary["data_unchanged"]
-        and summary["distinct_faults"] >= MINIMUM_FAULTS
+        and summary["distinct_invalid_inputs"] >= MINIMUM_FAULTS
         and not cleanup_failed
     )
     return 0 if ok else 1

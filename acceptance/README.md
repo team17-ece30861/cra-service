@@ -156,8 +156,12 @@ skipped work, missing bindings and manual demos do not become suite evidence.
 ## Malformed requests (AC-13)
 
 `malformed.py` sends 683 malformed requests that Schemathesis generates from
-`openapi.yaml` (contract 0.3.0), one per distinct fault: requests that differ only in
-their valid parts (say, a missing `X-Actor` with two different valid bodies) count once.
+`openapi.yaml` (contract 0.3.0). Requests are deduplicated so each one sent has a
+different invalid input; different invalid values for the same field count separately
+(an unknown report type `+` and `Ø` are two requests). The run reports three numbers:
+683 requests sent, 683 distinct invalid inputs, and 133 fault categories, keyed by
+operation, location and field (array indices collapsed), and rule. The JSON summary lists
+the categories per operation.
 The seed is fixed, so every run sends the same corpus; its size and fingerprint
 (`562ec91fbc181557`) are recorded in `malformed.py` and checked in CI. Each request must
 get the status the contract's precedence gives (404 for an unknown report type, 413 over
