@@ -83,7 +83,14 @@ TESTER_OWN_SYSTEM_URLS = env_own_system_urls(
         '"https://team17-prod-7zneiwx4ba-uc.a.run.app"]',
     )
 )
-TESTER_MODEL_MAPPING_URL = os.environ.get("TESTER_MODEL_MAPPING_URL", "")
+# The published design-to-test mapping for model coverage, pinned to the commit that
+# merged it (PR #106). The repository is public, so staff and podmates can open it.
+# Change it together with acceptance/model_requirements.json's design version.
+TESTER_MODEL_MAPPING_URL = os.environ.get(
+    "TESTER_MODEL_MAPPING_URL",
+    "https://github.com/team17-ece30861/cra-service/blob/"
+    "e4e8e33cfadfd29a9e71137a94a37593258f6b5d/docs/model-coverage.md",
+)
 
 # Other teams' systems our tester may target, besides this service itself (the
 # course spec: "approved pod service URLs"). Anything else is rejected with 400.
