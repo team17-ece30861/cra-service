@@ -1,6 +1,8 @@
 /* Ledger app shell (docs/design.md; ported from docs/design/ledger-screens.html): springs, the press system, the numeric
    text transition and the ticking clock, the deadline island, the dock with its command field, list rows, menus and toasts.
-   Pages work without it: links are links, and countdowns show the time the page was made. */
+   It also runs every sheet (New/Edit Ticket, Triage, Record Submission, Close Ticket): a sheet saves in place and the page
+   under it refreshes in place, with the toast, as the prototype does (see "Sheets" and "Refreshing in place").
+   Pages work without it: links are links, forms post, and countdowns show the time the page was made. */
 (function () {
   'use strict';
   var root = document.documentElement;
@@ -9,6 +11,19 @@
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   function $(id) { return document.getElementById(id); }
   function mk(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  /* What the server sent, copied before any script changes the page. Refreshing in place compares the next page with this, so
+     only what really changed moves. Text that ticks (countdowns, the clock, meters) is left out of the comparison. */
+  var TICKING = '[data-hms], [data-hms2], [data-rl], [data-clock], [data-meter-text]';
+  function normalize(el) {
+    if (!el) return null;
+    [].forEach.call(el.querySelectorAll(TICKING), function (e) { e.textContent = ''; });
+    [].forEach.call(el.querySelectorAll('[data-meter]'), function (m) { m.removeAttribute('aria-label'); if (m.firstElementChild) m.firstElementChild.removeAttribute('style'); });
+    return el;
+  }
+  function copyOf(el) { return el ? normalize(el.cloneNode(true)) : null; }
+  var source = { screen: copyOf(document.querySelector('.screen-in')), island: copyOf($('island')), dock: copyOf(document.querySelector('.dock-nav')) };
 
   /* ---------- Springs: generate CSS linear() curves from damping + response ---------- */
   function springFn(damping, response) {
@@ -42,6 +57,8 @@
   var T0 = Date.parse(app.getAttribute('data-now')), P0 = performance.now();
   if (isNaN(T0)) T0 = 0;
   function nowMs() { return T0 + (performance.now() - P0); }
+  /* A refreshed page brings the service's "now" again (it may follow a fixed test clock) */
+  function setNow(iso) { var t = Date.parse(iso); if (!isNaN(t)) { T0 = t; P0 = performance.now(); } }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   /* Time left, or the time since an overdue deadline */
   function hmsStr(ms, two) { var s = Math.floor(Math.abs(ms) / 1000), h = Math.floor(s / 3600); return (two ? pad(h) : h) + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60); }
@@ -102,7 +119,7 @@
   /* ---------- List rows ---------- */
   /* Row actions: the morph needs the deadline text's width (rest) and the button's own width (hover). Measure only while a row
      is at rest, so a measurement never interrupts the morph; the rest width follows the countdown every second. */
-  var rowEls = [].slice.call(document.querySelectorAll('.lrow'));
+  var rowEls = [];
   function measureRow(r, all) {
     var dlEl = r.querySelector('.dl'); if (!dlEl || dlEl.matches(':hover, :focus-within')) return;
     var m = r.querySelector('.act-main'), w = r.querySelector('.when'); if (!m || !w) return;
@@ -110,7 +127,7 @@
     dlEl.style.setProperty('--w-rest', w.offsetWidth + 'px');
     if (all) { m.offsetWidth; m.style.transition = ''; }
   }
-  function measureAll(all) { rowEls.forEach(function (r) { measureRow(r, all); }); }
+  function measureAll(all) { if (all) rowEls = [].slice.call(document.querySelectorAll('.lrow')); rowEls.forEach(function (r) { measureRow(r, all); }); }
   /* After a tick: re-measure only the rows whose countdown text changed, all reads first, then all writes */
   function remeasure(rows) {
     var widths = rows.map(function (r) {
@@ -131,38 +148,54 @@
   })();
 
   /* ---------- The deadline island ---------- */
-  var island = $('island'), heroEl = $('app-hero'), islandMorph = null, islandTarget = function () { return null; };
-  function toggleIsland() {}
-  if (island) {
-    var islandBar = island.querySelector('.bar'), islandMore = island.querySelector('.more'), expandable = !!islandMore;
-    islandMorph = new Morph(function (w, h, r) { island.style.width = w + 'px'; island.style.height = h + 'px'; island.style.borderRadius = r + 'px'; });
-    islandTarget = function () { var open = island.classList.contains('open'), max = app.clientWidth - 32; return { w: Math.min(open ? 460 : 360, max), h: islandBar.offsetHeight + (open && islandMore ? islandMore.offsetHeight : 0), r: open ? 26 : 22 }; };
-    islandMorph.to(islandTarget(), true);
-    /* The expanded rows are links; they're in the tab order only while the island is open */
-    var islandLinks = [].slice.call(island.querySelectorAll('.more a'));
-    function syncIslandLinks(open) { islandLinks.forEach(function (a) { a.tabIndex = open ? 0 : -1; }); }
-    toggleIsland = function (force) {
-      if (!expandable) return;
-      var o = island.classList.toggle('open', force);
-      island.setAttribute('aria-expanded', o ? 'true' : 'false'); syncIslandLinks(o); islandMorph.to(islandTarget());
-    };
-    island.addEventListener('click', function (e) { if (e.target.closest('a')) return; toggleIsland(); });
-    island.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && island.classList.contains('open')) { toggleIsland(false); island.focus(); return; }
-      if (e.target !== island) return;
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleIsland(); }
-    });
-    [].forEach.call(island.querySelectorAll('.more li'), function (li, i) { li.style.setProperty('--i', i); });
-    /* On Home the hero shows the same deadline, so the island waits until the hero scrolls away */
+  /* Its parts are read again when a refresh changes them; the container stays and springs to its new size */
+  var island = null, islandBar = null, islandMore = null, islandMorph = null, islandLinks = [], heroEl = null, heroObs = null;
+  function islandTarget() { var open = island.classList.contains('open'), max = app.clientWidth - 32; return { w: Math.min(open ? 460 : 360, max), h: islandBar.offsetHeight + (open && islandMore ? islandMore.offsetHeight : 0), r: open ? 26 : 22 }; }
+  /* The expanded rows are links; they're in the tab order only while the island is open */
+  function syncIslandLinks(open) { islandLinks.forEach(function (a) { a.tabIndex = open ? 0 : -1; }); }
+  function toggleIsland(force) {
+    if (!island || !islandMore) return;
+    var o = island.classList.toggle('open', force);
+    island.setAttribute('aria-expanded', o ? 'true' : 'false'); syncIslandLinks(o); islandMorph.to(islandTarget());
+  }
+  function bindIsland(el, instant) {
+    island = el;
+    if (!el) { islandMorph = null; return; }
+    islandBar = el.querySelector('.bar'); islandMore = el.querySelector('.more');
+    islandLinks = [].slice.call(el.querySelectorAll('.more a'));
+    [].forEach.call(el.querySelectorAll('.more li'), function (li, i) { li.style.setProperty('--i', i); });
+    if (!el._morph) {
+      el._morph = new Morph(function (w, h, r) { el.style.width = w + 'px'; el.style.height = h + 'px'; el.style.borderRadius = r + 'px'; });
+      el.addEventListener('click', function (e) { if (e.target.closest('a')) return; toggleIsland(); });
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && el.classList.contains('open')) { toggleIsland(false); el.focus(); return; }
+        if (e.target !== el) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleIsland(); }
+      });
+    }
+    islandMorph = el._morph;
+    syncIslandLinks(el.classList.contains('open'));
+    islandMorph.to(islandTarget(), instant);
+  }
+  /* On Home the hero shows the same deadline, so the island waits until the hero scrolls away */
+  function watchHero(force) {
+    var h = $('app-hero');
+    if (h === heroEl && !force) return;
+    heroEl = h; if (heroObs) { heroObs.disconnect(); heroObs = null; }
+    if (!island) return;
     if (heroEl && 'IntersectionObserver' in window) {
-      new IntersectionObserver(function (es) {
+      heroObs = new IntersectionObserver(function (es) {
         es.forEach(function (e) {
+          if (!island) return;
           var away = e.isIntersecting; island.classList.toggle('away', away);
           if (away && island.classList.contains('open')) { island.classList.remove('open'); island.setAttribute('aria-expanded', 'false'); syncIslandLinks(false); islandMorph.to(islandTarget(), true); }
         });
-      }, { root: scroller, threshold: 0.35 }).observe(heroEl);
+      }, { root: scroller, threshold: 0.35 });
+      heroObs.observe(heroEl);
     } else island.classList.remove('away');
   }
+  bindIsland($('island'), true);
+  watchHero(true);
 
   /* ---------- The dock and its command field ---------- */
   var dock = $('dock'), dockNav = dock.querySelector('.dock-nav'), cmdBox = $('cmd'), cmdIn = $('cmd-input');
@@ -278,7 +311,9 @@
 
   /* The command list shows a few suggestions; typing searches every ticket and action on the page */
   var IDLE_ROWS = 4, MATCH_ROWS = 7;
-  var cmdItems = [].slice.call(document.querySelectorAll('#cmd-list li[role="option"]')), cmdNone = document.querySelector('#cmd-list .none');
+  var cmdItems = [], cmdNone = null, cmdList = $('cmd-list');
+  /* Read again when a refresh brings a new list */
+  function bindCmd() { cmdItems = [].slice.call(cmdList.querySelectorAll('li[role="option"]')); cmdNone = cmdList.querySelector('.none'); filterCmd(); }
   function visibleCmd() { return cmdItems.filter(function (x) { return !x.hidden; }); }
   function filterCmd() {
     var q = cmdIn.value.trim().toLowerCase(), shown = 0, first = -1, cap = q ? MATCH_ROWS : IDLE_ROWS;
@@ -295,7 +330,7 @@
     if (cmdItems[i]) { if (!cmdItems[i].id) cmdItems[i].id = 'cmd-o' + i; cmdIn.setAttribute('aria-activedescendant', cmdItems[i].id); }
     else cmdIn.removeAttribute('aria-activedescendant');
   }
-  filterCmd();
+  bindCmd();
 
   function snapAll() { dockMorph.to(dockTarget(), true); fieldMorph.to(fieldTarget(), true); if (islandMorph) islandMorph.to(islandTarget(), true); }
   snapAll();
@@ -314,13 +349,14 @@
   function runCmd(li) {
     var href = li.getAttribute('data-href'), soon = li.getAttribute('data-soon'), sheet = li.getAttribute('data-sheet-href');
     closeCmd();
-    setTimeout(function () { if (sheet) openSheetHref(sheet, null); else if (href) location.href = href; else if (soon) notYet(soon); }, 140);
+    setTimeout(function () { if (sheet) showSheet(sheet, null); else if (href) location.href = href; else if (soon) notYet(soon); }, 140);
   }
   cmdIn.addEventListener('focus', openCmd);
   slotBtn.addEventListener('click', openCmd);
   $('cmd-scrim').addEventListener('click', closeCmd);
   cmdIn.addEventListener('input', function () { fieldEl.classList.toggle('has-value', cmdIn.value.length > 0); filterCmd(); morph(); });
-  cmdItems.forEach(function (li, i) { li.addEventListener('mouseenter', function () { selectCmd(i); }); li.addEventListener('click', function () { runCmd(li); }); });
+  cmdList.addEventListener('mouseover', function (e) { var li = e.target.closest('li[role="option"]'); if (li) selectCmd(cmdItems.indexOf(li)); });
+  cmdList.addEventListener('click', function (e) { var li = e.target.closest('li[role="option"]'); if (li) runCmd(li); });
   document.addEventListener('keydown', function (e) {
     var tag = (document.activeElement && document.activeElement.tagName) || '';
     if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(tag) && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); openCmd(); }
@@ -474,19 +510,23 @@
   (function tick() { tickClock(); setTimeout(tick, 1000 - nowMs() % 1000 + 40); })();
 
   /* ---------- Menus (account, the ticket's ⋯) ---------- */
+  /* Looked up when used, so a ticket header that a refresh replaced keeps working */
   function setMenu(btn, menu, open) { menu.hidden = !open; btn.setAttribute('aria-expanded', open ? 'true' : 'false'); if (open) { var f = menu.querySelector('button'); if (f) f.focus({ preventScroll: true }); } }
-  var menus = [].map.call(document.querySelectorAll('[aria-haspopup="menu"]'), function (btn) { return { btn: btn, menu: $(btn.getAttribute('aria-controls')) }; })
-    .filter(function (m) { return m.menu; });
-  menus.forEach(function (m) {
-    m.btn.addEventListener('click', function () { setMenu(m.btn, m.menu, m.menu.hidden); });
-    m.menu.addEventListener('keydown', function (e) {
-      var items = [].slice.call(m.menu.querySelectorAll('button')), k = items.indexOf(document.activeElement);
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(k + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
-      if (e.key === 'Escape') { setMenu(m.btn, m.menu, false); m.btn.focus(); }
-    });
+  function menuButton(menu) { return menu.id ? document.querySelector('[aria-haspopup="menu"][aria-controls="' + menu.id + '"]') : null; }
+  function closeMenuOf(el) { var menu = el.closest('.menu[role="menu"]'), btn = menu && menuButton(menu); if (btn) setMenu(btn, menu, false); return btn || null; }
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[aria-haspopup="menu"]'), menu = btn && $(btn.getAttribute('aria-controls'));
+    if (menu) setMenu(btn, menu, menu.hidden);
+  });
+  document.addEventListener('keydown', function (e) {
+    var menu = e.target.closest && e.target.closest('.menu[role="menu"]'), btn = menu && menuButton(menu); if (!btn) return;
+    var items = [].slice.call(menu.querySelectorAll('button')), k = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(k + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+    if (e.key === 'Escape') { setMenu(btn, menu, false); btn.focus(); }
   });
   document.addEventListener('pointerdown', function (e) {
-    menus.forEach(function (m) { if (!m.menu.hidden && !e.target.closest('.menu-wrap')) setMenu(m.btn, m.menu, false); });
+    if (e.target.closest('.menu-wrap')) return;
+    [].forEach.call(document.querySelectorAll('.menu[role="menu"]:not([hidden])'), function (menu) { var btn = menuButton(menu); if (btn) setMenu(btn, menu, false); });
   });
 
   /* The account menu is a <details> (it works without JavaScript); close it on Escape and on a press outside */
@@ -521,9 +561,9 @@
   document.addEventListener('click', function (e) {
     var t = e.target;
     var copy = t.closest('[data-copy]');
-    if (copy) { menus.forEach(function (m) { if (m.menu.contains(copy)) setMenu(m.btn, m.menu, false); }); copyId(copy); return; }
+    if (copy) { closeMenuOf(copy); copyId(copy); return; }
     var soon = t.closest('[data-soon]');
-    if (soon && !t.closest('#cmd-list')) { menus.forEach(function (m) { if (m.menu.contains(soon)) setMenu(m.btn, m.menu, false); }); notYet(soon.getAttribute('data-soon')); return; }
+    if (soon && !t.closest('#cmd-list')) { closeMenuOf(soon); notYet(soon.getAttribute('data-soon')); return; }
     /* A row opens its ticket, except from the deadline chip, whose actions are its own */
     var row = t.closest('.lrow[data-href]');
     if (row && !t.closest('.dl') && !t.closest('a')) location.href = row.getAttribute('data-href');
@@ -533,97 +573,416 @@
   var screen = document.querySelector('.screen');
   if (screen && !reduceMotion.matches) screen.classList.add('entering');
 
-  /* ================= Sheets (PR 2) =================
-     A sheet slides up over the page it belongs to, with the scrim behind and the page inert; it leaves the same way.
-     Each sheet has its own URL (data-url): opened from the page, it's pushed onto history, so Back closes it and the URL
-     can be shared; opened by that URL, the server renders the page with the sheet already open. Esc, Cancel and the scrim
-     close it; focus stays inside while it's open and goes back to what opened it. Pages put these sheets in #form-sheets
-     (console/templates/console/_sheets.html); a page without the sheet follows the link instead. Sheets announce
-     'sheet:open' (detail.focus: a field to bring into view) for their own scripts (forms.js). */
-  var layer = $('form-sheets'), sheetCard = null, sheetOpener = null, sheetPushed = false;
+  /* ---------- Toasts left for this page: by the server (a change made without this script, then redirected), or by this
+     script when a save's refresh in place had to fall back to loading the page (see refresh) ---------- */
+  var KEPT_TOAST = 'ledger-toast';
+  (function () {
+    var t = $('toast'), title = t && t.getAttribute('data-flash-title'), body = t && t.getAttribute('data-flash-body');
+    if (t) t.removeAttribute('data-flash-title');
+    try {
+      var kept = JSON.parse(sessionStorage.getItem(KEPT_TOAST) || 'null'); sessionStorage.removeItem(KEPT_TOAST);
+      if (!title && kept && kept.title) { title = kept.title; body = kept.body; }
+    } catch (err) { /* storage blocked: nothing kept */ }
+    if (!title) return;
+    setTimeout(function () { toast(title, body, true); }, reduceMotion.matches ? 0 : 280);
+  })();
+
+  /* ================= Sheets =================
+     One system for every sheet and dialog: New Ticket, Edit Ticket, Triage (pages put them in #form-sheets), Record
+     Submission and Close Ticket (#sheet-layer). A sheet slides up over the page it belongs to, with the scrim behind and the
+     page inert, and leaves the same way. Each has its own address (data-sheet-url): opened from the page ([data-sheet-href]),
+     it's pushed onto history, so Back closes it and Forward opens it again; opened by that address, the server renders the
+     page with the sheet already open. A sheet that isn't on the page is fetched from its address (the server is the one
+     source of its markup). Esc, Cancel and the scrim close it; focus stays inside and goes back to what opened it.
+     Saving posts the form in place: the API's errors come back in the sheet; a success closes the sheet, shows the toast
+     and refreshes the page under it in place. Sheets announce 'sheet:ready' (new markup to set up), 'sheet:open' (detail.focus:
+     a field to bring into view) and 'sheet:closed' for their own scripts (forms.js, reports.js). */
+  var sheet = { card: null, url: '', page: '', pushed: false, opener: null }, ignorePop = 0;
+  var shown = location.pathname + location.search;   /* the page the window shows, never a sheet's address */
   var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
-  function sheetFor(href) {
-    if (!layer || !href) return null;
-    var path = new URL(href, location.href).pathname;
-    return layer.querySelector('.sheet-card[data-url="' + path.replace(/"/g, '') + '"]');
-  }
+  /* A sheet's address without ?focus= (which only says where to look) */
+  function sheetKey(u) { var a = new URL(u, location.href); a.searchParams.delete('focus'); var q = a.searchParams.toString(); return a.pathname + (q ? '?' + q : ''); }
+  function pathOf(u) { var a = new URL(u, location.href); return a.pathname + a.search; }
+  function cards() { return [].slice.call(document.querySelectorAll('.sheet-layer > .sheet-card')); }
+  function cardFor(href) { if (!href) return null; var k = sheetKey(href); return cards().filter(function (c) { return sheetKey(c.getAttribute('data-sheet-url')) === k; })[0] || null; }
+  function layerOf(card) { return card.closest('.sheet-layer'); }
+  function cardReady(card) { card.dispatchEvent(new CustomEvent('sheet:ready', { bubbles: true })); }
   function focusables(card) { return [].filter.call(card.querySelectorAll(FOCUSABLE), function (el) { return el.offsetParent !== null || el === document.activeElement; }); }
   function sheetFocus(card, focus) {
     var wanted = focus && [].filter.call(card.querySelectorAll('[data-field]'), function (f) { return f.getAttribute('data-field') === focus; })[0];
     var target = (wanted && wanted.querySelector('input:not([type="hidden"]), textarea, select'))
       || card.querySelector('.invalid, [aria-invalid="true"]')
-      || card.querySelector('.sh-body input[type="radio"]:checked, .sh-body .input, .sh-body .textarea, .sh-body .select, .sh-body input[type="radio"], .dlg-actions .btn');
+      || card.querySelector('.sh-body input[type="radio"]:checked, .sh-body .input:not([disabled]), .sh-body .textarea, .sh-body .select, .sh-body input[type="radio"], .dlg-actions .btn');
     if (target && target.classList.contains('chips-input')) target = target.querySelector('input:not([type="hidden"])');
     if (target) target.focus({ preventScroll: true });
     var into = wanted || (target && target.closest('.field'));
     if (into && (wanted || card.querySelector('.invalid'))) into.scrollIntoView({ block: 'center', behavior: reduceMotion.matches ? 'auto' : 'smooth' });
   }
+  /* Where focus goes when a sheet closes and what opened it is gone: the control that opens it */
+  function openerFor(key) {
+    var all = document.querySelectorAll('#app [data-sheet-href]');
+    for (var i = 0; i < all.length; i++) {
+      if (sheetKey(all[i].getAttribute('data-sheet-href')) !== key) continue;
+      var menu = all[i].closest('.menu[role="menu"]');
+      return menu ? menuButton(menu) : all[i];
+    }
+    return null;
+  }
   function openSheet(card, opts) {
     opts = opts || {};
     if (app.classList.contains('cmd-open')) closeCmd();
-    [].forEach.call(layer.querySelectorAll('.sheet-card'), function (c) { c.hidden = c !== card; });
-    sheetCard = card; sheetOpener = opts.opener || document.activeElement;
+    var layer = layerOf(card);
+    cards().forEach(function (c) { if (c !== card) c.hidden = true; });
+    card.hidden = false;
+    sheet.card = card; sheet.url = sheetKey(card.getAttribute('data-sheet-url')); sheet.pushed = !!opts.pushed;
+    sheet.opener = opts.opener || (document.activeElement !== document.body ? document.activeElement : null);
     clearTimeout(layer.t); layer.hidden = false; layer.classList.remove('entering');
-    layer.offsetWidth; // start the transition from the closed state
+    layer.offsetWidth; /* start the transition from the closed state */
     layer.classList.add('open'); app.inert = true;
     card.dispatchEvent(new CustomEvent('sheet:open', { bubbles: true, detail: { focus: opts.focus || '' } }));
-    setTimeout(function () { if (sheetCard === card) sheetFocus(card, opts.focus); }, 80);
+    setTimeout(function () { if (sheet.card === card) sheetFocus(card, opts.focus); }, 80);
   }
-  function closeSheet(fromHistory) {
-    if (!sheetCard) return;
-    var card = sheetCard; sheetCard = null;
+  function closeSheet(opts) {
+    opts = opts || {};
+    var card = sheet.card; if (!card) return;
+    var layer = layerOf(card);
+    sheet.card = null; shown = sheet.page;
     layer.classList.remove('open', 'entering'); app.inert = false;
-    layer.t = setTimeout(function () { if (!sheetCard) { layer.hidden = true; card.dispatchEvent(new CustomEvent('sheet:closed', { bubbles: true })); } }, 260);
-    var back = sheetOpener && document.contains(sheetOpener) && sheetOpener !== document.body ? sheetOpener
-      : document.querySelector('#app [data-sheet-href^="' + card.getAttribute('data-url') + '"]');
+    clearTimeout(layer.t);
+    layer.t = setTimeout(function () {
+      if (sheet.card === card) return;
+      if (!sheet.card || layerOf(sheet.card) !== layer) layer.hidden = true;
+      card.hidden = true; card.dispatchEvent(new CustomEvent('sheet:closed', { bubbles: true }));
+    }, 260);
+    var back = sheet.opener && document.contains(sheet.opener) && sheet.opener !== document.body ? sheet.opener : openerFor(sheet.url);
     if (back && back.focus) back.focus({ preventScroll: true });
-    if (fromHistory) return;
-    if (sheetPushed) { sheetPushed = false; history.back(); }
-    else history.replaceState(null, '', card.getAttribute('data-base') || location.pathname);
+    if (opts.fromPop) return;
+    if (sheet.pushed) { ignorePop++; history.back(); }
+    else history.replaceState(null, '', sheet.page);
   }
-  function openSheetHref(href, opener) {
-    var card = sheetFor(href);
-    if (!card) { location.href = href; return; }
-    var url = new URL(href, location.href);
-    if (!sheetCard) { history.pushState({ sheet: url.pathname + url.search }, '', url.pathname + url.search); sheetPushed = true; }
-    openSheet(card, { opener: opener, focus: url.searchParams.get('focus') || '' });
-  }
-  if (layer) {
-    /* Opened by its URL: the server rendered it open (rising in once, by CSS, on a fresh visit) */
-    var already = layer.classList.contains('open') && layer.querySelector('.sheet-card:not([hidden])');
-    if (already) {
-      sheetCard = already; app.inert = true;
-      history.replaceState({ sheet: location.pathname + location.search }, '', location.href);
-      setTimeout(function () { sheetFocus(already, new URLSearchParams(location.search).get('focus')); }, layer.classList.contains('entering') ? 120 : 0);
+
+  /* Fetching a sheet from its address: its page arrives with the sheet open, and the card joins this page's layer */
+  /* A press starts the fetch and the click uses it. An entry lives 10 s at most, and every save empties the cache, so a sheet
+     never opens with what the ticket said before a change (e.g. "Not ready to close" after it became ready). */
+  var pages = {}, PAGE_TTL = 10000;
+  function fetchDoc(path) {
+    var hit = pages[path];
+    if (!hit || performance.now() - hit.at > PAGE_TTL) {
+      hit = pages[path] = { at: performance.now(), doc: fetch(path, { credentials: 'same-origin', headers: { Accept: 'text/html' } }).then(function (res) {
+        if (res.redirected || !res.ok) throw new Error('not a page');
+        return res.text();
+      }).then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); }) };
+      hit.doc.catch(function () { if (pages[path] === hit) delete pages[path]; });
     }
-    layer.addEventListener('click', function (e) { if (e.target.closest('[data-close]')) { e.preventDefault(); closeSheet(); } });
-    document.addEventListener('keydown', function (e) {
-      if (!sheetCard) return;
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSheet(); return; }
-      if (e.key !== 'Tab') return;
-      var f = focusables(sheetCard); if (!f.length) return;
-      var first = f[0], last = f[f.length - 1], at = document.activeElement;
-      if (!sheetCard.contains(at)) { e.preventDefault(); first.focus(); }
-      else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
-    }, true);
-    window.addEventListener('popstate', function (e) {
-      var want = e.state && e.state.sheet, card = want && sheetFor(want);
-      if (card && card !== sheetCard) { sheetPushed = true; openSheet(card, { focus: new URL(want, location.href).searchParams.get('focus') || '' }); }
-      else if (!card && sheetCard) { sheetPushed = false; closeSheet(true); }
+    return hit.doc;
+  }
+  function loadCard(path) {
+    return fetchDoc(path).then(function (doc) {
+      delete pages[path];   /* read fresh each time it's loaded */
+      var src = doc.querySelector('.sheet-layer.open > .sheet-card:not([hidden])'), layer = src && src.parentNode.id && $(src.parentNode.id);
+      if (!layer) throw new Error('no sheet for this page');
+      var old = cardFor(path); if (old && old !== sheet.card) old.remove();
+      var card = document.importNode(src, true); card.hidden = true; layer.appendChild(card); cardReady(card);
+      return card;
     });
   }
-  document.addEventListener('click', function (e) {
-    var t = e.target.closest('[data-sheet-href]');
-    if (!t || t.closest('#cmd-list') || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
-    e.preventDefault(); openSheetHref(t.getAttribute('data-sheet-href'), t);
-  });
-
-  /* A toast the server left for this page (a change that just went through) */
-  var flash = document.querySelector('[data-flash]');
-  if (flash) {
-    try { var f = JSON.parse(flash.getAttribute('data-flash')); setTimeout(function () { toast(f.title, f.body, true); }, reduceMotion.matches ? 0 : 280); } catch (err) { /* not a toast */ }
+  function showSheet(href, opener) {
+    if (sheet.card) return;
+    var path = pathOf(href), focus = new URL(href, location.href).searchParams.get('focus') || '';
+    function go(card) {
+      if (sheet.card) return;
+      sheet.page = shown;
+      if (path !== location.pathname + location.search) history.pushState({ ledgerSheet: path }, '', path);
+      openSheet(card, { pushed: true, opener: opener, focus: focus });
+    }
+    var card = cardFor(href);
+    if (card) { go(card); return; }
+    loadCard(path).then(go).catch(function () { location.assign(href); });
   }
 
-  window.Ledger = { toast: toast, nowMs: nowMs, relStr: relStr, reduceMotion: reduceMotion, openSheetHref: openSheetHref, closeSheet: closeSheet };
+  /* The page arrived with a sheet open (its own address): play the opening, as if it was clicked */
+  (function () {
+    var card = document.querySelector('.sheet-layer.open > .sheet-card:not([hidden])'); if (!card) return;
+    var layer = layerOf(card);
+    sheet.card = card; sheet.url = sheetKey(card.getAttribute('data-sheet-url')); sheet.pushed = false;
+    sheet.page = shown = card.getAttribute('data-base') || layer.getAttribute('data-base') || '/console/';
+    app.inert = true;
+    if (!layer.classList.contains('entering') && !reduceMotion.matches) { layer.classList.remove('open'); layer.offsetWidth; requestAnimationFrame(function () { layer.classList.add('open'); }); }
+    setTimeout(function () { if (sheet.card === card) sheetFocus(card, new URLSearchParams(location.search).get('focus')); }, 120);
+  })();
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var t = e.target, op = t.closest('[data-sheet-href]');
+    if (op && !op.closest('#cmd-list') && !op.closest('.sheet-layer')) {
+      e.preventDefault();
+      showSheet(op.getAttribute('data-sheet-href'), closeMenuOf(op) || op);
+      return;
+    }
+    if (sheet.card && t.closest('[data-close]') && t.closest('.sheet-layer') === layerOf(sheet.card)) { e.preventDefault(); closeSheet(); }
+  });
+  /* Start loading a sheet that isn't on the page the moment it's pressed */
+  document.addEventListener('pointerdown', function (e) {
+    var op = e.target.closest && e.target.closest('[data-sheet-href]');
+    if (op && !op.closest('#cmd-list') && !cardFor(op.getAttribute('data-sheet-href'))) fetchDoc(pathOf(op.getAttribute('data-sheet-href'))).catch(function () {});
+  }, true);
+  /* Esc closes; Tab stays inside; "/" doesn't open the command field behind the sheet */
+  window.addEventListener('keydown', function (e) {
+    if (!sheet.card) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSheet(); return; }
+    if (e.key === '/') { e.stopPropagation(); return; }
+    if (e.key !== 'Tab') return;
+    var f = focusables(sheet.card); if (!f.length) return;
+    var first = f[0], last = f[f.length - 1], at = document.activeElement;
+    if (!sheet.card.contains(at)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
+  }, true);
+  window.addEventListener('popstate', function () {
+    var here = location.pathname + location.search, prev = shown;
+    if (ignorePop) { ignorePop--; document.dispatchEvent(new CustomEvent('ledger:history', { cancelable: true })); return; }
+    if (sheet.card && sheet.url !== sheetKey(here)) closeSheet({ fromPop: true });
+    if (sheet.card) return;
+    var focus = new URLSearchParams(location.search).get('focus') || '';
+    var card = cardFor(here);
+    if (card) { sheet.page = prev; openSheet(card, { pushed: true, focus: focus }); return; }
+    /* The report pages switch report type in place (reports.js) */
+    if (!document.dispatchEvent(new CustomEvent('ledger:history', { cancelable: true }))) { shown = here; return; }
+    if (here === shown) return;
+    /* A sheet's address whose card isn't on the page any more (it was saved and the page refreshed): load it again */
+    loadCard(here).then(function (c) {
+      if (sheet.card || location.pathname + location.search !== here) return;
+      sheet.page = prev; openSheet(c, { pushed: true, focus: focus });
+    }).catch(function () { location.reload(); });
+  });
+
+  /* ---------- Saving: one POST, one change through the API. The API says no: the sheet again, with what was typed and its
+     errors. It says yes: the sheet leaves, the toast arrives and the page under it refreshes in place. ---------- */
+  var SAVE_FAILED = "Couldn't save this. Reload the page and try again.";
+  function busy(btn, on) {
+    if (!btn) return;
+    if (on) {
+      if (btn.querySelector('.spin')) return;
+      btn.dataset.label = btn.textContent; btn.style.minWidth = btn.offsetWidth + 'px';
+      btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true');
+      btn.innerHTML = '<span class="spin" aria-hidden="true"></span><span class="sr-only"></span>'; btn.lastChild.textContent = btn.dataset.label;
+    } else {
+      btn.classList.remove('busy'); btn.removeAttribute('aria-busy'); btn.style.minWidth = '';
+      if (btn.dataset.label != null) { btn.textContent = btn.dataset.label; delete btn.dataset.label; }
+    }
+  }
+  /* One line in the sheet when the answer isn't one we can show: the input stays, nothing is lost */
+  function sayFailed(card, msg) {
+    var old = card.querySelector('[data-failed]'); if (old) old.remove();
+    var el;
+    if (card.classList.contains('dialog')) {
+      el = mk('p', 'dlg-err'); el.innerHTML = '<svg class="i sm" aria-hidden="true"><use href="#i-alert"/></svg><span></span>';
+      el.lastChild.textContent = msg;
+      card.querySelector('.dlg-body').insertAdjacentElement('afterend', el);
+    } else {
+      el = mk('div', 'alert error sh-alert'); el.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><div><div class="a-title"></div></div><span></span>';
+      el.querySelector('.a-title').textContent = msg;
+      var body = card.querySelector('.sh-body'), first = [].filter.call(body.children, function (c) { return !c.matches('input[type="hidden"]'); })[0];
+      body.insertBefore(el, first || null);
+    }
+    el.setAttribute('role', 'alert'); el.setAttribute('data-failed', '');
+  }
+  function save(form, card, btn) {
+    if (form.dataset.sending) return;
+    form.dataset.sending = '1'; busy(btn, true);
+    var page = sheet.card === card ? sheet.page : shown, kind = card.getAttribute('data-sheet');
+    function again(msg) { delete form.dataset.sending; form._sent = false; busy(btn, false); sayFailed(card, msg); }
+    fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: { Accept: 'application/json, text/html;q=0.9', 'X-Ledger-Sheet': '1' } }).then(function (res) {
+      /* The session ended: the person signs in again (and comes back to this sheet) */
+      if (res.redirected && new URL(res.url).pathname === '/console/sign-in') { location.assign(res.url); return; }
+      if (res.ok && /^application\/json/.test(res.headers.get('Content-Type') || '')) {
+        return res.json().then(function (data) { if (data && data.saved) saved(card, page, data.toast); else again(SAVE_FAILED); });
+      }
+      return res.text().then(function (html) {
+        var fresh = res.status < 500 && res.status !== 403 ? new DOMParser().parseFromString(html, 'text/html').querySelector('.sheet-card[data-sheet="' + kind + '"]:not([hidden])') : null;
+        if (!fresh) { again(SAVE_FAILED); return; }
+        /* The whole sheet comes back (Edit's record of what you started from too), with the input kept */
+        var next = document.importNode(fresh, true); next.hidden = false;
+        card.replaceWith(next); if (sheet.card === card) sheet.card = next;
+        cardReady(next); sheetFocus(next);
+      });
+    }).catch(function () { again("Couldn't reach Ledger. Check your connection and try again."); });
+  }
+  function saved(card, page, t) {
+    pages = {};
+    if (sheet.card === card) closeSheet();
+    if (t) toast(t.title, t.body, true);
+    refresh(page, t);
+  }
+  document.addEventListener('submit', function (e) {
+    var form = e.target, card = form.closest && form.closest('.sheet-layer > .sheet-card');
+    if (!card || e.defaultPrevented || form.method.toLowerCase() !== 'post') return;
+    e.preventDefault();
+    save(form, card, e.submitter && e.submitter.type === 'submit' ? e.submitter : card.querySelector('[type="submit"]'));
+  });
+
+  /* ================= Refreshing in place =================
+     After a save, the page under the sheet is read again (its own address, so the server renders it as a reload would) and
+     only what changed moves: the old part leaves first (a quick fade), then the new part rises in. Unchanged rows and cards
+     aren't touched, so a list stays calm; the island keeps its container and springs to its new size; the dock's counts change
+     in place and the dock springs to fit. Anything that can't be patched falls back to loading the page. */
+  var ENTER_EASE = getComputedStyle(root).getPropertyValue('--spring-smooth').trim() || 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+  function leave(el) { return el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: reduceMotion.matches ? 150 : 140, easing: 'ease', fill: 'forwards' }); }
+  function enter(el) {
+    if (reduceMotion.matches) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease', fill: 'backwards' });
+    else el.animate([{ opacity: 0, transform: 'translateY(6px)', filter: 'blur(3px)' }, { opacity: 1, transform: 'none', filter: 'blur(0)' }], { duration: 380, easing: ENTER_EASE, fill: 'backwards' });
+  }
+  /* Children are matched by id, then by link (list rows), then by tag, class and position */
+  function keysOf(list) {
+    var seen = {};
+    return list.map(function (el) {
+      if (el.id) return '#' + el.id;
+      if (el.getAttribute('data-href')) return '@' + el.getAttribute('data-href');
+      var k = el.tagName + '.' + el.className; seen[k] = (seen[k] || 0) + 1; return k + '~' + seen[k];
+    });
+  }
+  function onlyElements(el) { return [].every.call(el.childNodes, function (n) { return n.nodeType === 1 || n.nodeType === 8 || (n.nodeType === 3 && !n.nodeValue.trim()); }); }
+  function syncAttrs(live, next, keep) {
+    keep = keep || [];
+    [].slice.call(live.attributes).forEach(function (a) { if (!next.hasAttribute(a.name) && keep.indexOf(a.name) < 0) live.removeAttribute(a.name); });
+    [].forEach.call(next.attributes, function (a) { if (keep.indexOf(a.name) < 0 && live.getAttribute(a.name) !== a.value) live.setAttribute(a.name, a.value); });
+  }
+  /* Patches `live` (on screen) from `next`, knowing `old` (what the server sent for `live`). An unchanged child stays as it is;
+     a changed one is patched inside when its children are all elements, otherwise replaced. plan.dry only collects what will
+     leave, so it can fade out before anything moves. */
+  function patch(live, old, next, plan) {
+    var L = [].slice.call(live.children), O = [].slice.call(old.children), N = [].slice.call(next.children);
+    var ok = keysOf(O), nk = keysOf(N), at = {}, used = [], out = [];
+    ok.forEach(function (k, i) { at[k] = i; });
+    N.forEach(function (n, j) {
+      var i = at[nk[j]];
+      if (i == null || used[i]) { out.push(plan.dry ? null : plan.add(n)); return; }
+      used[i] = true;
+      var o = O[i], l = L[i];
+      if (l.matches('[data-clock]') || o.isEqualNode(n)) { out.push(l); return; }
+      if (o.tagName === n.tagName && !l.matches(TICKING) && onlyElements(o) && onlyElements(n) && l.children.length === o.children.length) {
+        if (!plan.dry) syncAttrs(l, n, ['style']);
+        patch(l, o, n, plan); out.push(l); return;
+      }
+      plan.leaving.push(l); out.push(plan.dry ? null : plan.add(n));
+    });
+    O.forEach(function (o, i) { if (!used[i]) plan.leaving.push(L[i]); });
+    if (plan.dry) return;
+    L.forEach(function (l) { if (out.indexOf(l) < 0) l.remove(); });
+    for (var j = out.length - 1, ref = null; j >= 0; j--) { if (out[j].nextElementSibling !== ref || out[j].parentNode !== live) live.insertBefore(out[j], ref); ref = out[j]; }
+  }
+  function patchScreen(next) {
+    var live = document.querySelector('.screen-in'), old = source.screen;
+    if (!live || !old || !next) return Promise.reject(new Error('no screen'));
+    if (live.children.length !== old.children.length) return Promise.reject(new Error('screen changed shape'));
+    var dry = { dry: true, leaving: [] };
+    patch(live, old, next, dry);
+    dry.leaving.forEach(leave);
+    return wait(dry.leaving.length ? (reduceMotion.matches ? 150 : 140) : 0).then(function () {
+      var added = [], plan = { leaving: [], add: function (n) { var c = document.importNode(n, true); added.push(c); return c; } };
+      patch(live, old, next, plan);
+      source.screen = next;
+      tickClock();
+      added.forEach(enter);
+    });
+  }
+  function patchIsland(next) {
+    var old = source.island;
+    source.island = next;
+    if (!island && !next) return Promise.resolve();
+    if (island && next && old && old.isEqualNode(next)) return Promise.resolve();
+    if (island && !next) {
+      var gone = island; bindIsland(null); watchHero(true);
+      return new Promise(function (r) { leave(gone).onfinish = function () { gone.remove(); r(); }; });
+    }
+    if (!island) {
+      var el = document.importNode(next, true);
+      app.insertBefore(el, app.firstChild); bindIsland(el, true); watchHero(true); tickClock();
+      el.animate([{ opacity: 0, filter: 'blur(4px)' }, { opacity: 1, filter: 'blur(0)' }], { duration: reduceMotion.matches ? 150 : 320, easing: 'ease', fill: 'backwards' });
+      return Promise.resolve();
+    }
+    /* Morph, don't swap: the container stays; its contents leave, the new ones arrive, and it springs to the new size */
+    var bar = island.querySelector('.bar');
+    return new Promise(function (r) { leave(bar).onfinish = r; }).then(function () {
+      var open = island.classList.contains('open') && !!next.querySelector('.more'), away = island.classList.contains('away');
+      syncAttrs(island, next, ['style']);
+      island.classList.toggle('open', open); island.classList.toggle('away', away);
+      if (open) island.setAttribute('aria-expanded', 'true');
+      island.replaceChildren.apply(island, [].map.call(next.childNodes, function (n) { return document.importNode(n, true); }));
+      bindIsland(island); tickClock();
+      enter(island.querySelector('.bar'));
+    });
+  }
+  function patchDock(next) {
+    var old = source.dock; source.dock = next;
+    if (!old || !next) return;
+    var live = dockNav.querySelectorAll(':scope > a'), o = old.querySelectorAll(':scope > a'), n = next.querySelectorAll(':scope > a'), changed = false;
+    for (var i = 0; i < live.length; i++) {
+      if (!o[i] || !n[i] || o[i].isEqualNode(n[i])) continue;
+      ['aria-label', 'aria-current', 'href'].forEach(function (a) { if (n[i].hasAttribute(a)) live[i].setAttribute(a, n[i].getAttribute(a)); else live[i].removeAttribute(a); });
+      live[i].innerHTML = n[i].innerHTML; changed = true;
+      var ct = live[i].querySelector('.ct'); if (ct) enter(ct);
+    }
+    if (changed && !app.classList.contains('cmd-open')) morph();
+  }
+  function patchCmd(next) { if (!next || app.classList.contains('cmd-open')) return; cmdList.innerHTML = next.innerHTML; bindCmd(); }
+  /* The sheets come again with the page, so the next one opens with what the ticket says now (Edit's record of what you
+     started from, the Close dialog's variant, Triage's state) */
+  function replaceCards(doc) {
+    [].forEach.call(doc.querySelectorAll('.sheet-layer[id]'), function (nl) {
+      var layer = $(nl.id);
+      if (!layer) {
+        layer = document.importNode(nl, true); document.body.insertBefore(layer, $('toast'));
+        [].forEach.call(layer.querySelectorAll(':scope > .sheet-card'), cardReady);
+        return;
+      }
+      if (nl.getAttribute('data-base')) layer.setAttribute('data-base', nl.getAttribute('data-base'));
+      var keep = sheet.card && layerOf(sheet.card) === layer ? sheet.card : null;
+      [].forEach.call(layer.querySelectorAll(':scope > .sheet-card'), function (c) { if (c !== keep) c.remove(); });
+      [].forEach.call(nl.querySelectorAll(':scope > .sheet-card'), function (c) {
+        if (keep && sheetKey(keep.getAttribute('data-sheet-url')) === sheetKey(c.getAttribute('data-sheet-url'))) return;
+        var card = document.importNode(c, true); card.hidden = true; layer.appendChild(card); cardReady(card);
+      });
+    });
+  }
+  function routeOf(el) { return (/\broute-\S+/.exec(el.className) || [''])[0]; }
+  function applyPage(doc) {
+    pages = {};
+    var next = doc.getElementById('app');
+    if (!next || routeOf(next) !== routeOf(app)) throw new Error('a different page');
+    setNow(next.getAttribute('data-now')); app.setAttribute('data-now', next.getAttribute('data-now'));
+    document.title = doc.title;
+    patchDock(doc.querySelector('.dock-nav'));
+    patchCmd(doc.getElementById('cmd-list'));
+    replaceCards(doc);
+    return Promise.all([patchIsland(normalize(doc.getElementById('island'))), patchScreen(normalize(doc.querySelector('.screen-in')))]).then(function () {
+      measureAll(true); watchHero(); tickClock();
+      document.dispatchEvent(new CustomEvent('ledger:refreshed'));
+    });
+  }
+  var refreshing = 0;
+  function refresh(page, t) {
+    var token = ++refreshing;
+    var got = fetch(page, { credentials: 'same-origin', headers: { Accept: 'text/html' } }).then(function (res) {
+      if (res.redirected || !res.ok) throw new Error('not the page');
+      return res.text();
+    }).then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); });
+    /* The sheet leaves first (260 ms), then the page changes */
+    return Promise.all([got, wait(280)]).then(function (r) { if (token === refreshing) return applyPage(r[0]); })
+      .catch(function () {
+        if (token !== refreshing) return;
+        /* Loading the page instead: its toast comes along and shows there */
+        try { if (t) sessionStorage.setItem(KEPT_TOAST, JSON.stringify({ title: t.title, body: t.body || '' })); } catch (err) { /* storage blocked */ }
+        location.assign(page);
+      });
+  }
+
+  window.Ledger = {
+    toast: toast, nowMs: nowMs, relStr: relStr, reduceMotion: reduceMotion,
+    openSheetHref: showSheet, closeSheet: closeSheet, openCard: function () { return sheet.card; }, cardReady: cardReady,
+    /* reports.js switches the page it shows in place (report types): the address, and what the server sent for it, so the
+       next refresh compares with the report type on screen */
+    shown: function (url) { shown = pathOf(url); },
+    adopt: function (doc) { var next = doc.querySelector('.screen-in'); if (next) source.screen = copyOf(next); }
+  };
 })();

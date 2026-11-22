@@ -1,6 +1,8 @@
 /* New Ticket, Edit Ticket and Triage sheets (4.U2 part 2; ported from docs/design/ledger-screens.html). Checks here are
    only help while typing (a required field left empty, a CVE ID or time in the wrong shape): the API judges every value,
-   and its answer comes back under the fields. Opening and closing the sheets is ledger.js's job (the Sheets block). */
+   and its answer comes back under the fields. Opening, closing and saving the sheets is ledger.js's job (the Sheets block);
+   a sheet that arrives later (a failed save brings it back with the API's errors, a refresh brings a fresh one) announces
+   'sheet:ready' and is set up here. */
 (function () {
   'use strict';
   var L = window.Ledger || {};
@@ -97,6 +99,7 @@
 
   /* ---------- New Ticket / Edit Ticket ---------- */
   function initTicketForm(form) {
+    if (form._ready) return; form._ready = true;
     var card = form.closest('.sheet-card'), go = card.querySelector('[data-go]'), edit = form.getAttribute('data-mode') === 'edit';
     var more = form.querySelector('.sh-more');
     function current(el) { return el.classList.contains('chips-input') ? el._values().join('\n') : clean(el.value); }
@@ -176,6 +179,7 @@
   var TR_LABEL = { actively_exploited: 'Mark Reportable', not_actively_exploited: 'Close Ticket', invalid: 'Close as Invalid' };
   function relStr(ms) { return L.relStr ? L.relStr(ms) : ''; }
   function initTriage(form) {
+    if (form._ready) return; form._ready = true;
     var card = form.closest('.sheet-card'), go = card.querySelector('[data-go]');
     var wrap = form.querySelector('#tr-aware-wrap'), aware = form.querySelector('#tr-aware'), reason = form.querySelector('#tr-reason');
     var pv = form.querySelector('#tr-preview'), offsets = {};
@@ -229,8 +233,12 @@
     update();
   }
 
-  [].forEach.call(document.querySelectorAll('form.tf-form'), initTicketForm);
-  [].forEach.call(document.querySelectorAll('form.tr-form'), initTriage);
+  function init(root) {
+    [].forEach.call(root.querySelectorAll('form.tf-form'), initTicketForm);
+    [].forEach.call(root.querySelectorAll('form.tr-form'), initTriage);
+  }
+  init(document);
+  document.addEventListener('sheet:ready', function (e) { init(e.target); });
   /* Coming back to a page from the browser's cache: the action button is ready again */
   window.addEventListener('pageshow', function (e) {
     if (!e.persisted) return;

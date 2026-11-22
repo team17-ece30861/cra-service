@@ -20,7 +20,7 @@
   </div>
   <div class="row rp-actions">
     <button class="btn secondary" type="button" id="rp-copy" data-copy-report="{{ d.copy }}"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy Report</button>
-    {% if d.recordable %}{% if d.record_blocked %}<button class="btn primary" type="button" id="rp-record" disabled aria-describedby="rp-record-why">Record Submission</button>{% else %}<a class="btn primary" id="rp-record" href="{% url 'console:record' ticket.id kind %}" data-sheet-open>Record Submission</a>{% endif %}{% endif %}
+    {% if d.recordable %}{% if d.record_blocked %}<button class="btn primary" type="button" id="rp-record" disabled aria-describedby="rp-record-why">Record Submission</button>{% else %}<a class="btn primary" id="rp-record" href="{% url 'console:record' ticket.id kind %}" data-sheet-href="{% url 'console:record' ticket.id kind %}">Record Submission</a>{% endif %}{% endif %}
   </div>
 </header>
 {% if d.recordable and d.record_blocked %}<p class="sr-only" id="rp-record-why">{% if d.awaiting_fix %}The final report can be recorded once a fix is available.{% else %}Add the missing fields first.{% endif %}</p>{% endif %}

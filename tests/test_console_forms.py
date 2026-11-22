@@ -2,7 +2,6 @@
 change through the API as the signed-in person; when the API says no, the sheet comes back
 with the input kept and the API's errors under the fields, and nothing changes."""
 
-import json
 import re
 from datetime import UTC, datetime
 from html.parser import HTMLParser
@@ -103,7 +102,8 @@ def _edit_form(console, ticket_id):
 
 
 def _toast(response):
-    return [json.loads(m.message) for m in response.wsgi_request._messages]
+    """The toast a plain form POST leaves for the page it redirects to (console/flash.py)."""
+    return response.wsgi_request.session["ledger_toast"]
 
 
 NEW = {
@@ -173,9 +173,9 @@ def test_new_ticket_creates_it_as_the_signed_in_person(api, console):
     assert "impact" not in ticket.data  # empty fields aren't sent
     entry = ticket.audit_entries.get()
     assert (entry.actor, entry.action) == ("m.okafor", "created")
-    assert _toast(response)[0]["title"] == "Ticket created"
+    assert _toast(response)["title"] == "Ticket created"
     page = console.get(response["Location"]).content.decode()
-    assert "data-flash=" in page and "Ticket created" in page
+    assert 'data-flash-title="Ticket created"' in page
 
 
 def test_new_ticket_error_keeps_the_input_and_shows_the_field_error(api, console):
@@ -266,7 +266,7 @@ def test_edit_sends_only_changed_fields_and_records_the_actor(api, console):
     entry = ticket.audit_entries.last()
     assert (entry.actor, entry.action) == ("m.okafor", "updated")
     assert {c["field"] for c in entry.changes} == {"title", "member_states", "impact"}
-    assert _toast(response)[0]["body"].startswith("3 fields changed.")
+    assert _toast(response)["body"].startswith("3 fields changed.")
 
 
 def test_edit_aware_without_a_reason_shows_the_apis_error_and_changes_nothing(api, console):
@@ -334,7 +334,7 @@ def test_triage_actively_exploited(api, console):
     assert ticket.aware_at.isoformat() == "2026-10-29T10:40:00+00:00"
     entry = ticket.audit_entries.last()
     assert (entry.actor, entry.action, entry.reason) == ("m.okafor", "triaged", "Seen.")
-    assert "Early warning due 2026-10-30 10:40:00 UTC." in _toast(response)[0]["body"]
+    assert "Early warning due 2026-10-30 10:40:00 UTC." in _toast(response)["body"]
 
 
 @pytest.mark.parametrize("decision", ["not_actively_exploited", "invalid"])
@@ -347,7 +347,7 @@ def test_triage_closing_decisions(api, console, decision):
     assert response.status_code == 302
     ticket = Ticket.objects.get(pk=ticket_id)
     assert (ticket.state, ticket.resolution, ticket.aware_at) == ("closed", decision, None)
-    assert _toast(response)[0]["title"] == f"Closed as {decision.replace('_', ' ')}"
+    assert _toast(response)["title"] == f"Closed as {decision.replace('_', ' ')}"
 
 
 def test_invalid_triage_shows_the_error_and_changes_nothing(api, console):
@@ -432,6 +432,107 @@ def test_a_failed_read_before_a_change_shows_the_error_page(api, console, monkey
     assert Ticket.objects.get(pk=ticket_id).state == "received"
 
 
+# --- Saving from the page's script, without a reload (5.7) ---
+
+SHEET = {"X-Ledger-Sheet": "1"}
+
+
+def test_new_ticket_from_the_page_script_answers_with_the_toast(api, console):
+    response = console.post("/console/tickets/new", NEW, headers=SHEET)
+    ticket = Ticket.objects.get()
+    assert response.status_code == 200
+    assert response.json() == {
+        "saved": True,
+        "toast": {
+            "title": "Ticket created",
+            "body": "\u201cHeap overflow in OTA update parser\u201d is in To Triage. "
+            "Its received time is now.",
+        },
+    }
+    entry = ticket.audit_entries.get()
+    assert (entry.actor, entry.action) == ("m.okafor", "created")
+    # Nothing waits for a later page: the script shows the toast itself
+    assert "ledger_toast" not in console.session
+    assert "data-flash-title" not in console.get("/console/").content.decode()
+
+
+def test_edit_and_triage_from_the_page_script_answer_with_the_toast(api, console):
+    ticket_id = _create(api)
+    post = {**_edit_form(console, ticket_id), "title": "Path traversal in the log exporter"}
+    response = console.post(f"/console/tickets/{ticket_id}/edit", post, headers=SHEET)
+    assert response.json()["toast"] == {
+        "title": "Ticket updated",
+        "body": "1 field changed. The audit trail records it with your username.",
+    }
+    assert Ticket.objects.get(pk=ticket_id).data["title"] == "Path traversal in the log exporter"
+    response = console.post(
+        f"/console/tickets/{ticket_id}/triage",
+        {"decision": "invalid", "reason": "Not ours."},
+        headers=SHEET,
+    )
+    assert response.json()["toast"]["title"] == "Closed as invalid"
+    actions = [(e.actor, e.action) for e in AuditEntry.objects.filter(ticket_id=ticket_id)]
+    assert actions[1:] == [("m.okafor", "updated"), ("m.okafor", "triaged")]
+    assert "ledger_toast" not in console.session
+
+
+def test_a_refused_save_from_the_page_script_answers_with_the_sheet(api, console):
+    """Not JSON: the page with the sheet open, the input kept and the API's errors, so the
+    script can put that sheet in place. Nothing changes."""
+    response = console.post("/console/tickets/new", {**NEW, "title": ""}, headers=SHEET)
+    assert response.status_code == 400
+    assert response["Content-Type"].startswith("text/html")
+    html = response.content.decode()
+    assert 'data-sheet="new"' in html and "Enter a title." in html
+    assert 'value="Lumen Gateway 4"' in html
+    assert Ticket.objects.count() == 0 and AuditEntry.objects.count() == 0
+    ticket_id = _create(api)
+    response = console.post(
+        f"/console/tickets/{ticket_id}/triage",
+        {"decision": "actively_exploited", "aware_at": "2026-10-29 15:00:00", "reason": "x"},
+        headers=SHEET,
+    )
+    assert response.status_code == 422
+    assert 'data-sheet="triage"' in response.content.decode()
+    assert Ticket.objects.get(pk=ticket_id).state == "received"
+    assert "ledger_toast" not in console.session
+
+
+def test_an_edit_with_nothing_changed_from_the_page_script_is_not_a_save(api, console):
+    """200 but HTML: the sheet again with "Change a field to save.", never a toast."""
+    ticket_id = _create(api)
+    response = console.post(
+        f"/console/tickets/{ticket_id}/edit", _edit_form(console, ticket_id), headers=SHEET
+    )
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("text/html")
+    assert "Change a field to save." in response.content.decode()
+    assert AuditEntry.objects.filter(ticket_id=ticket_id).count() == 1
+
+
+def test_the_page_script_needs_the_csrf_token_and_a_session(api):
+    user = User.objects.create_user("m.okafor", password=PASSWORD)
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(user)
+    assert client.post("/console/tickets/new", NEW, headers=SHEET).status_code == 403
+    assert Ticket.objects.count() == 0
+    signed_out = Client().post("/console/tickets/new", NEW, headers=SHEET)
+    assert signed_out.status_code == 302
+    assert signed_out["Location"].startswith("/console/sign-in?next=")
+    assert Ticket.objects.count() == 0
+
+
+def test_every_sheet_names_its_address_and_the_page_under_it(api, console):
+    """One sheet system (ledger.js): every card says its own address and its page."""
+    ticket_id = _create(api)
+    html = console.get(f"/console/tickets/{ticket_id}").content.decode()
+    for kind in ("new", "edit", "triage", "close"):
+        card = re.search(rf'<section class="sheet-card[^"]*" data-sheet="{kind}"[^>]*>', html)
+        assert card, kind
+        assert "data-sheet-url=" in card.group(0) and "data-base=" in card.group(0)
+    assert "data-sheet-open" not in html and " data-url=" not in html
+
+
 # --- Edit: only what the person changed (PR #95 review) ---
 
 
@@ -451,7 +552,7 @@ def test_editing_the_title_sends_only_the_title(api, console):
     assert [c["field"] for c in entry.changes] == ["title"]
     assert ticket.data["description"] == "line one\nline two\n"
     assert ticket.data["product"]["affected_versions"] == ["4.1,b", "5"]
-    assert _toast(response)[0]["body"].startswith("1 field changed.")
+    assert _toast(response)["body"].startswith("1 field changed.")
 
 
 def test_a_crlf_only_post_changes_nothing(api, console):

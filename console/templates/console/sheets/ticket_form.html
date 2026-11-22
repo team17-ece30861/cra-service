@@ -1,6 +1,6 @@
 {# New Ticket and Edit Ticket share one form (docs/design/ledger-screens.html, data-sheet="ticket-form"). Field names are the API's paths; ?focus= takes the same names. #}
 {% with p=tf.p v=tf.v e=tf.e i=tf.i edit=tf.i %}
-<section class="sheet-card" data-sheet="{{ tf.mode }}" id="sheet-{{ tf.mode }}" data-url="{{ tf.action }}" data-base="{{ tf.base }}" role="dialog" aria-modal="true" aria-labelledby="{{ p }}-title"{% if open_sheet != tf.mode %} hidden{% endif %}>
+<section class="sheet-card" data-sheet="{{ tf.mode }}" id="sheet-{{ tf.mode }}" data-sheet-url="{{ tf.action }}" data-base="{{ tf.base }}" role="dialog" aria-modal="true" aria-labelledby="{{ p }}-title"{% if open_sheet != tf.mode %} hidden{% endif %}>
   <header class="sh-bar"><a class="btn plain" href="{{ tf.base }}" data-close>Cancel</a><h2 class="sh-title" id="{{ p }}-title">{% if edit %}Edit Ticket{% else %}New Ticket{% endif %}</h2><button class="btn primary sm" type="submit" form="{{ p }}-form" data-go>{% if edit %}Save{% else %}Create{% endif %}</button></header>
   <form class="sh-body tf-form" id="{{ p }}-form" method="post" action="{{ tf.action }}" novalidate data-mode="{{ tf.mode }}" data-eu="{{ tf.member_states }}"{% if tf.focus %} data-focus="{{ tf.focus }}"{% endif %}>
     {% csrf_token %}

@@ -2,10 +2,10 @@
 Ticket dialog. Each sheet has its own address, so it can be bookmarked or reloaded: the GET
 renders the page it belongs to with the sheet open, and ledger's reports.js opens and closes
 it in place when it's clicked from that page. A POST makes exactly one change through the
-API, as the signed-in person; a failure re-renders the sheet with the API's errors."""
+API, as the signed-in person; a failure re-renders the sheet with the API's errors, and a
+success answers as console/flash.py says (a redirect, or JSON for the page's script)."""
 
-from django.http import HttpResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 from console import present
 from console import present_reports as rp
 from console.api_calls import call_api
-from console.flash import flash
+from console.flash import saved
 from console.views import (
     _everything,
     _failed_status,
@@ -22,10 +22,6 @@ from console.views import (
     ticket_context,
 )
 from core import clock
-
-# reports.js sends SHEET_HEADER with a sheet's POST; success answers with DONE_HEADER.
-SHEET_HEADER = "X-Ledger-Sheet"
-DONE_HEADER = "X-Ledger-Done"
 
 
 def _instead(request, now, *, failed=None):
@@ -132,18 +128,6 @@ def _record_sheet(context: dict, ticket_id: str, kind: str, from_ticket: bool, n
     }
 
 
-def _done(request, ticket_id: str):
-    """After a change: the ticket page, where the toast waits. The page's own script asks
-    with X-Ledger-Sheet and gets the address in a header instead of a redirect it can't
-    read, so it can tell success from a redirect to sign-in (reports.js)."""
-    url = reverse("console:ticket", args=[ticket_id])
-    if request.headers.get(SHEET_HEADER):
-        response = HttpResponse(status=204)
-        response[DONE_HEADER] = url
-        return response
-    return redirect(url)
-
-
 @never_cache
 @signed_in_required
 @require_http_methods(["GET", "HEAD", "POST"])
@@ -169,13 +153,13 @@ def record(request, ticket_id: str, kind: str):
         )
         if result.ok:
             late = result.data.get("status") == "submitted_late"
-            flash(
+            return saved(
                 request,
+                ticket_id,
                 f"{rp.LABEL[kind]} recorded",
                 ("Submitted late." if late else "Submitted on time.")
                 + " The report is locked as it read now.",
             )
-            return _done(request, ticket_id)
         if result.status == 404:
             return _instead(request, now)
         status, failed = result.status, result.data
@@ -214,12 +198,12 @@ def close(request, ticket_id: str):
     if request.method == "POST":
         result = call_api(request, "POST", f"/tickets/{ticket_id}/close")
         if result.ok:
-            flash(
+            return saved(
                 request,
+                ticket_id,
                 "Ticket closed",
                 f"{result.data['title']} is resolved. The audit trail records it.",
             )
-            return _done(request, ticket_id)
         if result.status != 404:
             problem = (result.data or {}).get("detail") or "The ticket couldn't be closed."
             status = result.status
