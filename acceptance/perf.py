@@ -16,20 +16,25 @@ Phases, in order:
    deployment, for every client. Without it the deployment must already be empty.
 3. Load: valid tickets through the public API only (submit, triage, record
    submission, close), in the fixed ``LOAD_PROFILE`` mix. Not timed. By default it
-   loads ``--tickets`` minus the measured POSTs (990), so the store holds exactly
-   ``--tickets`` (1,000, the spec's limit) after the last measured request. A setup
+   loads ``--tickets`` (1,000, as AC-18 says), and the 10 measured POSTs end the run at
+   1,010. ``--exact-limit`` loads 990 instead, so the store never exceeds 1,000. A setup
    or load request that gets no response is retried up to 3 times, after checking the
    service so nothing is applied twice; retries are reported.
 4. Measured: ``--requests`` requests sent one after another in the fixed
    ``MEASURED_MIX``, shuffled by ``--seed``. Each request has one expected status; any
    other status, a connection error or a response that breaks the contract schema is a
-   failure, however fast it was. Measured requests are never retried.
+   failure, however fast it was. Measured requests are never retried. Outside the
+   timer, every list response is compared with the tickets the script expects from what
+   it loaded and changed: the unfiltered list must hold exactly those tickets, and each
+   filtered list exactly the ones matching its filter.
+
+Only a run with 1,000 tickets, 200 requests and response validation on is labelled an
+AC-18 result (PASS or FAIL). Any other run prints its numbers as "not an AC-18 run", and
+``--no-validate`` prints "NOT AC-18 EVIDENCE: validation off".
 
 Times are derived from the service's own clock (``GET /test/clock``), read once before
 loading, and always lie in the past, so the script never sets the clock. A fixed clock
-left by an earlier run is used as it is. With ``--exceed-limit`` the load is the full
-``--tickets`` and the measured POSTs take the store past it (1,010), a slightly harder
-test than the requirement.
+left by an earlier run is used as it is.
 
 Latency is the wall time of one HTTP request, from sending it to reading the whole
 response body. The transport opens a new connection per request (as the acceptance
@@ -227,10 +232,10 @@ def ticket_body(rng: random.Random, number: int, base: datetime, *, full: bool, 
     return body
 
 
-def load_size(tickets: int, mix: dict, *, exceed_limit: bool = False) -> int:
-    """How many tickets to load so the store holds `tickets` after the measured POSTs
-    (or before them, with exceed_limit)."""
-    count = tickets if exceed_limit else tickets - mix.get("create", 0)
+def load_size(tickets: int, mix: dict, *, exact_limit: bool = False) -> int:
+    """How many tickets to load: `tickets` (AC-18's wording), or with exact_limit few
+    enough that the store holds `tickets` after the measured POSTs."""
+    count = tickets - mix.get("create", 0) if exact_limit else tickets
     if count < 1:
         raise ValueError("--tickets must be larger than the measured POSTs")
     return count
@@ -531,27 +536,154 @@ def _request_for(step, ids, base, created):
     return method, template, path, expected, body
 
 
-def run_measured(transport, plan, ids, base, stored, contract=None) -> list[dict]:
+# ---------------------------------------------------------------- expected lists
+#
+# The script's own model of every stored ticket (state, awareness, fix time, recorded
+# reports), built from what it sent, so list responses can be checked independently.
+# Statuses follow docs/spec.md Model B: early warning due 24 h after awareness,
+# notification 72 h, final report 14 days after the later of fix and awareness.
+
+
+def _parse(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def model_entry(body: dict) -> dict:
+    fix = (body.get("fix") or {}).get("available_at")
+    return {
+        "state": "received",
+        "resolution": None,
+        "aware": None,
+        "fix": _parse(fix) if fix else None,
+        "subs": {},
+    }
+
+
+def apply_triage(entry: dict, triage: dict) -> None:
+    if triage["decision"] == "actively_exploited":
+        entry.update(state="reportable", aware=_parse(triage["aware_at"]))
+    else:
+        entry.update(state="closed", resolution=triage["decision"])
+
+
+def model_from_load(specs, loaded) -> dict:
+    model = {}
+    for spec, ticket_id in zip(specs, loaded, strict=True):
+        entry = model[ticket_id] = model_entry(spec["body"])
+        if spec["triage"]:
+            apply_triage(entry, spec["triage"])
+        for submission in spec["submissions"]:
+            entry["subs"][submission["type"]] = _parse(submission["body"]["submitted_at"])
+        if spec["close"]:
+            entry.update(state="closed", resolution="resolved")
+    return model
+
+
+def obligation_statuses(entry: dict, now: datetime) -> set[str]:
+    """The statuses of a ticket's three reports at `now`."""
+    aware = entry["aware"]
+    if aware is None or entry["resolution"] in ("invalid", "not_actively_exploited"):
+        return {"not_applicable"}
+    fix = entry["fix"]
+    dues = {
+        "early_warning": aware + timedelta(hours=24),
+        "notification": aware + timedelta(hours=72),
+        "final_report": None if fix is None else max(fix, aware) + timedelta(days=14),
+    }
+    statuses = set()
+    for report_type, due in dues.items():
+        submitted = entry["subs"].get(report_type)
+        if submitted is not None:
+            statuses.add("submitted" if submitted <= due else "submitted_late")
+        elif due is None:
+            statuses.add("awaiting_fix")
+        else:
+            statuses.add("pending" if now <= due else "overdue")
+    return statuses
+
+
+def expected_ids(model: dict, query: dict, earliest: datetime, latest: datetime):
+    """(certain, possible) ticket IDs a list with this filter must return when the
+    service clock is somewhere in [earliest, latest]. Each "any report has status X"
+    test changes at most once in that window, so checking both ends is enough."""
+    certain, possible = set(), set()
+    for ticket_id, entry in model.items():
+        if "state" in query:
+            outcomes = {entry["state"] == query["state"]}
+        elif "obligation_status" in query:
+            wanted = query["obligation_status"]
+            outcomes = {wanted in obligation_statuses(entry, t) for t in (earliest, latest)}
+        else:
+            outcomes = {True}
+        if True in outcomes:
+            possible.add(ticket_id)
+            if outcomes == {True}:
+                certain.add(ticket_id)
+    return certain, possible
+
+
+def check_list(returned, model, query, earliest, latest):
+    """None if the list holds exactly the expected tickets, else what is wrong."""
+    ids = [ticket["id"] for ticket in returned]
+    certain, possible = expected_ids(model, query, earliest, latest)
+    missing, extra = certain - set(ids), set(ids) - possible
+    if len(ids) != len(set(ids)) or missing or extra:
+        return (
+            f"list {urlencode(query) or 'unfiltered'}: {len(ids)} tickets, expected "
+            f"{len(certain)}-{len(possible)} ({len(missing)} missing, {len(extra)} extra)"
+        )
+    return None
+
+
+def update_model(model, step, ids, body, parsed) -> None:
+    """Applies a successful measured change to the model."""
+    op = step["op"]
+    if op == "create":
+        model[parsed["id"]] = model_entry(body)
+    elif op == "triage":
+        apply_triage(model[ids[step["target"]]], body)
+    elif op == "submission":
+        model[ids[step["target"]]]["subs"][step["type"]] = _parse(parsed["submitted_at"])
+    elif op == "close":
+        model[ids[step["target"]]].update(state="closed", resolution="resolved")
+
+
+def run_measured(
+    transport, plan, ids, base, model=None, contract=None, clock_read_at=None
+) -> list[dict]:
+    """Sends the plan one request at a time. With a model, list responses are checked
+    against it and the model follows each successful change."""
     results = []
     created = 0
+    clock_read_at = time.perf_counter() if clock_read_at is None else clock_read_at
     for step in plan:
         method, template, path, expected, body = _request_for(step, ids, base, created)
         response, seconds, error = _timed(transport, method, path, body)
+        # Everything below is outside the timer.
         status = response.status if response else None
         problem = error
         if status is not None and status != expected:
             problem = f"expected {expected}, got {status}"
-        if problem is None and step["op"] == "create":
-            created += 1
-        if problem is None and contract is not None:
-            # Outside the timer: a fast answer that breaks the contract still fails.
+        parsed = None
+        if problem is None:
             try:
-                parsed = contract.validate(method, template, response)
+                if contract is not None:
+                    parsed = contract.validate(method, template, response)
+                else:
+                    parsed = json.loads(response.body) if response.body else None
             except (AssertionError, ValueError) as failure:
                 problem = f"schema: {str(failure)[:200]}"
+        if problem is None and step["op"] == "create":
+            created += 1
+        if problem is None and model is not None:
+            if step["op"] in ("list", "list_state", "list_status"):
+                # The service clock is base plus at most the time since it was read
+                # (plus a second for its truncation).
+                elapsed = time.perf_counter() - clock_read_at + 1
+                latest = base + timedelta(seconds=math.ceil(elapsed))
+                problem = check_list(parsed, model, step.get("query", {}), base, latest)
             else:
-                if step["op"] == "list" and len(parsed) != stored + created:
-                    problem = f"list returned {len(parsed)} tickets, expected {stored + created}"
+                update_model(model, step, ids, body, parsed)
         results.append(
             {
                 "op": step["op"],
@@ -616,10 +748,21 @@ def _ms(value) -> str:
     return f"{value * 1000:8.1f} ms"
 
 
+def verdict(passed: bool, *, validated: bool, tickets: int, requests: int) -> str:
+    """PASS or FAIL only for a real AC-18 run: 1,000 tickets, 200 requests, validated."""
+    if not validated:
+        return "NOT AC-18 EVIDENCE: validation off"
+    if tickets != 1000 or requests != 200:
+        return "not an AC-18 run"
+    return "PASS" if passed else "FAIL"
+
+
 def _print_summary(result):
+    label = "AC-18" if result["ac18_run"] else "Performance run (not AC-18)"
     print(
-        f"\nAC-18 against {result['base_url']} ({result['ticket_count_at_start']} tickets "
-        f"at the start, {result['ticket_count_at_end']} at the end)"
+        f"\n{label} against {result['base_url']} ({result['ticket_count_at_start']} tickets "
+        f"at the start, {result['ticket_count_at_end']} at the end; "
+        f"validated: {str(result['validated']).lower()})"
     )
     warm = result["summary"]["warmup"]
     if warm["requests"]:
@@ -643,8 +786,12 @@ def _print_summary(result):
     print(f"Unexpected statuses or responses: {result['summary']['unexpected']}")
     for failure in result["summary"]["failures"][:20]:
         print(f"  {failure['method']} {failure['path']}: {failure['problem']}")
-    verdict = "PASS" if result["summary"]["passed"] else "FAIL"
-    print(f"{verdict}: p95 {_ms(overall['p95']).strip()} (limit {P95_LIMIT_SECONDS:.0f} s)")
+    within = "within" if result["summary"]["passed"] else "NOT within"
+    print(
+        f"{result['verdict']}: p95 {_ms(overall['p95']).strip()} "
+        f"({within} the {P95_LIMIT_SECONDS:.0f} s limit, "
+        f"{result['summary']['unexpected']} unexpected)"
+    )
 
 
 def parse_args(argv=None):
@@ -660,15 +807,18 @@ def parse_args(argv=None):
     parser.add_argument("--tickets", type=int, default=1000)
     parser.add_argument("--requests", type=int, default=200)
     parser.add_argument(
-        "--exceed-limit",
+        "--exact-limit",
         action="store_true",
-        help="load the full --tickets; the measured POSTs then take the store past it",
+        help="load --tickets minus the measured POSTs (990), so the store ends at exactly "
+        "--tickets; by default the full --tickets are loaded and the POSTs end at 1,010",
     )
     parser.add_argument("--warmup", type=int, default=5, help="untimed cold-start requests")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--load-workers", type=int, default=4, help="concurrent loaders")
     parser.add_argument(
-        "--no-validate", action="store_true", help="skip contract schema checks of responses"
+        "--no-validate",
+        action="store_true",
+        help="skip contract schema checks of responses (the run is then not AC-18 evidence)",
     )
     parser.add_argument(
         "--tested-version", default=os.environ.get("CRA_TESTED_VERSION", "unspecified")
@@ -687,7 +837,8 @@ def parse_args(argv=None):
 def run(args) -> int:
     transport = HTTPTransport(args.base_url, os.environ["CRA_API_TOKEN"])
     mix = apportion(MEASURED_MIX, args.requests)
-    load_count = load_size(args.tickets, mix, exceed_limit=args.exceed_limit)
+    load_count = load_size(args.tickets, mix, exact_limit=args.exact_limit)
+    validated = not args.no_validate
     result = {
         "criterion": "AC-18 / REQ-17: p95 <= 1 s over sequential mixed requests",
         "base_url": transport.base_url,
@@ -697,7 +848,9 @@ def run(args) -> int:
         "seed": args.seed,
         "tickets": args.tickets,
         "loaded": load_count,
-        "exceed_limit": args.exceed_limit,
+        "exact_limit": args.exact_limit,
+        "validated": validated,
+        "ac18_run": validated and args.tickets == 1000 and args.requests == 200,
         "requests": args.requests,
         "mix": mix,
         "percentile_method": "nearest rank",
@@ -721,6 +874,7 @@ def run(args) -> int:
                 "deployment or pass --reset (deletes everything)"
             )
         clock = loader.get("/test/clock")["now"]
+        clock_read_at = time.perf_counter()
         base = datetime.fromisoformat(clock.replace("Z", "+00:00"))
         result["service_clock_at_start"] = clock
         specs = build_load_specs(args.seed, load_count, base)
@@ -740,8 +894,9 @@ def run(args) -> int:
         result["ticket_count_at_end"] = stored + mix.get("create", 0)
         print(f"Loaded in {result['load_seconds']} s; {stored} tickets stored.")
         print(f"Measuring {args.requests} requests, one at a time...")
-        contract = None if args.no_validate else Contract()
-        measured = run_measured(transport, plan, ids, base, stored, contract)
+        contract = Contract() if validated else None
+        model = model_from_load(specs, loaded)
+        measured = run_measured(transport, plan, ids, base, model, contract, clock_read_at)
     except SetupError as error:
         result["error"] = str(error)
         _note_retries(result, loader)
@@ -751,6 +906,12 @@ def run(args) -> int:
     result["finished_at"] = _now_utc()
     _note_retries(result, loader)
     result["summary"] = report(measured, warmup)
+    result["verdict"] = verdict(
+        result["summary"]["passed"],
+        validated=validated,
+        tickets=args.tickets,
+        requests=args.requests,
+    )
     result["results"] = measured
     _write(args.out, result)
     _print_summary(result)

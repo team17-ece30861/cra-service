@@ -157,14 +157,15 @@ def test_report_fails_when_p95_is_over_one_second():
     assert perf.report(failing, warmup=[])["passed"] is False
 
 
-def test_default_load_leaves_exactly_the_ticket_limit_after_the_measured_posts():
+def test_default_load_is_the_full_ticket_count_and_exact_limit_is_opt_in():
     mix = perf.MEASURED_MIX
-    assert perf.load_size(1000, mix) == 990
-    assert perf.load_size(1000, mix) + mix["create"] == 1000
-    assert perf.load_size(1000, mix, exceed_limit=True) == 1000
+    assert perf.load_size(1000, mix) == 1000  # AC-18's wording; the POSTs end at 1,010
+    assert perf.load_size(1000, mix, exact_limit=True) == 990
+    assert perf.load_size(1000, mix, exact_limit=True) + mix["create"] == 1000
     with pytest.raises(ValueError):
-        perf.load_size(10, mix)
-    perf.build_plan(17, mix, perf.apportion(perf.LOAD_PROFILE, perf.load_size(1000, mix)))
+        perf.load_size(10, mix, exact_limit=True)
+    sizes = perf.apportion(perf.LOAD_PROFILE, perf.load_size(1000, mix, exact_limit=True))
+    perf.build_plan(17, mix, sizes)
 
 
 class FakeService:
@@ -297,7 +298,109 @@ def test_measured_requests_are_never_retried():
             raise URLError("connection reset")
 
     plan = [{"op": "list", "number": 0}]
-    results = perf.run_measured(Dropping(), plan, {}, BASE, stored=0)
+    results = perf.run_measured(Dropping(), plan, {}, BASE)
     assert Dropping.calls == 1
     assert results[0]["ok"] is False and results[0]["status"] is None
     assert perf.report(results, warmup=[])["passed"] is False
+
+
+def test_only_a_validated_1000_ticket_200_request_run_gets_pass_or_fail():
+    args = {"validated": True, "tickets": 1000, "requests": 200}
+    assert perf.verdict(True, **args) == "PASS"
+    assert perf.verdict(False, **args) == "FAIL"
+    off = {**args, "validated": False}
+    assert perf.verdict(True, **off) == "NOT AC-18 EVIDENCE: validation off"
+    assert perf.verdict(True, **{**args, "tickets": 300}) == "not an AC-18 run"
+    assert perf.verdict(True, **{**args, "requests": 50}) == "not an AC-18 run"
+
+
+def ticket_model():
+    hour = perf.timedelta(hours=1)
+    return {
+        "received": perf.model_entry({}),
+        "na": {**perf.model_entry({}), "state": "closed", "resolution": "invalid"},
+        # Early warning due exactly at BASE: pending at BASE, overdue a second later.
+        "boundary": {**perf.model_entry({}), "state": "reportable", "aware": BASE - 24 * hour},
+        "late": {
+            **perf.model_entry({}),
+            "state": "reportable",
+            "aware": BASE - 100 * hour,
+            "subs": {"early_warning": BASE - 50 * hour},
+        },
+    }
+
+
+def test_expected_ids_follow_model_b_and_allow_only_clock_boundary_doubt():
+    model = ticket_model()
+    later = BASE + perf.timedelta(seconds=30)
+    assert perf.expected_ids(model, {"state": "reportable"}, BASE, later) == (
+        {"boundary", "late"},
+        {"boundary", "late"},
+    )
+    assert perf.expected_ids(model, {"obligation_status": "not_applicable"}, BASE, later)[0] == {
+        "received",
+        "na",
+    }
+    # Its notification is pending either way; only the early warning is in doubt.
+    assert perf.expected_ids(model, {"obligation_status": "pending"}, BASE, later) == (
+        {"boundary"},
+        {"boundary"},
+    )
+    assert perf.expected_ids(model, {"obligation_status": "overdue"}, BASE, later) == (
+        {"late"},
+        {"boundary", "late"},
+    )
+    assert perf.expected_ids(model, {"obligation_status": "submitted_late"}, BASE, later) == (
+        {"late"},
+        {"late"},
+    )
+    assert perf.expected_ids(model, {"obligation_status": "awaiting_fix"}, BASE, BASE)[0] == {
+        "boundary",
+        "late",
+    }
+
+
+def test_final_report_deadline_uses_the_later_of_fix_and_awareness():
+    aware = datetime(2026, 10, 5, 9, 0, 0, tzinfo=UTC)
+    entry = {**perf.model_entry({}), "state": "reportable", "aware": aware}
+    entry["fix"] = datetime(2026, 10, 20, 12, 0, 0, tzinfo=UTC)  # E4: due 2026-11-03T12:00Z
+    assert "pending" in perf.obligation_statuses(entry, datetime(2026, 11, 3, 12, tzinfo=UTC))
+    entry["subs"] = {"early_warning": aware, "notification": aware}
+    late = datetime(2026, 11, 3, 12, 0, 1, tzinfo=UTC)
+    assert perf.obligation_statuses(entry, late) == {"submitted", "overdue"}
+    entry["fix"] = datetime(2026, 9, 28, tzinfo=UTC)  # E5: due 2026-10-19T09:00Z
+    assert "overdue" in perf.obligation_statuses(entry, datetime(2026, 10, 19, 9, 1, tzinfo=UTC))
+
+
+def test_filtered_list_missing_or_adding_a_ticket_is_a_failure():
+    model = ticket_model()
+
+    class Lists:
+        def __init__(self, ids):
+            self.ids = ids
+
+        def send(self, *args, **kwargs):
+            body = json.dumps([{"id": ticket_id} for ticket_id in self.ids]).encode()
+            return Response(200, "application/json", body)
+
+    plan = [{"op": "list_state", "query": {"state": "reportable"}, "number": 0}]
+    for ids, ok in [
+        (["boundary", "late"], True),
+        (["late"], False),
+        (["boundary", "late", "received"], False),
+        (["late", "late", "boundary"], False),
+    ]:
+        [result] = perf.run_measured(Lists(ids), plan, {}, BASE, model)
+        assert result["ok"] is ok, (ids, result["problem"])
+    unfiltered = [{"op": "list", "number": 0}]
+    [result] = perf.run_measured(Lists(["received", "na", "boundary"]), unfiltered, {}, BASE, model)
+    assert "1 missing" in result["problem"]
+
+
+def test_measured_changes_update_the_model_for_later_list_checks():
+    model = ticket_model()
+    ids = {("final_report", 0): "late"}
+    perf.update_model(model, {"op": "close", "target": ("final_report", 0)}, ids, None, None)
+    assert model["late"]["state"] == "closed"
+    perf.update_model(model, {"op": "create"}, ids, {"title": "x"}, {"id": "new"})
+    assert model["new"]["state"] == "received"
