@@ -1,7 +1,8 @@
 # Handoff: Ann (API and Data)
 
-**Last updated:** 2026-11-01 by Quincy's agent (Claude Code), handing over Ann's Phase 5
-tasks. Ann's agent: rewrite this file in your own words at the end of your next session.
+**Last updated:** 2026-11-22 by Quincy's agent (Claude Code): Phase 5 status and what's
+left for Ann. Ann's agent: rewrite this file in your own words at the end of your next
+session.
 
 **For Ann's agent (Codex or other):** you're working for Ann, who owns API and Data on
 Team 17. Read [`AGENTS.md`](../../AGENTS.md) and [`docs/plan.md`](../plan.md) before starting.
@@ -9,37 +10,27 @@ Restate the task to Ann before acting, and agree on behavior with Ann before wri
 
 ## Where things stand
 
-Phase 4 is delivered and released to Orbit (2026-11-01). The API and Data pieces are done:
-the recorded-report table and submitted statuses (PR #76), statuses in ticket responses
-plus list filters and order (PR #84), and the reporter confidentiality sweep (PR #88). The
-contract freeze PR is open in `pod-k-shared` (#14) and waiting on Team 21's approval.
-Team 21 agreed to Q1 to Q6 and Q10 on 2026-11-01; Q7 and Q9 are agreed in principle but
-need contract changes; Q8 is unanswered (see [`docs/decisions.md`](../decisions.md)).
+- **5.5:** Ann's operations guide is PR #117 (`docs/operations.md`). Quincy's agent added
+  fixes on 2026-11-22 (c9e3be4): a full access-log line, `HOST` and `NEW_TOKEN` set before
+  use, the 5xx alert, the tester's one-run rule, and clearing a console lockout.
+- **5.9:** done by Quincy's agent so Phase 5 could land: contract 0.3.0 with Q7, Q8 and Q9
+  and the 422-lists-every-problem rule (#111, `pod-k-shared` #20), the 0.2.0 freeze
+  (`pod-k-shared` #14, merged), and AC-13 (#113).
+- Team 21 hasn't answered since 2026-11-01, so Team 17 decided Q7, Q8 and Q9 itself
+  (see [`docs/decisions.md`](../decisions.md)); they reopen if Team 21 objects.
 
 ## In progress
 
-- Nothing of Ann's. `pod-k-shared` #14 (the freeze) is open; see Waiting on.
+- Nothing of Ann's beyond #117.
 
-## Next up (Phase 5, split agreed 2026-11-01)
+## Next up
 
-1. **5.9, contract and API:**
-   - Q7: a `pod-k-shared` PR adding a 422 to submit for a future `fix.available_at`,
-     approved by Team 21, then the code and tests here.
-   - Q9: settle the exact form of "unknown" member states (and whether affected versions
-     too) with Team 21, then the contract PR, the code, and the Model C table in the spec.
-   - Q8: raise it with Team 21 and word the answer into the spec.
-   - Once #14 merges: mirror the frozen `openapi.yaml` into this repo and
-     `pod-k-shared/team17/tester/openapi.yaml` (the three copies must match).
-   - Our own AC-13 run: Schemathesis against `openapi.yaml`, at least 500 generated
-     malformed requests, no 5xx, data unchanged.
-2. **5.5:** a short operations guide, mostly a trim of [`docs/platform.md`](../platform.md).
-3. **5.6 (spec part):** the final spec version agreed with Team 21.
+1. **5.6 (spec part):** confirm the final spec version is contract 0.3.0 and `docs/spec.md`
+   as merged; if Team 21 answers, carry their response into `pod-k-shared` #20.
 
 ## Waiting on
 
-- **Team 21:** approval of `pod-k-shared` #14, and an answer to Q8.
-- **Ann:** accept the invite to `team17-ece30861/pod-k-shared` (`zuo30`, still pending on
-  2026-11-01). Contract PRs need it.
+- **Team 21:** any reply on `pod-k-shared` #20.
 
 ## Notes for the next session
 

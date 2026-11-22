@@ -35,7 +35,7 @@ Cloud, and its own Neon project.
 
 | Component | What it does here |
 |---|---|
-| **Cloud Run** | Runs the Django container (gunicorn, 2 workers) as `team17-dev` and `team17-prod`. 1 vCPU, 512 MiB, request timeout 1800 s (raised from 600 s on 2026-11-01 so a full deployed-tester run fits), concurrency 80. Min 0 and max 1 instances. CPU is allocated only while a request is in flight (`--cpu-throttling`). Cloud Run terminates HTTPS. Ingress is public (`--allow-unauthenticated`) and the app itself enforces the bearer token. Each service runs as its own `ENV-runtime@` service account. |
+| **Cloud Run** | Runs the Django container (gunicorn, 2 workers) as `team17-dev` and `team17-prod`. 1 vCPU, 512 MiB, request timeout 1800 s (raised from 600 s on 2026-11-01 so a full deployed-tester run fits), concurrency 80. Min 0 and max 1 instances. CPU is allocated only while a request is in flight (`--cpu-throttling`). Cloud Run terminates HTTPS. Ingress is public (`--allow-unauthenticated`) and the app itself enforces the bearer token. Each service runs as its own `ENV-runtime@` service account. API responses are gzipped when the client sends `Accept-Encoding: gzip` (`cra_service/compression.py`; `GET /tickets` with 1,000 tickets goes from about 1.7 MB to about 80 KB); clients that don't ask get the same bytes as before, and console pages are never compressed. |
 | **Neon** | Postgres, one Neon project per environment. `DATABASE_URL` is the **pooled** connection string with `sslmode=require`. The pooler runs in transaction mode, so Django disables server-side cursors and prepared statements and relies on no session state. Each gunicorn worker keeps its connection for 300 s (`DB_CONN_MAX_AGE`, set in the `Dockerfile`; local `runserver` keeps 0) with health checks and a 10 s connect timeout; `cra_service/settings.py` explains why that is safe with the pooler. Reads skip the request transaction, and `GET /health` never opens a connection. |
 | **Secret Manager** | Holds `ENV-database-url`, `ENV-django-secret-key`, and one API token secret per client (see [API tokens](#api-tokens)). The deploy passes them to the service (the migrate job gets only the first two) with `--set-secrets ...:latest`. Cloud Run reads the value when an instance starts, so redeploy after rotating a secret. Nothing secret lives in the repo or in GitHub. |
 | **Artifact Registry** | Docker repository `team17`. Images are `cra-service-dev` and `cra-service-prod`, each tagged with the commit SHA. The cleanup policy in [`deploy/cleanup.json`](../deploy/cleanup.json) keeps the 2 most recent images per environment and deletes any others older than 7 days. |
@@ -317,6 +317,18 @@ not the API token. Each person gets their own account in each environment's data
 `X-Actor` in the audit log. Sessions last 12 hours, and the session and CSRF cookies are
 only sent to `/console/`.
 
+**Sign-in lockout** (`console/lockout.py`, PR #109): five failed sign-ins for one username
+within 15 minutes lock that username for 15 minutes from the fifth failure, whether or not
+the account exists. Timing uses real time, never the test clock. The lock ends by itself;
+`POST /test/reset` doesn't clear it. To clear it early, run this with that environment's
+`DATABASE_URL`:
+
+```bash
+python manage.py shell -c "from console.lockout import username_key; \
+from console.models import SignInFailure; \
+SignInFailure.objects.filter(username=username_key('USERNAME')).delete()"
+```
+
 ## Container images
 
 Every deploy pushes one image to Artifact Registry (`team17`, packages `cra-service-dev`
@@ -344,6 +356,7 @@ project (billed separately by Neon). Then check Billing → Reports for anything
 | **Scale to zero** | `--min-instances 0` and `--cpu-throttling`: no instance runs while idle, and CPU is billed only while a request is in flight. |
 | **$10 Cloud Run spend cap** | If Cloud Run spend reaches $10, the cap stops serving. It does not reset on its own, so someone has to lift it manually (see [Known limitations](#known-limitations)). |
 | **$1 alert budget** | A budget alert fires at $1 of spend, long before the cap. |
+| **5xx email alert** | Cloud Monitoring policies "Team 17: server errors on team17-prod" and "... on team17-dev" email the platform owner when a service returns any 5xx in a 5-minute window (`run.googleapis.com/request_count`, `response_code_class="5xx"`); the incident closes after 30 minutes without server errors. Created and updated by `scripts/create_5xx_alert.sh EMAIL` (PR #118); rerunning it updates the policies in place. Read the error in Cloud Logging with `severity>=ERROR` for that service. |
 | **Image cleanup** | Artifact Registry policy (`deploy/cleanup.json`): keep the 2 newest images per environment, delete the rest once they're 7 days old. See [Container images](#container-images). |
 | **Neon stays asleep** | `GET /health` and the deploy smoke test never touch the database, so health checks don't keep Neon's compute running. |
 

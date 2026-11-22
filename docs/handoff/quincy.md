@@ -1,58 +1,56 @@
 # Handoff: Quincy (Platform and Hosting)
 
-**Last updated:** 2026-11-02 by Claude Code (Quincy's agent).
+**Last updated:** 2026-11-22 by Claude Code (Quincy's agent).
 
 ## Where things stand
 
-Phase 4 is delivered and released. Orbit runs `de7a056` (launched 2026-11-01 21:47 UTC):
-every Phase 3 and Phase 4 operation, the console, and the deployed tester with a 30-minute
-run limit. Our tester passed 222/222 against Orbit; cross-team runs passed both ways on
-2026-11-01 (ours 222/222 against Team 21's new deployment, theirs 17/17 against Orbit),
-recorded in `pod-k-shared` (#17). The Phase 4 report text is in
-[`docs/reports/phase4.md`](../reports/phase4.md). Task status is in
-[`docs/plan.md`](../plan.md); Phase 5 owners are in its Phase 5 table (split agreed
-2026-11-01, see [`docs/decisions.md`](../decisions.md)).
+Phase 5 is due 2026-11-22 23:59 ET. Merged to `main` and on Launchpad (`256c3d9`):
+own-system model coverage and the HTTP-gap and operation-table fixes (Richard's #106,
+#107, #108), the console sign-in lockout (#109), contract 0.3.0 with Q7, Q8 and Q9 (#111),
+the deployed tester's run rules, recovery and cleanup (#112), the pinned model-coverage
+mapping URL (#114), console saves in place (#115), persistent database connections and
+gzip (#116), and the AC-18 performance script (#110). On Launchpad after #116, a warm
+simple read takes about 42 ms on the server, down from about 192 ms. Orbit still runs the
+Phase 4 release. Task status is in [`docs/plan.md`](../plan.md), decisions in
+[`docs/decisions.md`](../decisions.md).
 
-On 2026-11-02 we checked the service against the course's "Cross-team Testing Interface"
-document and closed its gaps (5.11): an aborted tester run keeps its results (#103), every
-interface error carries `message` and `source` (#103), and OpenAPI descriptions of the
-tester and the system's test endpoints are in [`docs/interface/`](../interface/) (#104).
-Both are on Launchpad (`2768aa2`, checked 2026-11-02), not yet on Orbit.
+Team 21 hasn't answered on GitHub or by email since 2026-11-01. Team 17 decided the open
+pod items itself, and Quincy chose not to message them first (2026-11-22).
 
 ## In progress
 
-- **Next Orbit launch** picks up #103 and #104. Right after it, set the version row in
-  `team17/SYSTEM.md` on `pod-k-shared` #19 (draft) to the launched commit and merge #19.
-- **`pod-k-shared` #14:** contract freeze (`0.2.0`), waiting on Team 21's approval. Once it
-  merges, Ann mirrors `openapi.yaml` into this repo (5.9).
+- **Open PRs:** #113 (AC-13 Schemathesis, corpus pinned per operating system), #117 (Ann's
+  operations guide, with follow-up fixes), #118 (AC-19 restart demo and 5xx alert
+  scripts), and this docs PR.
+- **Orbit launch** (Quincy: `gh workflow run orbit.yml --ref main -f confirm=ORBIT`), then
+  right after it: merge `pod-k-shared` #20 (contract 0.3.0) and #19 (tester OpenAPI
+  descriptions, with the launched commit in `team17/SYSTEM.md`), and a new pod PR that
+  refreshes `team17/tester/`, `TESTING.md` (gzip, the tester's 409s, `coverage.model`),
+  `SYSTEM.md` and the status chart.
+- **Evidence for the report** (`docs/reports/phase5.md`): AC-18 on Orbit, AC-13 CLI run,
+  deployed tester run at the launched commit, AC-19 screen recording on Orbit
+  (`scripts/restart_demo.sh prod`, Quincy), our suite against Team 21 after 11 PM ET
+  (resets their data; approved 2026-11-21), Team 21's published tester against Orbit, and a
+  Cloud Logging excerpt.
 
-## Next up (Phase 5, Quincy's tasks)
+## Next up
 
-1. 5.8 first: the early performance check, then 5.1 (AC-18 on Orbit) with Richard's load
-   script.
-2. 5.8: the 5xx alert; refuse a second deployed-tester run while one is going, and return
-   before a long run ends; recover a tester session stuck in `running` after a restart;
-   the console sign-in lockout (LIM-12); LIM-13 (tester cleans up after a run).
-3. 5.7: console without page reloads. 5.2: the restart demo.
+1. Merge #113, #117, #118 and this PR; launch Orbit; merge the pod PRs.
+2. Collect the evidence above and finish the Phase 5 report (5.1, 5.2, 5.6).
+3. After grading: tear down the billable resources (`docs/platform.md`, "End of the course").
 
 ## Waiting on
 
-- **Team 21:** approve `pod-k-shared` #14; answer Q8.
+- **Quincy:** merge go for the open PRs, the Orbit launch, and the AC-19 recording.
+- **Richard:** record the final cross-team results (5.6) from tonight's runs.
 
 ## Notes for the next session
 
-- Infrastructure is documented in [`docs/platform.md`](../platform.md), including the
-  deployed tester, console accounts, container images, and what to delete at the end of
-  the course. Disabled secret versions are still billed; destroy old versions.
-- Merging a stacked PR with `--delete-branch` from the CLI closes the next PR instead of
-  retargeting it. Retarget the next PR to `main` first, then merge, then delete.
-- Two local pytest runs at once share the `test_team17` database and fail each other.
-- A deployed-tester run takes about 11 to 12 minutes; some networks drop a connection that
-  has been silent that long (ours dropped at 540 s), so fetch the report with
-  `GET /tester/test/report` afterwards. The run carries on without the client.
-- `docs/interface/*.yaml` are checked against real responses by
-  `tests/test_interface_descriptions.py`: change them together with any tester or
-  `/test/setup`/`/test/report` behavior, and refresh the copies in `pod-k-shared/team17/`.
-- Team 17 tests on Launchpad; it ran against Orbit once after the Phase 4 release, for the
-  report, with Quincy's go-ahead.
+- Infrastructure is in [`docs/platform.md`](../platform.md); the on-call version is
+  [`docs/operations.md`](../operations.md) once #117 merges.
+- The 5xx alert emails Quincy's Purdue address for both services; rerun
+  `scripts/create_5xx_alert.sh EMAIL` to change it.
+- The AC-13 corpus differs between Linux (664 requests) and macOS (683); CI checks only
+  the Linux one. Run the CLI on a Mac to check the macOS pin.
+- Don't deploy or launch Orbit while a deployed-tester run is going; it cuts the run off.
 - Claude Code merges a code PR only after Quincy says to in their own message.
