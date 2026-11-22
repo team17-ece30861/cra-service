@@ -31,10 +31,10 @@ for c in d.get('notificationChannels', []):
         print(c['name']); break
 " "$EMAIL")
 if [[ -z "$CHANNEL" ]]; then
-  CHANNEL=$(call -X POST "$API/notificationChannels" --data "$(python3 -c "
-import json, sys
-print(json.dumps({'type': 'email', 'displayName': 'Team 17 alerts', 'labels': {'email_address': sys.argv[1]}}))
-" "$EMAIL")" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('name') or sys.exit(json.dumps(d)))")
+  BODY=$(python3 -c 'import json, sys; print(json.dumps({"type": "email", "displayName": "Team 17 alerts", "labels": {"email_address": sys.argv[1]}}))' "$EMAIL")
+  RESPONSE=$(call -X POST "$API/notificationChannels" --data "$BODY")
+  CHANNEL=$(printf '%s' "$RESPONSE" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("name", ""))' 2>/dev/null || true)
+  [[ -n "$CHANNEL" ]] || { echo "Could not create the channel: $RESPONSE" >&2; exit 1; }
   echo "Created notification channel $CHANNEL"
 else
   echo "Reusing notification channel $CHANNEL"
