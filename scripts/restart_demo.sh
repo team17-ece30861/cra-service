@@ -14,6 +14,7 @@
 # The token is read from Secret Manager into a variable and never printed. The script
 # does not reset the deployment; it adds one ticket named "AC-19 restart demo".
 set -euo pipefail
+{ set +x; } 2>/dev/null  # never trace: the token would be printed (and recorded)
 
 ENV="${1:-}"
 case "$ENV" in
@@ -28,15 +29,32 @@ BASE=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PR
 TOKEN=$(gcloud secrets versions access latest --secret="$SECRET" --project "$PROJECT")
 OUT=$(mktemp -d)
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
-api() {  # api METHOD PATH [JSON]
+api() {  # api METHOD PATH [JSON]: prints the body; stops unless the status is 2xx
+  local body="$OUT/last-response" code
   local args=(-sS -X "$1" "$BASE$2" -H "Authorization: Bearer $TOKEN" -H "X-Actor: ac19-demo")
   [[ $# -ge 3 ]] && args+=(-H "Content-Type: application/json" --data "$3")
-  curl "${args[@]}" -w '\n'
+  code=$(curl "${args[@]}" -o "$body" -w '%{http_code}')
+  if [[ "$code" != 2* ]]; then
+    echo "$1 $2 returned HTTP $code:" >&2; cat "$body" >&2; echo >&2; exit 1
+  fi
+  cat "$body"; echo
+}
+serving_revision() {  # the revision getting 100% of traffic; stops if traffic is split or pinned
+  gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format=json |
+    python3 -c '
+import json, sys
+s = json.load(sys.stdin)["status"]
+traffic = [t for t in s.get("traffic", []) if t.get("percent", 0) > 0]
+if len(traffic) != 1 or not traffic[0].get("latestRevision"):
+    sys.exit("Traffic is split or pinned to a revision; a new revision would not take over. "
+             "Unpin first (gcloud run services update-traffic --to-latest).")
+print(s["latestReadyRevisionName"])
+'
 }
 field() { python3 -c "import sys,json; print(json.load(sys.stdin)$1)"; }
 
 step "Service: $SERVICE at $BASE"
-REV_BEFORE=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format='value(status.latestReadyRevisionName)')
+REV_BEFORE=$(serving_revision)
 echo "Serving revision: $REV_BEFORE"
 api GET /health
 
@@ -81,7 +99,7 @@ PY
 step "5. Restart: deploy a new revision (harmless env var change) and wait for it"
 gcloud run services update "$SERVICE" --region "$REGION" --project "$PROJECT" \
   --update-env-vars "AC19_RESTART_MARKER=$(date -u +%Y%m%dT%H%M%SZ)" --quiet
-REV_AFTER=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" --format='value(status.latestReadyRevisionName)')
+REV_AFTER=$(serving_revision)
 echo "Revision before: $REV_BEFORE"
 echo "Revision after:  $REV_AFTER"
 [[ "$REV_BEFORE" != "$REV_AFTER" ]] || { echo "No new revision was created" >&2; exit 1; }
