@@ -184,18 +184,21 @@ skipped work, missing bindings and manual demos do not become suite evidence.
 
 ## Malformed requests (AC-13)
 
-`malformed.py` sends 683 malformed requests that Schemathesis generates from
+`malformed.py` sends at least 500 malformed requests that Schemathesis generates from
 `openapi.yaml` (contract 0.3.0). Requests are deduplicated so each one sent has a
 different invalid input; different invalid values for the same field count separately
 (an unknown report type `+` and `Ø` are two requests). The run reports three numbers:
-683 requests sent, 683 distinct invalid inputs, and 133 fault categories, keyed by
+requests sent, distinct invalid inputs (always equal), and fault categories, keyed by
 operation, location and field (array indices collapsed), and rule. The JSON summary lists
 the categories per operation.
-The seed is fixed, so every run sends the same corpus; its size and fingerprint
-(`562ec91fbc181557`) are recorded in `malformed.py` and checked in CI. Each request must
+The seed is fixed, so every run on one operating system sends the same corpus. With the
+same seed and versions, Hypothesis draws different values on Linux and macOS: Linux (CI,
+Cloud Run) sends 664 requests (`34824b069854e3e9`), macOS sends 683 (`562ec91fbc181557`).
+Both cover the same 133 fault categories. The sizes and fingerprints are recorded in
+`malformed.py` and checked in CI and by the CLI. Each request must
 get the status the contract's precedence gives (404 for an unknown report type, 413 over
 64 KB, otherwise 400) as problem+json matching the contract, never a 5xx, and the stored
-data must be unchanged afterwards. CI runs the same corpus in-process
+data must be unchanged afterwards. CI runs the Linux corpus in-process
 (`tests/test_malformed_requests.py`). Unlike the suite above it needs Python 3.12 and the
 dev requirements (`pip install -r requirements-dev.txt`); other versions generate a
 different corpus, so the CLI refuses them and warns if the fingerprint differs.

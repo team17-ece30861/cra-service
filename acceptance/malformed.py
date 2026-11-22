@@ -67,13 +67,25 @@ BUDGET = {
     "POST /tickets/{id}/close": 60,  # only 3 faults exist: X-Actor missing, empty, too long
 }
 MINIMUM_FAULTS = 500  # AC-13
-# The corpus this repository expects (Python 3.12 and requirements-dev.txt's pins).
-# Another Python or library version generates different requests. If openapi.yaml or
-# the generator changes on purpose, regenerate and update both values:
+# The corpus this repository expects (Python 3.12 and requirements-dev.txt's pins), per
+# operating system: with the same seed and versions, Hypothesis draws different random
+# values on Linux (CI, Cloud Run) than on macOS. Both corpora cover the same 133 fault
+# categories; only the invalid values differ. Another Python or library version also
+# generates different requests. If openapi.yaml or the generator changes on purpose,
+# regenerate on both systems and update the values:
 #   python -c "from acceptance.malformed import *; c = generate()[0]; print(len(c), fingerprint(c))"
 PYTHON = (3, 12)
-EXPECTED_FAULTS = 683
-EXPECTED_FINGERPRINT = "562ec91fbc181557"
+EXPECTED = {  # sys.platform: (requests, fingerprint)
+    "linux": (664, "34824b069854e3e9"),
+    "darwin": (683, "562ec91fbc181557"),
+}
+
+
+def expected_corpus() -> tuple[int, str] | None:
+    """The recorded (requests, fingerprint) for this operating system, if there is one."""
+    return EXPECTED.get(sys.platform)
+
+
 UNGENERATED = {
     "GET /tickets/{id}": "only a free-form ticket ID; no input can break the contract",
     "GET /tickets/{id}/audit": "only a free-form ticket ID; no input can break the contract",
@@ -663,11 +675,19 @@ def main(argv=None) -> int:
         f"(seed {SEED}, corpus {fingerprint(corpus)}).",
         flush=True,
     )
-    if (len(corpus), fingerprint(corpus)) != (EXPECTED_FAULTS, EXPECTED_FINGERPRINT):
+    expected = expected_corpus()
+    if expected is None:
         print(
-            f"WARNING: this is not the corpus CI checks ({EXPECTED_FAULTS} faults, "
-            f"{EXPECTED_FINGERPRINT}). Install requirements-dev.txt exactly; results here "
-            "are not comparable with CI.",
+            f"WARNING: no corpus is recorded for {sys.platform}, so this run can't be "
+            "checked against a recorded one.",
+            file=sys.stderr,
+            flush=True,
+        )
+    elif (len(corpus), fingerprint(corpus)) != expected:
+        print(
+            f"WARNING: this is not the corpus recorded for {sys.platform} ({expected[0]} "
+            f"requests, {expected[1]}). Install requirements-dev.txt exactly; results here "
+            "are not comparable with the recorded corpus.",
             file=sys.stderr,
             flush=True,
         )
