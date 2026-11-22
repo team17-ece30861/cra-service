@@ -18,6 +18,7 @@ WRITE_ROUTES = [
     ),
 ]
 CLOCK_SKEW_SECONDS = 120
+RECEIPT_SLACK_SECONDS = 1
 
 
 def observation(service, ticket_id):
@@ -30,7 +31,7 @@ class HttpGapChecks:
         service.expect("POST", "/test/reset", 204, actor=None)
         service.fix_clock(FIXED)
 
-    def test_ac07_awareness_edit_recalculates_all_deadlines_and_records_exact_audit(self, service):
+    def test_ac07_awareness_edit_recalculates_all_deadlines_and_records_audit(self, service):
         ticket_id = create_reportable(service, fix={"available_at": "2026-10-04T09:00:00Z"})
         before = service.get(ticket_id)
         entries_before = audit_log(service, ticket_id)
@@ -69,15 +70,13 @@ class HttpGapChecks:
         assert entries[-1]["actor"] == "awareness-editor"
         assert entries[-1]["action"] == "updated"
         assert entries[-1]["reason"] == "Earlier evidence"
-        assert {change["field"]: change for change in entries[-1]["changes"]} == {
-            "aware_at": {"field": "aware_at", "old": FIXED, "new": "2026-10-03T09:00:00Z"},
-            "product.name": {
-                "field": "product.name",
-                "old": before["product"]["name"],
-                "new": "Renamed router",
-            },
-        }
-        assert len(entries[-1]["changes"]) == 2
+        # The contract types changes[].field only as a string: how nested fields are named,
+        # and whether recalculated deadlines are listed too, are left to each system.
+        assert any(
+            (change["field"], change["old"], change["new"])
+            == ("aware_at", FIXED, "2026-10-03T09:00:00Z")
+            for change in entries[-1]["changes"]
+        )
 
     def test_ac07_setting_fix_time_immediately_creates_final_deadline(self, service):
         ticket_id = create_reportable(service)
@@ -101,16 +100,17 @@ class HttpGapChecks:
         assert entries[-1]["at"] == "2026-10-06T09:00:00Z"
 
     @pytest.mark.parametrize(
-        "reportable,body,status,field",
+        "reportable,body,status,fields",
         [
-            (True, {"aware_at": "2026-10-04T09:00:00Z"}, 422, "change_reason"),
+            # The contract doesn't say which field a missing change_reason names.
+            (True, {"aware_at": "2026-10-04T09:00:00Z"}, 422, {"change_reason", "aware_at"}),
             (
                 True,
                 {"aware_at": "2026-10-05T09:00:01Z", "change_reason": "Future evidence"},
                 422,
-                "aware_at",
+                {"aware_at"},
             ),
-            (True, {"fix": {"available_at": "2026-10-05T09:00:01Z"}}, 422, "fix.available_at"),
+            (True, {"fix": {"available_at": "2026-10-05T09:00:01Z"}}, 422, {"fix.available_at"}),
             (
                 False,
                 {"aware_at": "2026-10-04T09:00:00Z", "change_reason": "Before triage"},
@@ -121,7 +121,7 @@ class HttpGapChecks:
         ids=["missing-reason", "future-awareness", "future-fix", "received-awareness"],
     )
     def test_ac07_rejected_edit_preserves_ticket_drafts_list_and_audit(
-        self, service, reportable, body, status, field
+        self, service, reportable, body, status, fields
     ):
         ticket_id = create_reportable(service) if reportable else service.create()["id"]
         before = observation(service, ticket_id)
@@ -132,8 +132,8 @@ class HttpGapChecks:
             template="/tickets/{id}",
             body={"title": "Must not persist", **body},
         )
-        if field is not None:
-            assert field in {error["field"] for error in problem["errors"]}
+        if fields is not None:
+            assert fields & {error["field"] for error in problem["errors"]}
         assert observation(service, ticket_id) == before
 
     @pytest.mark.parametrize("method,template,body", WRITE_ROUTES, ids=["patch", "triage"])
@@ -188,14 +188,17 @@ class HttpGapChecks:
             time.sleep(2.1)
             second = service.expect("GET", "/test/clock", 200, actor=None)["now"]
             real_after = time.time()
-            for returned_time in (first, second, created["received_at"]):
-                returned_seconds = datetime.fromisoformat(
-                    returned_time.replace("Z", "+00:00")
-                ).timestamp()
+            first, second, received = (
+                datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+                for value in (first, second, created["received_at"])
+            )
+            for returned_seconds in (first, second, received):
                 assert real_before - CLOCK_SKEW_SECONDS <= returned_seconds
                 assert returned_seconds <= real_after + CLOCK_SKEW_SECONDS
             assert first < second
-            assert first <= created["received_at"] <= second
+            # Times are truncated to the second, and the clock read and the ticket's
+            # receipt are separate requests, so allow a second either side.
+            assert first - RECEIPT_SLACK_SECONDS <= received <= second + RECEIPT_SLACK_SECONDS
             assert service.get(ticket_id) == before["ticket"]
             assert audit_log(service, ticket_id) == before["audit"]
             assert {ticket["id"] for ticket in service.list()} == {ticket_id, created["id"]}
