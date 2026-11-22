@@ -1,78 +1,65 @@
 # Handoff: Richard (Domain Logic and Testing)
 
-**Last updated:** 2026-11-21 by Codex with Richard.
+**Last updated:** 2026-11-22 by Quincy's agent (Claude Code), applying the review fixes
+on Richard's three Phase 5 PRs. Richard's last session was 2026-11-21 (Codex).
 
 ## Where things stand
 
-Main remains `ecb59a7`. Richard authorized publishing the HTTP-test draft and
-checking PostgreSQL CI, then fixing operation reporting separately. On November
-21 he also authorized the reporting branch's commit, push, draft PR and CI.
-No merge,
-deployment, shared reset, performance run or restart was performed.
+Phase 4 is delivered. All three Phase 5 test PRs are published, with CI passing on
+Richard's own heads; review fixes were applied by Quincy's agent on 2026-11-22. Quincy
+approved on 2026-11-21 that Team 17's agent resolves and merges Richard's PRs, with
+Quincy's go for each merge. Order: #106, then #107, then #108. Each later branch has the
+earlier ones merged in, so use merge commits, not squash.
+
+- **[PR #106](https://github.com/team17-ece30861/cra-service/pull/106)** (5.4,
+  `codex/phase5-model-coverage`): own-system `coverage.model` from the approved
+  44-requirement design ([model-coverage.md](../model-coverage.md)). CI passed 1,494
+  tests at `81a05eb`. Review fixes: failed oracle groups now name each failed
+  comparison in the report message (`OracleChecks`), an own-system example report in
+  `docs/interface/tester.yaml`, and the "unexpected 5xx = not evaluated" rule in
+  model-coverage.md.
+- **[PR #107](https://github.com/team17-ece30861/cra-service/pull/107)** (5.10,
+  `codex/phase5-http-gaps`): 19 portable cases for AC-07, PATCH/triage 404 and 413,
+  and `DELETE /test/clock`. CI passed 1,424 tests at `5c616b7`. Review fixes: the AC-07
+  audit check no longer asserts nested field naming or the change count, a missing
+  `change_reason` may name `change_reason` or `aware_at`, and clock release compares
+  parsed times with 1 s slack. #106 is merged into this branch, so it holds both.
+- **[PR #108](https://github.com/team17-ece30861/cra-service/pull/108)** (5.10,
+  `codex/phase5-operation-reporting`): the two operation-table fixes from PR #83's
+  review. Failed setup checks stay in the report, and early-stopped, filtered or
+  interrupted runs say `incomplete` with counts and reasons. CI passed 1,417 tests at
+  `c490982`. Review fixes: a check that got no response (connection failure, timeout)
+  is inconclusive rather than failed, and a run from a parent directory says the
+  selection is broader than the suite. #107 (with #106) is merged into this branch.
 
 ## In progress
 
-- Model coverage: draft [#106](https://github.com/team17-ece30861/cra-service/pull/106),
-  `codex/phase5-model-coverage`, head `81a05eb`; PostgreSQL 18 CI passed 1,494.
-  Mapping/manifest publication, configured mapping URL and own-target confirmation
-  still need Quincy. The fixed 44-requirement baseline is unchanged.
-- HTTP tests: draft [#107](https://github.com/team17-ece30861/cra-service/pull/107),
-  `codex/phase5-http-gaps`, head `5c616b7`; PostgreSQL 18 CI passed 1,424.
-  Its 19 new cases previously passed isolated local HTTP; standalone collection
-  is 241. No deployed HTTP run is claimed. Original checkout/branches are preserved.
-- Operation reporting: draft [#108](https://github.com/team17-ece30861/cra-service/pull/108),
-  `codex/phase5-operation-reporting`, based on main, in the reused
-  `work/cra-publish-a4` checkout. Published November 21; inspect its exact-head
-  PostgreSQL CI before merging. Failed setup checks
-  survive even if the Service fixture raises before returning. Conforming setup
-  responses are inconclusive; successful fixture setup supplies no passing credit.
-- Completion uses collection, scope, outcomes and teardown. Early stops, code-0
-  exits before completion, -k/positional filters, --ignore/--ignore-glob exclusions,
-  collection failures and interruptions show incomplete with counts/reasons.
-  A fully attempted suite may finish with failures. Existing result fields and
-  course API are preserved; extra completion fields are standalone-report metadata.
-- Selected local regression: 191 passed, one existing PostgreSQL-only triage skip.
-  Lint/format, Django, migration and whitespace checks pass. No new skip was added.
-- Independent local review caught positional and collection-exclusion omissions.
-  Both are fixed with real pytest child cases; final re-review found no remaining
-  actionable issue. The reviewer is closed; no posted PR approval is claimed.
-- Final combined validation with #106/#107 passed 208 focused tests, including
-  both model and operation hook families and the exclusion-filter correction.
-  Its nested portable suite passed 240/241, with the expected HTTPS-only skip;
-  this is local in-process evidence, not deployed HTTP or PostgreSQL evidence.
+Nothing half-done on any of the three branches. They wait on CI for the new heads, an
+independent review, and the merges.
 
 ## Next up
 
-1. Verify #106/#107/#108 current-head CI and obtain posted independent reviews before
-   separately authorized merges. Quincy reviews model/interface configuration.
-2. As checked November 21, none of the three drafts has a posted review or PR
-   comment. Local independent review is not posted approval. Draft publication
-   does not authorize merging or a release.
-3. Reconcile overlapping client/plugin and handoff changes when integrating the
-   independent main-based branches; keep model journaling/call-phase evidence and
-   operation setup evidence/completion hooks. A temporary tested merge is not a
-   branch merge or deployment.
-4. Finish 5.10 shared fixtures and the multiple-problem 422 decision; 5.1 needs
-   an agreed load protocol and script, then Quincy's performance run. 5.4/5.6
-   still need fresh deployed and both-direction cross-team evidence.
+1. After #106 merges: publish a commit-pinned design mapping and set
+   `TESTER_MODEL_MAPPING_URL` (it stays empty until then, so own model counts are null
+   with a reason). Confirm `TESTER_OWN_SYSTEM_URLS` with Quincy.
+2. After all three merge: check them on Launchpad (with Quincy's go), then refresh the
+   `pod-k-shared` tester copy (including the new `acceptance/observations.py`) in the
+   pod PR for Quincy's Orbit launch.
+3. 5.10 still open: the shared fixtures with Team 21 (4.T2) and the pod's
+   multiple-problem 422 decision.
+4. 5.1: agree the load protocol before writing the script. 5.4/5.6: full and
+   cross-team results before submission.
 
 ## Waiting on
 
-Quincy: mapping/manifest publication and configuration, service-base confirmation,
-release coordination and authorized Launchpad verification. Ann/Team 21: remaining
-contract decisions/shared fixtures. Only Quincy launches Orbit.
+Quincy: mapping URL, own-system URLs, Launchpad check and Orbit launch. Ann and
+Team 21: contract decisions and shared fixtures.
 
 ## Notes for the next session
 
-Reporting evidence is in the parent workspace:
-`work/phase5-reporting-regression-20261120-final2.xml` and
-`work/phase5-reporting-combined-20261120-final2.xml`.
-The temporary combined source is `work/phase5-reporting-combined-20261120-c`.
-HTTP CI is [run 44778121863](https://github.com/team17-ece30861/cra-service/actions/runs/44778121863).
-Its saved log is `work/phase5-http-job-136433295330.log`.
-
-The portable public copy needs the new `observations.py` alongside client/plugin
-updates, coordinated with Quincy's release. No production API code, auth, root
-contract, workflow, migration, other teammate's handoff or shared repo was changed.
-Known Windows full-suite blockers were not disabled or repaired. Local SQLite,
-Linux/PostgreSQL CI and deployed HTTP remain different evidence categories.
+- Model coverage counts evaluated design scenarios, not passes: don't present 19/44
+  as 19 delivered or passing requirements.
+- The clock-release case compares against the runner's wall clock with 120 s skew;
+  keep the runner and target clocks in sync.
+- New HTTP-gap cases have no model bindings yet; add them only with a design-version
+  update.
