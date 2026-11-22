@@ -86,7 +86,7 @@ part of the shared spec, so it changes neither the contract nor what Team 21 tes
 | Operation | Status | Notes |
 | --- | --- | --- |
 | `GET /health` | Delivered | Public. Doesn't check the database. |
-| `POST /tickets` | Delivered | A future `fix.available_at` is still accepted (Q7, see Known limitations). |
+| `POST /tickets` | Delivered | A `fix.available_at` later than now returns 422 and stores nothing (Q7, contract 0.3.0). `member_states` may be exactly `["unknown"]` (Q9). |
 | `GET /tickets` | Delivered | Nearest unmet deadline (`next_due_at`) first, tickets with none last; ties go to the oldest `received_at`, then `id` (Q2). `state` and `obligation_status` filters combine; `obligation_status` matches if any of the three reports has that status. Unknown values return 400. |
 | `GET /tickets/{id}` | Delivered | The only response with reporter details. |
 | `PATCH /tickets/{id}` | Delivered | Merges nested objects one level deep; lists are replaced whole; `null` clears optional fields. A PATCH that changes nothing returns 200 with no audit entry (Q6). |
@@ -264,19 +264,15 @@ also had an independent agent review posted on its pull request before it merged
 - **Spending cap and alerting (LIM-03):** a $10 spending cap stops the service until we
   lift it by hand, and there's no automated alert for server errors yet (moved to
   Phase 5). If the service stops responding, email Team 17.
-- **Final report clock (LIM-04):** the final report deadline starts only from the recorded
-  fix time, while the CRA starts it when any corrective or mitigating measure is available
-  (Art. 14(2)(c)), so a workaround released before the fix can leave our due time later
-  than the regulation requires. The pod hasn't answered this yet (Q8). Until then, record
-  the time of the first mitigating measure as the fix time. See
+- **Final report clock (LIM-04):** the final report deadline starts from `fix.available_at`,
+  which contract 0.3.0 defines as when the first corrective or mitigating measure became
+  available (Art. 14(2)(c), Q8). The system can't tell a fix from a workaround, so record
+  the workaround's release time there if it came first. See
   [reports/risk1-cra-review.md](reports/risk1-cra-review.md).
-- **Agreed changes not in force yet (LIM-05):** two answers Team 21 agreed to need contract
-  changes, so they wait for their own contract pull requests (Phase 5): a ticket submitted
-  with a future fix time is still accepted with 201 (Q7), and an early warning still
-  requires member states and affected versions, with no "unknown" option (Q9).
-- **Contract text on no-change updates (LIM-06):** until the contract freeze pull request
-  (`pod-k-shared` #14) merges, the contract text says every successful update adds an audit
-  entry, but ours adds none when the update changes nothing, as agreed with Team 21 (Q6).
+- **Shared contract copy behind ours (LIM-05):** this service follows contract 0.3.0 (Q7: a
+  future fix time on submit is 422; Q9: `member_states` may be exactly `["unknown"]`; Q8
+  wording). The shared copy in `pod-k-shared` changes only when Team 21 approves the 0.3.0
+  pull request, so until then it still describes the older behavior.
 - **Empty lists in mixed updates (LIM-07):** an update that changes a real field and also
   sends an empty list for a list that was never set records that list as a change in the
   audit entry, even though no read shows a difference (Phase 5).
