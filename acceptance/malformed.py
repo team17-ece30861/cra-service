@@ -32,6 +32,7 @@ import time
 from collections import Counter, defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
+from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, quote, unquote, urlsplit
 from urllib.request import Request
@@ -453,7 +454,7 @@ def run(service: Service, send_raw, corpus, seeds: dict[str, str], progress=None
             )
         try:
             response = send_raw(request.method, path, dict(request.headers), request.body)
-        except (OSError, URLError) as error:
+        except (OSError, URLError, HTTPException) as error:
             results.append({"request": request, "status": None, "problems": [repr(error)]})
             continue
         problems = check_response(contract, request, response)
@@ -592,33 +593,36 @@ def main(argv=None) -> int:
         return 2
 
     started = time.monotonic()
-    seeds = seed_tickets(service)
-    before = observable_state(service, seeds)
-    outcome = run(
-        service,
-        http_sender(transport),
-        corpus,
-        seeds,
-        progress=lambda n, total: print(f"  {n}/{total} sent", flush=True),
-    )
-    after = observable_state(service, seeds)
-    summary = summarize(corpus, stats, outcome, before, after, time.monotonic() - started)
-    summary["base_url"] = transport.base_url
-    print_summary(summary, show=args.show)
-    if args.out:
-        with open(args.out, "w", encoding="utf-8") as handle:
-            json.dump(summary, handle, indent=2, ensure_ascii=False)
-        print(f"Wrote {args.out}")
-
-    if args.reset:
-        service.expect("POST", "/test/reset", 204, actor=None)
-        service.expect("DELETE", "/test/clock", 204, actor=None)
-        print("Reset the target and released the clock.")
-    else:
-        print(
-            f"Left {len(outcome['seeds'])} seed tickets on the target: "
-            + ", ".join(outcome["seeds"].values())
+    summary = None
+    outcome = {"seeds": {}}
+    try:
+        seeds = seed_tickets(service)
+        outcome["seeds"] = seeds
+        before = observable_state(service, seeds)
+        outcome = run(
+            service,
+            http_sender(transport),
+            corpus,
+            seeds,
+            progress=lambda n, total: print(f"  {n}/{total} sent", flush=True),
         )
+        after = observable_state(service, seeds)
+        summary = summarize(corpus, stats, outcome, before, after, time.monotonic() - started)
+        summary["base_url"] = transport.base_url
+        print_summary(summary, show=args.show)
+    finally:
+        if args.out and summary is not None:
+            with open(args.out, "w", encoding="utf-8") as handle:
+                json.dump(summary, handle, indent=2, ensure_ascii=False)
+            print(f"Wrote {args.out}")
+        if summary is None:
+            print("The run stopped before it finished; see the error below.", file=sys.stderr)
+        if args.reset:
+            service.expect("POST", "/test/reset", 204, actor=None)
+            service.expect("DELETE", "/test/clock", 204, actor=None)
+            print("Reset the target and released the clock.")
+        elif outcome["seeds"]:
+            print(f"Left seed tickets on the target: {', '.join(outcome['seeds'].values())}")
 
     ok = not summary["failures"] and summary["data_unchanged"] and len(corpus) >= 500
     return 0 if ok else 1

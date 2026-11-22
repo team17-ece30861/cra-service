@@ -7,14 +7,18 @@ row may change. The same corpus runs against a deployment with
 `python -m acceptance.malformed`.
 """
 
+import os
+import subprocess
+import sys
 import time
 
 import pytest
 from django.test import Client
 
-from acceptance.client import Response, Service
+from acceptance.client import ROOT, Response, Service
 from acceptance.malformed import (
     UNGENERATED,
+    fingerprint,
     generate,
     observable_state,
     print_summary,
@@ -50,10 +54,24 @@ def stored_rows():
     }
 
 
-def test_generation_is_deterministic():
-    first, _ = generate()
-    second, _ = generate()
-    assert first == second
+def test_generation_matches_a_fresh_interpreter():
+    """The CLI must send the corpus CI tests. Generation inside pytest once differed from
+    a plain interpreter (Hypothesis drew constants from loaded test modules)."""
+    in_process = fingerprint(generate()[0])
+    fresh = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from acceptance.malformed import fingerprint, generate; "
+            "print(fingerprint(generate()[0]))",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "PYTHONHASHSEED": "1"},
+    )
+    assert fresh.stdout.strip() == in_process
 
 
 @pytest.mark.django_db(transaction=True)
