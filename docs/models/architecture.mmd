@@ -3,21 +3,23 @@ flowchart TB
   person["<b>Person in a browser</b><br/>manufacturer's security team"]
   subgraph run["Google Cloud Run service (Django + Django Ninja on gunicorn)"]
     direction TB
-    mw["<b>Platform middleware</b><br/>bearer token (401) for the API, 64 KB limit (413),<br/>one transaction per write (not for /tester), rolled back on error"]
-    console["<b>Console</b> (/console/)<br/>Django sign-in session, no bearer token;<br/>calls ticket routes in-process,<br/>signed-in username as X-Actor"]
+    mw["<b>Platform middleware</b><br/>bearer token (401) for the API, 64 KB limit (413),<br/>one transaction per write (not for /tester), rolled back on error;<br/>gzip for API clients that ask"]
+    console["<b>Console</b> (/console/)<br/>Django sign-in session, no bearer token;<br/>5 failed sign-ins lock a username for 15 min;<br/>calls ticket routes in-process,<br/>signed-in username as X-Actor;<br/>saves update the page in place"]
     subgraph api["Django Ninja API"]
       direction LR
       health["<b>GET /health</b><br/>public"]
       tickets["<b>Ticket routes</b><br/>tickets, list filters, triage, updates,<br/>drafts, record submission, close,<br/>audit log; X-Actor check, audit entries"]
       controls["<b>Test controls</b><br/>reset, clock,<br/>course test setup and report"]
-      testerapi["<b>Deployed tester</b><br/>/tester/test: setup, run, report"]
+      testerapi["<b>Deployed tester</b><br/>/tester/test: setup, run, report;<br/>one run at a time (409), heartbeat,<br/>cleans up the target after a run"]
     end
     domain["<b>Domain rules</b> (pure)<br/>triage, deadlines, statuses, drafts (Model C),<br/>submission rule, close rule, listing order"]
     clock["<b>Service clock</b><br/>real or fixed test time"]
     runner["<b>Tester subprocess</b><br/>our acceptance suite, run against a<br/>target with only that target's token"]
   end
-  db[("<b>Neon Postgres</b><br/>Ticket, AuditEntry, ReportSubmission,<br/>FixedClock, SystemSession, TesterSession,<br/>Django user and session tables")]
+  db[("<b>Neon Postgres</b><br/>Ticket, AuditEntry, ReportSubmission,<br/>FixedClock, SystemSession, TesterSession,<br/>SignInFailure, Django user and session tables;<br/>connections kept 5 min per worker")]
   target["<b>Target system</b><br/>a podmate's service, or this one"]
+  monitor["<b>Cloud Monitoring</b><br/>alert policy: any 5xx in 5 min<br/>emails Team 17"]
+  team["<b>Team 17</b><br/>email"]
   client -->|"HTTPS request"| mw
   person -->|"HTTPS, signed in"| mw
   mw -->|"no token needed"| health
@@ -26,7 +28,9 @@ flowchart TB
   mw -->|"token checked"| testerapi
   mw -->|"session checked by the pages"| console
   console -->|"ticket operations"| tickets
-  console -->|"sessions"| db
+  console -->|"sessions, sign-in failures"| db
+  run -.->|"request metrics (status, latency)"| monitor
+  monitor -->|"alert email"| team
   tickets <-->|"inputs + time;<br/>result or 400/409/422"| domain
   tickets -->|"current time"| clock
   controls -->|"fix or release time"| clock
@@ -40,7 +44,7 @@ flowchart TB
   mw -.->|"JSON or problem+json response"| client
   subgraph legend["Legend"]
     direction LR
-    l1["Boxes are components that exist in the delivered system; the cylinder is the database.<br/>Solid arrows are calls or data flow; the dotted arrow is the API response<br/>(the console answers the browser with HTML pages)."]
+    l1["Boxes are components that exist in the delivered system; the cylinder is the database.<br/>Solid arrows are calls or data flow; dotted arrows are the API response<br/>(the console answers the browser with HTML pages) and the request<br/>metrics Cloud Run reports to Cloud Monitoring."]
   end
   target ~~~ legend
   classDef note fill:#ffffff,stroke:#999,color:#333

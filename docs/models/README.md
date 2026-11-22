@@ -7,13 +7,21 @@ design-to-test mapping, not a claim that every proposed Phase 5 feature or updat
 diagram has been delivered.
 
 The Phase 2 models (Sections 3.2 and 7.1), redrawn to match the system as actually
-delivered at the end of Phase 4. Each `.mmd` file is the Mermaid source; each `.png` is its
+delivered at the end of Phase 5 (Phase 4 changes are kept below for the record). Each `.mmd` file is the Mermaid source; each `.png` is its
 render (mermaid-cli 11.4.2), checked by eye for overlaps and against the code for accuracy.
 
 **Notation, shared by all three:** rounded boxes are states; plain boxes are components.
 Everything drawn exists in the delivered system (the Phase 3 versions drew Phase 4 parts
 dashed). Every diagram has a legend. An independent AI session (one that didn't draw them)
 checked all three against the code on 2026-11-01; its findings were fixed before merge.
+
+| Model | Changed in Phase 5 | What changed and why | Files |
+|---|---|---|---|
+| A. Ticket lifecycle (state machine) | No | Phase 5 added no states or transitions. | `model-a-ticket-lifecycle.*` |
+| B. Report status (state machine) | No | Unchanged. | `model-b-report-status.*` |
+| C. Required fields per draft (table) | Yes | The early warning's member states may be exactly `["unknown"]`, which counts as filled in, because Art. 14(2)(a) asks for them only "where applicable" (Q9, contract 0.3.0). | `docs/spec.md` |
+| D. Deadline examples (table) | No (wording) | The examples are unchanged; the fix time is now defined as the first corrective or mitigating measure (Q8), which changes no example. | `docs/spec.md` |
+| Section 7.1 architecture and data flow (component diagram) | Yes | Adds what Phase 5 delivered: gzip in the middleware, the console's sign-in lockout (`SignInFailure` table) and in-place saves, the deployed tester's one-run rule, heartbeat and cleanup, kept database connections, and the Cloud Monitoring alert that emails Team 17 on any 5xx. | `architecture.*` |
 
 | Model | Changed in Phase 4 | What changed and why | Files |
 |---|---|---|---|

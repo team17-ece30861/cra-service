@@ -273,8 +273,9 @@ also had an independent agent review posted on its pull request before it merged
   deployed-tester run fits; one run holds one worker while it lasts, and a second run is
   refused with 409). Each worker keeps its database connection for 5 minutes and API
   responses are gzipped for clients that ask, which cut the server time of a simple read
-  from about 190 ms to about 40 ms on our development deployment (2026-11-22). The AC-18
-  measurement (1,000 tickets, 200 requests, REQ-17) is in the Phase 5 report. Send
+  from about 190 ms to about 40 ms on our development deployment (2026-11-22). AC-18 (REQ-17)
+  passed on the evaluation deployment at `c875f14`: with 1,000 tickets, 200 requests one at a
+  time had p95 736 ms and a maximum of 1,750 ms (a filtered list). Send
   `GET /health` and one authenticated read before timing anything.
 - **Spending cap (LIM-03):** a $10 spending cap stops the service until we lift it by
   hand. Any server error (5xx) now emails Team 17 automatically, but a stopped service
@@ -284,10 +285,9 @@ also had an independent agent review posted on its pull request before it merged
   available (Art. 14(2)(c), Q8). The system can't tell a fix from a workaround, so record
   the workaround's release time there if it came first. See
   [reports/risk1-cra-review.md](reports/risk1-cra-review.md).
-- **Shared contract copy behind ours (LIM-05):** this service follows contract 0.3.0 (Q7: a
-  future fix time on submit is 422; Q9: `member_states` may be exactly `["unknown"]`; Q8
-  wording). The shared copy in `pod-k-shared` changes only when Team 21 approves the 0.3.0
-  pull request, so until then it still describes the older behavior.
+- **Shared contract copy (LIM-05):** fixed in Phase 5. Contract 0.3.0 (Q7: a future fix time
+  on submit is 422; Q9: `member_states` may be exactly `["unknown"]`; Q8 wording) is merged in
+  `pod-k-shared` (#20, 2026-11-22), so the shared copy, ours, and our tester's are identical.
 - **Empty lists in mixed updates (LIM-07):** an update that changes a real field and also
   sends an empty list for a list that was never set records that list as a change in the
   audit entry, even though no read shows a difference (Phase 5).
