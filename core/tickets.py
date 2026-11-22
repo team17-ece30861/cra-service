@@ -178,6 +178,10 @@ def create_ticket(request):
     actor = require_actor(request)
     payload = parse_body(request, TicketCreate)
     now = clock.now()
+    # Q7 (agreed with Team 21, 2026-11-01; contract 0.3.0): the same rule as Update ticket.
+    if payload.fix is not None and payload.fix.available_at is not None:
+        if payload.fix.available_at > now:
+            raise RuleViolation([field_error("fix.available_at", "must not be later than now")])
     ticket = Ticket.objects.create(
         received_at=now, data=payload.model_dump(mode="json", exclude_unset=True)
     )
@@ -268,7 +272,8 @@ def update_ticket(request, id: str):
         else:
             data[key] = value
     # Only a fix time this request sends is checked. A stored one may be later than now
-    # (accepted at intake, or the test clock moved back) and must not block other edits.
+    # (the test clock moved back, or accepted at intake before contract 0.3.0) and must
+    # not block other edits.
     if payload.fix is not None and "available_at" in payload.fix.model_fields_set:
         if payload.fix.available_at > now:
             errors.append(field_error("fix.available_at", "must not be later than now"))

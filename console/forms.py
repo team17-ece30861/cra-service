@@ -39,6 +39,8 @@ class Field:
 
 
 TIME_FORMAT = "Use the format 2026-10-29 14:00:00."
+# Q9: member states may be exactly "unknown" (the same copy as forms.js, UNKNOWN_ALONE).
+UNKNOWN_ALONE = "Use unknown on its own, or only EU country codes."
 FIELDS = [
     Field("title", "Title", missing="Enter a title."),
     Field("source", "Source", "select", missing="Choose a source."),
@@ -60,7 +62,7 @@ FIELDS = [
         "member_states",
         "Member states",
         "list",
-        format="Use EU country codes, such as DE. Greece is GR.",
+        format="Use EU country codes, such as DE (Greece is GR), or unknown on its own.",
     ),
     Field("severity", "Severity", "select"),
     Field("sensitivity", "Sharing (TLP)", "select"),
@@ -149,6 +151,12 @@ def values_from_ticket(ticket: dict) -> dict:
     return out
 
 
+def unknown_member_state(items: list[str]) -> list[str]:
+    """Member states typed as "Unknown" in any case become "unknown", as forms.js does, so the
+    no-JS path sends what the API takes (Q9; the API itself accepts only lowercase)."""
+    return ["unknown" if v.lower() == "unknown" else v for v in items]
+
+
 def values_from_post(post) -> dict:
     """The posted form, cleaned by the same rules. A list arrives as one value per line (the
     chips' hidden field), plus whatever was typed but not yet made a chip, comma-separated."""
@@ -157,6 +165,8 @@ def values_from_post(post) -> dict:
         if f.kind == "list":
             typed = re.split(r"[,\n]", post.get(f.key + "__add", ""))
             out[f.key] = clean_list(clean(post.get(f.key, "")).split("\n") + typed)
+            if f.key == "member_states":
+                out[f.key] = unknown_member_state(out[f.key])
         else:
             out[f.key] = clean(post.get(f.key, ""))
     return out
@@ -280,6 +290,8 @@ def _say(f: Field | None, message: str, now: datetime) -> str:
         return f.format
     if message == "must contain unique member states":
         return "Each member state can appear once."
+    if message == '"unknown" must be the only value':
+        return UNKNOWN_ALONE
     text = message[:1].upper() + message[1:]
     return text if text.endswith(".") else text + "."
 

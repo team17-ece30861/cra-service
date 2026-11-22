@@ -142,12 +142,14 @@ class TestLocalPhase3(Phase3Checks):
         )
 
     def test_unrelated_update_ignores_stored_future_fix_time(self, service):
-        # POST /tickets has no fix-time rule in the contract, so a future fix can be stored.
-        ticket = service.create(fix={"available_at": "2030-01-01T00:00:00Z"})
+        # Submit rejects a future fix time (Q7, contract 0.3.0), but moving the test clock
+        # back can still leave a stored one later than now.
+        ticket = service.create(fix={"available_at": "2026-10-05T09:00:00Z"})
+        service.fix_clock("2026-10-01T00:00:00Z")
         result = self._patch(service, ticket["id"], {"title": "Renamed"}, 200)
         assert result["title"] == "Renamed"
         result = self._patch(service, ticket["id"], {"fix": {"description": "Patch"}}, 200)
-        assert result["fix"]["available_at"] == "2030-01-01T00:00:00Z"
+        assert result["fix"]["available_at"] == "2026-10-05T09:00:00Z"
         assert AuditEntry.objects.count() == 3
 
     def test_unrelated_update_after_clock_moves_back(self, service):
@@ -169,7 +171,8 @@ class TestLocalPhase3(Phase3Checks):
         assert AuditEntry.objects.count() == 1
 
     def test_clearing_fix_skips_the_fix_time_check(self, service):
-        ticket = service.create(fix={"available_at": "2030-01-01T00:00:00Z"})
+        ticket = service.create(fix={"available_at": "2026-10-05T09:00:00Z"})
+        service.fix_clock("2026-10-01T00:00:00Z")
         assert self._patch(service, ticket["id"], {"fix": None}, 200)["fix"] is None
 
     def test_awareness_change_needs_reason_and_reportable_state(self, service):
