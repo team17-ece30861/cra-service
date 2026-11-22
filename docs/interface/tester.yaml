@@ -1,7 +1,7 @@
 openapi: 3.1.1
 info:
   title: Team 17 Tester (course cross-team testing interface)
-  version: 1.0.0
+  version: 1.1.0
   summary: Team 17's deployed tester, which runs our acceptance suite against a pod system.
   description: |
     The tester side of the course's "Cross-team Testing Interface". It runs Team 17's
@@ -110,11 +110,45 @@ paths:
               $ref: "#/components/schemas/RunRequest"
       responses:
         "200":
-          description: The suite finished. Failed tests and target errors are in `results`.
+          description: |
+            The suite finished. Failed tests and target errors are in `results`.
+
+            The example is a run against our own evaluation deployment, with `results` cut
+            to two entries (a real report lists every planned test). Because the target is
+            a configured Team 17 system, `coverage.model` is present; its counts stay null
+            until the design mapping is published and configured. Reports on other teams'
+            systems have no `model`.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Report"
+              example:
+                session_id: run-3f2b8c1e-7d4a-4f0e-9a51-2c6d8e0b7f13
+                target_url: https://team17-prod-7zneiwx4ba-uc.a.run.app
+                results:
+                  - test_id: test_phase3.py::TestRemotePhase3::test_ac01_intake_has_unique_ids_and_fixed_receipt_time
+                    outcome: pass
+                    message: Passed.
+                  - test_id: test_phase3.py::TestRemotePhase3::test_ac15_health_is_public
+                    outcome: pass
+                    message: Passed.
+                coverage:
+                  code:
+                    covered: null
+                    total: null
+                    basis: Source lines; the deployed service is not instrumented for code coverage
+                  component:
+                    covered: null
+                    total: null
+                    basis: The pod specification does not define a component list yet
+                  system:
+                    covered: 15
+                    total: 19
+                    basis: Pod acceptance criteria AC-01 to AC-19 with at least one executed test, identified by test name
+                  model:
+                    covered: null
+                    total: null
+                    basis: Design team17-phase5-design-v1; mapping not yet published/configured; see docs/model-coverage.md
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":
@@ -289,6 +323,15 @@ components:
             $ref: "#/components/schemas/Result"
         coverage:
           type: object
+          description: |
+            Code, pod-component and shared acceptance-criterion measures are always
+            present. Starting in Phase 5, reports against an explicitly configured
+            Team 17 system also include model: versioned design requirements
+            evaluated in this session, not a pass rate. Other teams' reports omit
+            model. Own-system identity uses exact canonical base URLs, including
+            their paths, rather than token or hostname guesses. An unpublished
+            design mapping or unavailable evaluation evidence yields null model
+            counts with an explanatory basis. See ../model-coverage.md.
           required: [code, component, system]
           properties:
             code:
@@ -296,6 +339,8 @@ components:
             component:
               $ref: "#/components/schemas/Measure"
             system:
+              $ref: "#/components/schemas/Measure"
+            model:
               $ref: "#/components/schemas/Measure"
     Result:
       type: object
