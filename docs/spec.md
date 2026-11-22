@@ -3,9 +3,9 @@
 This is the behavior Teams 17 and 21 agreed on September 25, 2026, copied from the
 Phase 2 report (Sections 2 to 6) so agents can read it without the PDF. Nothing here is
 new, except changes the pod agreed later by pull request, marked with their question
-(Q7 to Q9, contract 0.3.0). If this file and [`openapi.yaml`](../openapi.yaml) disagree about an interface
-detail, `openapi.yaml` wins. If either disagrees with the PDF, raise it with the team
-before changing code. Work status and owners are in [plan.md](plan.md).
+(Q7 to Q9, contract 0.3.0). If this file and [`openapi.yaml`](../openapi.yaml) disagree
+about an interface detail, `openapi.yaml` wins. If either disagrees with the PDF, raise it
+with the team before changing code. Work status and owners are in [plan.md](plan.md).
 
 ## Scope
 
