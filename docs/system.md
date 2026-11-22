@@ -258,12 +258,16 @@ also had an independent agent review posted on its pull request before it merged
   a time, and finish with `POST /test/reset` and `DELETE /test/clock`.
 - **Hosting performance (LIM-02):** the service scales to zero, so the first request after
   idle takes about 3 to 6 seconds, plus about 1.5 seconds for the first database read. It
-  runs one instance with two workers and a 30-minute request timeout (so a full deployed-tester run fits; one run holds one worker while it lasts). The 1-second target
-  with 1,000 tickets (REQ-17) hasn't been measured on the deployed service yet (Phase 5).
-  Send `GET /health` and one authenticated read before timing anything.
-- **Spending cap and alerting (LIM-03):** a $10 spending cap stops the service until we
-  lift it by hand, and there's no automated alert for server errors yet (moved to
-  Phase 5). If the service stops responding, email Team 17.
+  runs one instance with two workers and a 30-minute request timeout (so a full
+  deployed-tester run fits; one run holds one worker while it lasts, and a second run is
+  refused with 409). Each worker keeps its database connection for 5 minutes and API
+  responses are gzipped for clients that ask, which cut the server time of a simple read
+  from about 190 ms to about 40 ms on our development deployment (2026-11-22). The AC-18
+  measurement (1,000 tickets, 200 requests, REQ-17) is in the Phase 5 report. Send
+  `GET /health` and one authenticated read before timing anything.
+- **Spending cap (LIM-03):** a $10 spending cap stops the service until we lift it by
+  hand. Any server error (5xx) now emails Team 17 automatically, but a stopped service
+  returns nothing to alert on. If the service stops responding, email Team 17.
 - **Final report clock (LIM-04):** the final report deadline starts from `fix.available_at`,
   which contract 0.3.0 defines as when the first corrective or mitigating measure became
   available (Art. 14(2)(c), Q8). The system can't tell a fix from a workaround, so record
@@ -284,11 +288,14 @@ also had an independent agent review posted on its pull request before it merged
 - **GET with a body (LIM-10):** Google Cloud Run's front end rejects any `GET` request that
   has a body before it reaches the service, with a dropped connection or an HTML 400
   instead of a problem+json error. Don't send bodies on `GET`.
-- **Test gaps (LIM-11):** the 500 generated malformed requests (AC-13) haven't been run, the
-  update cases (AC-07) are tested in CI but not yet in the HTTP tester, and a few error
-  codes have no test (404 and 413 on PATCH and triage, 405 on the audit log in the
-  generated table). No tests are currently failing.
-- **Console sign-in (LIM-12):** the console has no limit on failed sign-ins. Low; Phase 5.
-- **Deployed tester cleanup (LIM-13):** our deployed tester leaves the target's test clock
-  fixed and the run's test data in place. Call `POST /test/reset` and `DELETE /test/clock`
-  after a run. Low; Phase 5.
+- **Test gaps (LIM-11):** fixed in Phase 5. The update cases (AC-07) and 404 and 413 on
+  PATCH and triage are in the HTTP tester, and at least 500 generated malformed requests
+  (AC-13) run in CI and against a deployment with `python -m acceptance.malformed`.
+  405 on the audit log is checked by its own tester case rather than in the generated
+  operation table.
+- **Console sign-in (LIM-12):** fixed in Phase 5. Five failed sign-ins for one username
+  within 15 minutes lock it for 15 minutes; `POST /test/reset` doesn't clear the lock.
+- **Deployed tester cleanup (LIM-13):** fixed in Phase 5. After each run, also after an
+  abort, our deployed tester calls the target's `DELETE /test/clock` and `POST /test/reset`.
+  The exception: a run the service took for cut off (no heartbeat for 3 minutes) stops
+  without cleaning up, so call both yourself if a run's report says it was cut off.
