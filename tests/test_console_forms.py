@@ -198,6 +198,29 @@ def test_new_ticket_takes_unknown_member_states(api, console):
     assert Ticket.objects.get().data["member_states"] == ["unknown"]
 
 
+@pytest.mark.parametrize("typed", ["Unknown", "UNKNOWN"])
+def test_new_ticket_without_js_stores_unknown_lowercase(api, console, typed):
+    # No chips (JS off): the typed text arrives in member_states__add.
+    post = {**NEW, "member_states": "", "member_states__add": typed}
+    response = console.post("/console/tickets/new", post)
+    assert response.status_code == 302
+    assert Ticket.objects.get().data["member_states"] == ["unknown"]
+
+
+def test_edit_without_js_stores_unknown_lowercase(api, console):
+    ticket_id = _create(api, member_states=["DE"])
+    post = {**_edit_form(console, ticket_id), "member_states": "Unknown"}
+    response = console.post(f"/console/tickets/{ticket_id}/edit", post)
+    assert response.status_code == 302
+    assert Ticket.objects.get(pk=ticket_id).data["member_states"] == ["unknown"]
+
+
+def test_versions_called_unknown_keep_their_case(api, console):
+    post = {**NEW, "product.affected_versions": "Unknown"}
+    assert console.post("/console/tickets/new", post).status_code == 302
+    assert Ticket.objects.get().data["product"]["affected_versions"] == ["Unknown"]
+
+
 def test_new_ticket_with_unknown_and_codes_says_why(api, console):
     response = console.post("/console/tickets/new", {**NEW, "member_states": "DE\nunknown"})
     assert response.status_code == 400

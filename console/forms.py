@@ -151,6 +151,12 @@ def values_from_ticket(ticket: dict) -> dict:
     return out
 
 
+def unknown_member_state(items: list[str]) -> list[str]:
+    """Member states typed as "Unknown" in any case become "unknown", as forms.js does, so the
+    no-JS path sends what the API takes (Q9; the API itself accepts only lowercase)."""
+    return ["unknown" if v.lower() == "unknown" else v for v in items]
+
+
 def values_from_post(post) -> dict:
     """The posted form, cleaned by the same rules. A list arrives as one value per line (the
     chips' hidden field), plus whatever was typed but not yet made a chip, comma-separated."""
@@ -159,6 +165,8 @@ def values_from_post(post) -> dict:
         if f.kind == "list":
             typed = re.split(r"[,\n]", post.get(f.key + "__add", ""))
             out[f.key] = clean_list(clean(post.get(f.key, "")).split("\n") + typed)
+            if f.key == "member_states":
+                out[f.key] = unknown_member_state(out[f.key])
         else:
             out[f.key] = clean(post.get(f.key, ""))
     return out

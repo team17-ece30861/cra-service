@@ -273,10 +273,6 @@ also had an independent agent review posted on its pull request before it merged
   future fix time on submit is 422; Q9: `member_states` may be exactly `["unknown"]`; Q8
   wording). The shared copy in `pod-k-shared` changes only when Team 21 approves the 0.3.0
   pull request, so until then it still describes the older behavior.
-- **Contract text on no-change updates (LIM-06):** until the freeze (`pod-k-shared` #14) or
-  0.3.0 pull request merges there, the shared contract text says every successful update
-  adds an audit entry, but ours adds none when the update changes nothing, as agreed with
-  Team 21 (Q6). Our own copy (0.3.0) already says so.
 - **Empty lists in mixed updates (LIM-07):** an update that changes a real field and also
   sends an empty list for a list that was never set records that list as a change in the
   audit entry, even though no read shows a difference (Phase 5).
