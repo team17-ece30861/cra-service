@@ -12,12 +12,15 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+
+from acceptance.model_coverage import canonical_base_url, model_measure, read_model_journal
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,9 @@ ACCEPTANCE_INI = ROOT / "acceptance" / "pytest.ini"
 SETUP_TIMEOUT = 60
 SUITE_TIMEOUT = 1680
 REPORT_TIMEOUT = 30
+# Each of the two cleanup calls after a run. Collecting (60), the suite (1,680), the
+# coverage read (30) and cleanup (2 x 10) stay within gunicorn's 1,800 s timeout.
+CLEANUP_TIMEOUT = 10
 
 # Our own client name in settings.API_TOKENS, used when the tester targets this service.
 SELF_CLIENT = "team17"
@@ -48,6 +54,11 @@ class CommunicationError(Exception):
     pass
 
 
+# The pytest process each request thread is waiting on, so the run's heartbeat can stop
+# it (tester.sessions.Heartbeat). Only ever read within this process.
+_children: dict[int, subprocess.Popen] = {}
+
+
 def allowed_target(target_url: str) -> bool:
     """Only this service and the approved pod systems, so the tester can't be used to
     send requests (or our tokens) anywhere else."""
@@ -64,6 +75,23 @@ def target_token(target_url: str) -> str | None:
     if host.split(":")[0] in settings.ALLOWED_HOSTS:
         return settings.API_TOKENS.get(SELF_CLIENT)
     return None
+
+
+def own_target(target_url: str) -> bool:
+    canonical = canonical_base_url(target_url)
+    configured = getattr(settings, "TESTER_OWN_SYSTEM_URLS", [])
+    if canonical is None or not isinstance(configured, (list, tuple)):
+        return False
+    return canonical in {
+        normalized for value in configured if (normalized := canonical_base_url(value)) is not None
+    }
+
+
+def _add_model_measure(report, target_url, planned, evidence=None):
+    if own_target(target_url):
+        report["coverage"]["model"] = model_measure(
+            evidence, planned, getattr(settings, "TESTER_MODEL_MAPPING_URL", "")
+        )
 
 
 def call(target_url: str, method: str, path: str, body=None, *, timeout: int):
@@ -90,18 +118,58 @@ def call(target_url: str, method: str, path: str, body=None, *, timeout: int):
     return response.code, parsed if isinstance(parsed, dict) else {}
 
 
+def clean_up_target(target_url: str, session_id: str) -> list[str]:
+    """LIM-13: after a run, release the target's test clock and reset its data, best
+    effort. Returns what went wrong (also logged); it never changes test outcomes."""
+    problems = []
+    for method, path in (("DELETE", "/test/clock"), ("POST", "/test/reset")):
+        try:
+            status, _ = call(target_url, method, path, None, timeout=CLEANUP_TIMEOUT)
+        except CommunicationError as error:
+            problems.append(str(error))
+            continue
+        except Exception as error:
+            problems.append(f"{method} {path} failed: {type(error).__name__}")
+            continue
+        if not 200 <= status < 300:
+            problems.append(f"{method} {path} returned {status}")
+    if problems:
+        logger.warning(
+            "Tester session %s: target cleanup incomplete: %s", session_id, "; ".join(problems)
+        )
+    return problems
+
+
 def _pytest(*args: str, env: dict | None = None, timeout: int) -> subprocess.CompletedProcess:
     # The test path goes before the suite's own options (--base-url and so on), so
     # pytest loads acceptance/conftest.py, which defines them, before parsing them.
     command = [sys.executable, "-m", "pytest", str(ROOT / "acceptance"), "-c", str(ACCEPTANCE_INI)]
-    return subprocess.run(
-        [*command, "-p", "no:cacheprovider", *args],
-        cwd=ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    return _run_child([*command, "-p", "no:cacheprovider", *args], env=env, timeout=timeout)
+
+
+def _run_child(command: list[str], *, env: dict | None, timeout: float):
+    """subprocess.run(capture_output=True, text=True, timeout=...), except that
+    stop_child() from another thread can stop the process early."""
+    owner = threading.get_ident()
+    with subprocess.Popen(
+        command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    ) as process:
+        _children[owner] = process
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise
+        finally:
+            _children.pop(owner, None)
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def stop_child(owner: int) -> None:
+    """Stop the pytest process that thread `owner` is waiting on, if any."""
+    if (process := _children.get(owner)) is not None:
+        process.kill()
 
 
 def planned_tests() -> list[str]:
@@ -216,14 +284,39 @@ def _mark_abort(results: list[dict], entries: dict[str, dict], aborted: str) -> 
     return marked
 
 
-def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
-    """Run the whole suite once. Returns the report and, if the tester aborted, why."""
+def cut_off_report(
+    session_id: str, target_url: str, aborted: str, planned: list[str], entries: dict[str, dict]
+) -> dict:
+    """The report for a run whose process stopped before it finished (a restart): the
+    outcomes it had recorded, the test it was running marked as interrupted, the rest
+    skipped. Code coverage isn't read: the target's session may be long gone."""
+    results = _mark_abort([_result(t, entries.get(t)) for t in planned], entries, aborted)
+    unavailable = {"covered": None, "total": None, "basis": f"Not measured: {aborted}"}
+    return {
+        "session_id": session_id,
+        "target_url": target_url,
+        "results": results,
+        "coverage": {
+            "code": unavailable,
+            "component": unavailable,
+            "system": _system_coverage(results),
+        },
+    }
+
+
+def run_suite(session_id: str, target_url: str, on_start=None) -> tuple[dict, str | None]:
+    """Run the whole suite once. Returns the report and, if the tester aborted, why.
+    `on_start(planned, report_path, progress_path)` is called just before the suite
+    starts, so the caller can follow its progress (tester.sessions.Heartbeat)."""
     planned = planned_tests()
     aborted = None
     with tempfile.TemporaryDirectory() as tmp:
         report_path = Path(tmp) / "report.json"
         progress_path = Path(tmp) / "progress.jsonl"
+        model_progress_path = Path(tmp) / "model-progress.jsonl"
         token = target_token(target_url) or "no-token-configured"
+        if on_start is not None:
+            on_start(planned, report_path, progress_path)
         try:
             done = _pytest(
                 "-q",
@@ -234,6 +327,8 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
                 str(report_path),
                 "--progress",
                 str(progress_path),
+                "--model-progress",
+                str(model_progress_path),
                 env=_child_env(token),
                 timeout=SUITE_TIMEOUT,
             )
@@ -242,6 +337,18 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
         except subprocess.TimeoutExpired:
             aborted = f"The test suite did not finish within {SUITE_TIMEOUT} seconds"
         entries = _recorded_entries(report_path, progress_path)
+        model_evidence = read_model_journal(model_progress_path)
+        if report_path.exists():
+            try:
+                saved_report = json.loads(report_path.read_text(encoding="utf-8"))
+                if isinstance(saved_report, dict) and (
+                    saved_report.get("model_evidence_available") is False
+                    or saved_report.get("model_evidence_version", model_evidence["version"])
+                    != model_evidence["version"]
+                ):
+                    model_evidence["available"] = False
+            except (OSError, ValueError, AttributeError):
+                saved_report = None
     if aborted:
         logger.error("Tester session %s aborted: %s", session_id, aborted)
     results = [_result(test_id, entries.get(test_id)) for test_id in planned]
@@ -261,6 +368,7 @@ def run_suite(session_id: str, target_url: str) -> tuple[dict, str | None]:
             "system": _system_coverage(results),
         },
     }
+    _add_model_measure(report, target_url, planned, model_evidence)
     return report, aborted
 
 
@@ -273,9 +381,11 @@ def failed_report(session_id: str, target_url: str, aborted: str) -> dict:
     except Exception:
         planned = []
     unavailable = {"covered": None, "total": None, "basis": f"Not measured: {aborted}"}
-    return {
+    report = {
         "session_id": session_id,
         "target_url": target_url,
         "results": _mark_abort([_result(t, None) for t in planned], {}, aborted),
         "coverage": {"code": unavailable, "component": unavailable, "system": unavailable},
     }
+    _add_model_measure(report, target_url, planned)
+    return report

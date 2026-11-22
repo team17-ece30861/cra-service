@@ -3,20 +3,19 @@ belongs to: GET renders that page with the sheet open (so the URL can be bookmar
 linked, e.g. /console/tickets/<id>/edit?focus=member_states), and the page's own JS opens
 the same sheet in place. A POST makes exactly one change through the API. If the API says
 no, the sheet comes back with the person's input and the API's errors under the fields; if
-it says yes, the browser is redirected to the ticket with a toast (POST/redirect/GET)."""
+it says yes, the browser is redirected to the ticket with a toast (POST/redirect/GET), or,
+when the page's own script sent it, the answer is the toast as JSON and the page refreshes
+in place (console/flash.py)."""
 
-import json
-
-from django.contrib import messages
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
 from console import forms, present, views
 from console.api_calls import call_api
+from console.flash import saved
 from core import clock
 
-TOAST_TAG = "ledger-toast"
 OUT_OF_DATE = "This form is out of date. Your changes weren't saved; make them again here."
 CHANGED_MEANWHILE = (
     "Someone else changed this since you opened the sheet. Save again to replace it."
@@ -24,11 +23,6 @@ CHANGED_MEANWHILE = (
 READ_FAILED = (
     "This ticket couldn't be loaded, so nothing was changed. Reload the page to try again."
 )
-
-
-def _toast(request, title: str, body: str) -> None:
-    """Shown once, on the next page (console/templates/console/shell.html)."""
-    messages.success(request, json.dumps({"title": title, "body": body}), extra_tags=TOAST_TAG)
 
 
 def _ticket_page(request, ticket_id: str):
@@ -75,13 +69,13 @@ def new_ticket(request):
     values = forms.values_from_post(request.POST)
     result = call_api(request, "POST", "/tickets", body=forms.create_body(values))
     if result.ok:
-        _toast(
+        return saved(
             request,
+            result.data["id"],
             "Ticket created",
             f"\N{LEFT DOUBLE QUOTATION MARK}{result.data['title']}\N{RIGHT DOUBLE QUOTATION MARK}"
             " is in To Triage. Its received time is now.",
         )
-        return redirect("console:ticket", result.data["id"])
     problems = forms.problems(result, forms.NEW_KNOWN, clock.now())
     page = views.tickets_page(request)
     return _over(request, page, "new", forms.new_sheet(values, problems), status=result.status)
@@ -139,13 +133,13 @@ def edit_ticket(request, ticket_id: str):
         result = call_api(request, "PATCH", f"/tickets/{ticket_id}", body=body)
         if result.ok:
             n = len(changed)
-            _toast(
+            return saved(
                 request,
+                ticket_id,
                 "Ticket updated",
                 f"{n} field{'' if n == 1 else 's'} changed. "
                 "The audit trail records it with your username.",
             )
-            return redirect("console:ticket", ticket_id)
         problems = forms.problems(result, forms.edit_known(ticket), clock.now())
         forms.explain_partial_clears(problems, current, values)
         status = result.status
@@ -172,15 +166,16 @@ def triage(request, ticket_id: str):
     if result.ok:
         if result.data["state"] == "reportable":
             due = present.utc(result.data["obligations"]["early_warning"]["due_at"])
-            _toast(
+            return saved(
                 request,
+                ticket_id,
                 "Triaged as actively exploited",
                 f"{title} is reportable. Early warning due {due}.",
             )
-        else:
-            what = present.RESOLUTION_LABEL.get(result.data.get("resolution"), "").lower()
-            _toast(request, f"Closed as {what}", f"{title} is closed. No reports are needed.")
-        return redirect("console:ticket", ticket_id)
+        what = present.RESOLUTION_LABEL.get(result.data.get("resolution"), "").lower()
+        return saved(
+            request, ticket_id, f"Closed as {what}", f"{title} is closed. No reports are needed."
+        )
     problems = forms.problems(result, forms.TRIAGE_FIELDS, clock.now())
     sheet = forms.triage_form(found.data, post=request.POST, problems=problems)
     page = _ticket_page(request, ticket_id)

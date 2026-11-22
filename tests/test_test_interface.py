@@ -88,12 +88,15 @@ def allowed(settings):
 
 @pytest.fixture
 def target(monkeypatch, allowed):
-    """A target system whose setup succeeds and echoes the session ID."""
+    """A target system whose setup succeeds and echoes the session ID, and whose
+    cleanup calls (DELETE /test/clock, POST /test/reset) succeed."""
     calls = []
 
     def call(target_url, method, path, body=None, *, timeout):
         calls.append((target_url, method, path, body))
-        return 201, {"session_id": body["session_id"]}
+        if path == "/test/setup":
+            return 201, {"session_id": body["session_id"]}
+        return 204, {}
 
     monkeypatch.setattr(runner, "call", call)
     return calls
@@ -104,7 +107,7 @@ def suite(monkeypatch):
     """A suite run that passes one test and fails another."""
     runs = []
 
-    def run_suite(session_id, target_url):
+    def run_suite(session_id, target_url, **kwargs):
         runs.append(session_id)
         report = {
             "session_id": session_id,
@@ -200,7 +203,7 @@ def test_invalid_run_request_does_not_use_the_session(authed, target, suite):
 
 
 def test_aborted_run_returns_500_and_keeps_the_report(authed, target, monkeypatch):
-    def run_suite(session_id, target_url):
+    def run_suite(session_id, target_url, **kwargs):
         report = {
             "session_id": session_id,
             "target_url": target_url,
@@ -440,7 +443,7 @@ def test_a_final_report_cut_off_mid_write_falls_back_to_progress(no_target, monk
 
 
 def test_a_tester_crash_still_reports_every_planned_test(authed, target, no_target, monkeypatch):
-    def crash(session_id, target_url):
+    def crash(session_id, target_url, **kwargs):
         raise RuntimeError("tester bug")
 
     monkeypatch.setattr(runner, "run_suite", crash)

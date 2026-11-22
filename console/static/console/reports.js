@@ -1,19 +1,23 @@
-/* Ledger report pages (4.U3; ported from docs/design/ledger-screens.html): the Record Submission sheet and the Close Ticket
-   dialog open in place over the page they belong to, the Report Draft page switches report type in place, and a change that
-   redirects shows its toast on the page it lands on. Everything works without this file: every sheet has its own address
-   (the server renders the page under it with the sheet open) and every form posts normally.
-   Sheet machinery lives here, not in ledger.js, until it's merged with PR 2's copy (4.U2). */
+/* Ledger report pages (4.U3; ported from docs/design/ledger-screens.html): what's particular to the Record Submission sheet
+   (the on-time or late preview), copying a report, and the Report Draft page switching report type in place. Opening,
+   closing and saving sheets, toasts, and refreshing the page after a save are ledger.js's (its Sheets block); this file sets
+   up a Record Submission card whenever one arrives ('sheet:ready'). Everything works without this file: every sheet has
+   its own address and every form posts normally. */
 (function () {
   'use strict';
   var app = document.getElementById('app');
   if (!app) return;
+  var L = window.Ledger || {};
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   function $(id) { return document.getElementById(id); }
+  function toast(title, body, ok) { if (L.toast) L.toast(title, body, ok); }
 
   /* The service clock: the page carries the service's "now" (core.clock, which follows a fixed test clock); the browser's
      clock is never read. Time moves forward from it with performance.now(), as in ledger.js. */
-  var T0 = Date.parse(app.getAttribute('data-now')), P0 = performance.now(), W0 = Date.now();
-  if (isNaN(T0)) T0 = 0;
+  var T0, P0, W0;
+  function syncNow() { T0 = Date.parse(app.getAttribute('data-now')); P0 = performance.now(); W0 = Date.now(); if (isNaN(T0)) T0 = 0; }
+  syncNow();
+  document.addEventListener('ledger:refreshed', syncNow);
   /* Elapsed time is a difference of the browser's clocks, never its absolute time. performance.now() can stall while a laptop
      sleeps, so the larger of the two differences wins and "now" never falls behind. */
   function nowMs() { return T0 + Math.max(performance.now() - P0, Date.now() - W0); }
@@ -32,22 +36,6 @@
   var BADGE = { submitted: ['submitted', 'Submitted'], late: ['late', 'Submitted late'] };
   function urlKey(u) { var a = new URL(u, location.href); return a.pathname + a.search; }
 
-  /* ---------- Toasts (the shell's #toast) ---------- */
-  function toast(title, body, ok) {
-    var t = $('toast'); if (!t) return;
-    $('toast-title').textContent = title; $('toast-body').textContent = body || '';
-    t.querySelector('svg use').setAttribute('href', ok ? '#i-check' : '#i-hourglass');
-    t.classList.toggle('ok', !!ok);
-    t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(function () { t.classList.remove('show'); }, 3400);
-  }
-  /* A change that redirected left a toast for this page: it rises in once the page has arrived */
-  (function () {
-    var t = $('toast'), title = t && t.getAttribute('data-flash-title');
-    if (!title) return;
-    t.removeAttribute('data-flash-title');
-    setTimeout(function () { toast(title, t.getAttribute('data-flash-body'), true); }, reduceMotion.matches ? 0 : 280);
-  })();
-
   /* ---------- Segmented control: the indicator slides to the selected segment ---------- */
   function placeInd(seg, instant) {
     var on = seg.querySelector('[aria-current="page"], [aria-pressed="true"]'), ind = seg.querySelector('.ind');
@@ -59,6 +47,7 @@
     seg.classList.add('ind-ready');
   }
   var tabs = $('rp-tabs');
+  document.addEventListener('ledger:refreshed', function () { tabs = $('rp-tabs'); if (tabs) placeInd(tabs, true); });
   if (tabs) {
     placeInd(tabs, true);
     window.addEventListener('resize', function () { placeInd(tabs, true); });
@@ -67,204 +56,11 @@
     if (cur && cur.scrollIntoView && tabs.scrollWidth > tabs.clientWidth) tabs.scrollLeft = cur.offsetLeft - 8;
   }
 
-  /* ---------- Fetching pages: a sheet's own address renders it, so the server is the one source of its markup ---------- */
-  var pages = {};
-  function fetchDoc(url) {
-    var key = urlKey(url);
-    if (!pages[key]) {
-      pages[key] = fetch(key, { credentials: 'same-origin', headers: { Accept: 'text/html' } }).then(function (res) {
-        if (res.redirected || !res.ok) throw new Error('not a page');
-        return res.text();
-      }).then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); });
-      pages[key].catch(function () { delete pages[key]; });
-    }
-    return pages[key];
-  }
-
-  /* ---------- Sheets: slide up over the current page, scrim behind, the page inert; leave the same way ---------- */
-  var layer = $('sheet-layer');
-  var sheet = { card: null, url: '', pushed: false, opener: null }, ignorePop = 0;
-  function cards() { return layer ? [].slice.call(layer.querySelectorAll('.sheet-card')) : []; }
-  function cardFor(url) { var k = urlKey(url); return cards().filter(function (c) { return urlKey(c.getAttribute('data-sheet-url')) === k; })[0] || null; }
-  function focusables(card) { return [].filter.call(card.querySelectorAll('a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled])'), function (e) { return e.offsetParent !== null || e === document.activeElement; }); }
-  function focusFirst(card) {
-    var f = card.querySelector('.input.invalid') || card.querySelector('.alert.error') && card.querySelector('#rs-at') || card.querySelector('.sh-body .input:not([disabled])') || card.querySelector('.dlg-actions .btn');
-    if (f) f.focus({ preventScroll: true });
-  }
-  function openSheet(card, opts) {
-    opts = opts || {};
-    if (sheet.card === card) return;
-    clearTimeout(layer.t);
-    sheet.opener = opts.opener || (document.activeElement !== document.body ? document.activeElement : null);
-    cards().forEach(function (c) { c.hidden = c !== card; });
-    sheet.card = card; sheet.url = urlKey(card.getAttribute('data-sheet-url')); sheet.pushed = !!opts.push;
-    if (opts.fresh) resetCard(card);
-    setup(card);
-    layer.hidden = false; layer.offsetWidth; layer.classList.add('open'); app.inert = true;
-    if (opts.push && urlKey(location.href) !== sheet.url) history.pushState({ ledgerSheet: sheet.url }, '', sheet.url);
-    setTimeout(function () { if (sheet.card === card) focusFirst(card); }, 80);
-  }
-  function closeSheet(opts) {
-    opts = opts || {};
-    var card = sheet.card; if (!card) return;
-    sheet.card = null; layer.classList.remove('open'); app.inert = false;
-    layer.t = setTimeout(function () { if (!sheet.card) { layer.hidden = true; card.hidden = true; } }, 260);
-    if (!opts.navigating) {
-      var back = sheet.opener && document.contains(sheet.opener) ? sheet.opener : openerFor(sheet.url);
-      if (back && back.focus) back.focus({ preventScroll: true });
-    }
-    if (opts.fromPop || opts.navigating) return;
-    if (sheet.pushed) { ignorePop++; history.back(); }
-    else history.replaceState(null, '', layer.getAttribute('data-base'));
-  }
-  /* Where focus goes when a sheet that arrived with the page closes: the control that opens it */
-  function openerFor(url) {
-    var k = urlKey(url), all = document.querySelectorAll('[data-sheet-open]');
-    for (var i = 0; i < all.length; i++) { var u = all[i].getAttribute('data-sheet-open') || all[i].getAttribute('href'); if (u && urlKey(u) === k) return all[i].closest('.menu') ? document.querySelector('[aria-controls="' + all[i].closest('.menu').id + '"]') : all[i]; }
-    return null;
-  }
-  function showSheet(url, opener) {
-    var card = cardFor(url);
-    if (card) { openSheet(card, { push: true, opener: opener, fresh: true }); return; }
-    fetchDoc(url).then(function (doc) {
-      var src = doc.querySelector('#sheet-layer .sheet-card[data-sheet-url]:not([hidden])');
-      if (!src) throw new Error('no sheet');
-      var c = cardFor(url); if (c) c.remove();
-      c = document.importNode(src, true); c.hidden = true; layer.appendChild(c);
-      delete pages[urlKey(url)];   /* a sheet is read fresh each time it's loaded */
-      openSheet(c, { push: true, opener: opener, fresh: true });
-    }).catch(function () { location.assign(url); });
-  }
-  /* A sheet opened again in place starts fresh, as in the prototype: the time is now, nothing typed, no old errors */
-  function resetCard(card) {
-    var at = card.querySelector('#rs-at'); if (!at) return;
-    at.value = fmtUtc(formNow(at.form)); card.querySelector('#rs-ref').value = '';
-    [].forEach.call(card.querySelectorAll('.alert.error'), function (a) { a.remove(); });
-    [].forEach.call(card.querySelectorAll('.field'), function (f) { setErr(f, ''); });
-    at.dispatchEvent(new Event('input'));
-  }
-
-  if (layer) {
-    /* The page arrived with its sheet open (its own address): play the opening, as if it was clicked */
-    var initial = layer.classList.contains('open') ? cards().filter(function (c) { return !c.hidden; })[0] : null;
-    if (initial) {
-      sheet.card = initial; sheet.url = urlKey(location.href); sheet.pushed = false;
-      setup(initial);
-      if (!reduceMotion.matches) { layer.classList.remove('open'); layer.offsetWidth; requestAnimationFrame(function () { layer.classList.add('open'); }); }
-      app.inert = true;
-      setTimeout(function () { if (sheet.card === initial) focusFirst(initial); }, 80);
-    }
-    cards().forEach(setup);
-  }
-
-  document.addEventListener('click', function (e) {
-    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    var t = e.target;
-    var op = t.closest('[data-sheet-open]');
-    if (op && layer && !layer.contains(op)) {
-      e.preventDefault();
-      var opener = op, menu = op.closest('.menu');
-      if (menu) { menu.hidden = true; var mb = document.querySelector('[aria-controls="' + menu.id + '"]'); if (mb) { mb.setAttribute('aria-expanded', 'false'); opener = mb; } }
-      showSheet(op.getAttribute('data-sheet-open') || op.getAttribute('href'), opener);
-      return;
-    }
-    if (layer && sheet.card && t.closest('[data-close]') && layer.contains(t)) { e.preventDefault(); closeSheet(); return; }
-    var copy = t.closest('[data-copy-report]');
-    if (copy) {
-      var text = copy.getAttribute('data-copy-report');
-      try { navigator.clipboard.writeText(text).then(function () { toast('Report copied', "Paste it into the authority's reporting form.", true); }, function () { toast('Copy blocked', 'Select the report text and copy it instead.'); }); }
-      catch (err) { toast('Copy blocked', 'Select the report text and copy it instead.'); }
-      return;
-    }
-    var tab = t.closest('#rp-tabs > a');
-    if (tab && tab.getAttribute('aria-current') !== 'page') { e.preventDefault(); switchReport(tab.getAttribute('href'), true); }
-  });
-  /* Start loading a sheet the moment it's pressed */
-  document.addEventListener('pointerdown', function (e) {
-    var op = e.target.closest && e.target.closest('[data-sheet-open]');
-    if (op && layer && !cardFor(op.getAttribute('data-sheet-open') || op.getAttribute('href'))) fetchDoc(op.getAttribute('data-sheet-open') || op.getAttribute('href')).catch(function () {});
-  }, true);
-  /* Esc closes; Tab stays inside; "/" doesn't open the command field behind the sheet */
-  window.addEventListener('keydown', function (e) {
-    if (!sheet.card) return;
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSheet(); return; }
-    if (e.key === '/') { e.stopPropagation(); return; }
-    if (e.key === 'Tab') {
-      var f = focusables(sheet.card); if (!f.length) return;
-      var i = f.indexOf(document.activeElement);
-      if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
-      else if (!e.shiftKey && (i === f.length - 1 || i < 0)) { e.preventDefault(); f[0].focus(); }
-    }
-  }, true);
-  window.addEventListener('popstate', function () {
-    if (ignorePop) { ignorePop--; syncReport(); return; }
-    var here = urlKey(location.href);
-    if (sheet.card && sheet.url !== here) closeSheet({ fromPop: true });
-    var c = layer && cardFor(here);
-    if (c && !sheet.card) { openSheet(c, {}); return; }
-    syncReport();
-  });
-
   /* ---------- Fields: one line of error text under the field ---------- */
   function setErr(field, msg) {
     var e = field.querySelector('.err'), inp = field.querySelector('.input'); if (!e) return;
     e.querySelector('span').textContent = msg || ''; e.hidden = !msg;
     if (inp) { inp.classList.toggle('invalid', !!msg); if (msg) inp.setAttribute('aria-invalid', 'true'); else inp.removeAttribute('aria-invalid'); }
-  }
-
-  /* ---------- One POST, then either the page it lands on or the sheet again with the API's errors ---------- */
-  function busy(btn, on) {
-    if (!btn) return;
-    if (on) { btn.dataset.label = btn.textContent; btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true'); btn.innerHTML = '<span class="spin" aria-hidden="true"></span><span class="sr-only">' + btn.dataset.label + '</span>'; }
-    else { btn.classList.remove('busy'); btn.removeAttribute('aria-busy'); btn.textContent = btn.dataset.label || btn.textContent; }
-  }
-  /* One line in the sheet when the answer isn't one we can show: the input stays, nothing is lost */
-  var FAILED = { record: "Couldn't record this. Reload the page and try again.", close: "Couldn't close this ticket. Reload the page and try again." };
-  function sayFailed(card, msg) {
-    var old = card.querySelector('[data-failed]'); if (old) old.remove();
-    var el;
-    if (card.getAttribute('data-sheet') === 'record') {
-      el = document.createElement('div'); el.className = 'alert error'; el.setAttribute('role', 'alert');
-      el.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><div><div class="a-title"></div></div><span></span>';
-      el.querySelector('.a-title').textContent = msg;
-      var form = card.querySelector('#rs-form'); form.insertBefore(el, form.querySelector('.sh-context'));
-    } else {
-      el = document.createElement('p'); el.className = 'dlg-err'; el.setAttribute('role', 'alert');
-      el.innerHTML = '<svg class="i sm" aria-hidden="true"><use href="#i-alert"/></svg><span></span>';
-      el.querySelector('span').textContent = msg;
-      card.querySelector('#cl-body').insertAdjacentElement('afterend', el);
-    }
-    el.setAttribute('data-failed', '');
-  }
-  function post(form, btn, card) {
-    if (form.dataset.sending) return;
-    form.dataset.sending = '1'; busy(btn, true);
-    var kind = card.getAttribute('data-sheet');
-    function again(msg) { delete form.dataset.sending; busy(btn, false); sayFailed(card, msg); }
-    fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: { Accept: 'text/html', 'X-Ledger-Sheet': '1' } }).then(function (res) {
-      var done = res.headers.get('X-Ledger-Done');
-      if (done && urlKey(done) === urlKey(form.getAttribute('data-done'))) {
-        /* Done: the sheet leaves, then the ticket page arrives with the toast (the sheet's address leaves history) */
-        closeSheet({ navigating: true });
-        setTimeout(function () { location.replace(done); }, reduceMotion.matches ? 0 : 200);
-        return;
-      }
-      /* The session ended: the person signs in again (and comes back to this sheet) */
-      if (res.redirected && /\/console\/sign-in(\?|$)/.test(new URL(res.url).pathname + new URL(res.url).search)) { location.assign(res.url); return; }
-      return res.text().then(function (html) {
-        var fresh = res.status >= 400 && res.status < 500 && res.status !== 403 ? new DOMParser().parseFromString(html, 'text/html').querySelector('.sheet-card[data-sheet="' + kind + '"]') : null;
-        if (!fresh) { again(FAILED[kind]); return; }
-        /* The API said no: the sheet again, with what was typed and the API's errors */
-        card.replaceChildren.apply(card, [].map.call(fresh.childNodes, function (n) { return document.importNode(n, true); }));
-        setup(card); focusFirst(card);
-      });
-    }).catch(function () { again("Couldn't reach Ledger. Check your connection and try again."); });
-  }
-
-
-  function setup(card) {
-    if (card.getAttribute('data-sheet') === 'record') setupRecord(card);
-    else if (card.getAttribute('data-sheet') === 'close') setupClose(card);
   }
 
   /* ---------- Record Submission ---------- */
@@ -297,15 +93,37 @@
     var ref = form.querySelector('#rs-ref');
     ref.addEventListener('input', function () { setErr(ref.closest('.field'), ''); });
     form.querySelector('#rs-now').addEventListener('click', function () { at.value = fmtUtc(formNow(form)); setErr(at.closest('.field'), ''); update(); });
-    form.addEventListener('submit', function (e) { e.preventDefault(); if (!go.disabled) post(form, go, card); });
+    /* Saving is ledger.js's; a blocked report doesn't post */
+    form.addEventListener('submit', function (e) { if (go.disabled) e.preventDefault(); });
     update();
   }
 
-  /* ---------- Close Ticket ---------- */
-  function setupClose(card) {
-    var form = card.querySelector('#cl-form'); if (!form || form._ready) return; form._ready = true;
-    form.addEventListener('submit', function (e) { e.preventDefault(); post(form, card.querySelector('#cl-go'), card); });
+  /* A sheet opened again in place starts fresh, as in the prototype: the time is now, nothing typed, no old errors */
+  function resetCard(card) {
+    var at = card.querySelector('#rs-at'); if (!at) return;
+    at.value = fmtUtc(formNow(at.form)); card.querySelector('#rs-ref').value = '';
+    [].forEach.call(card.querySelectorAll('.alert.error'), function (a) { a.remove(); });
+    [].forEach.call(card.querySelectorAll('.field'), function (f) { setErr(f, ''); });
+    at.dispatchEvent(new Event('input'));
   }
+  function setupAll(root) { [].forEach.call(root.querySelectorAll('.sheet-card[data-sheet="record"]'), setupRecord); }
+  setupAll(document);
+  document.addEventListener('sheet:ready', function (e) { if (e.target.matches('.sheet-card[data-sheet="record"]')) setupRecord(e.target); });
+  document.addEventListener('sheet:open', function (e) { if (e.target.matches('.sheet-card[data-sheet="record"]')) resetCard(e.target); });
+
+  document.addEventListener('click', function (e) {
+    var copy = e.target.closest('[data-copy-report]');
+    if (copy) {
+      var text = copy.getAttribute('data-copy-report');
+      try { navigator.clipboard.writeText(text).then(function () { toast('Report copied', "Paste it into the authority's reporting form.", true); }, function () { toast('Copy blocked', 'Select the report text and copy it instead.'); }); }
+      catch (err) { toast('Copy blocked', 'Select the report text and copy it instead.'); }
+      return;
+    }
+    var tab = e.target.closest('#rp-tabs > a');
+    if (tab && tab.getAttribute('aria-current') !== 'page' && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) { e.preventDefault(); switchReport(tab.getAttribute('href'), true); }
+  });
+  /* Back and Forward between report types (ledger.js asks: it handles sheets) */
+  document.addEventListener('ledger:history', function (e) { if (syncReport()) e.preventDefault(); });
 
   /* ---------- Report Draft: switch report type in place. The indicator slides at once; the old draft leaves first, then
      the new one rises in. Back and Forward do the same. ---------- */
@@ -316,27 +134,36 @@
     [].forEach.call(tabs.querySelectorAll('a'), function (a) { if (urlKey(a.getAttribute('href')) === k) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     placeInd(tabs);
     if (push) history.pushState({ ledgerReport: k }, '', k);
+    if (L.shown) L.shown(k);
     swap.classList.remove('entering'); swap.classList.add('leaving');
     var left = new Promise(function (r) { setTimeout(r, reduceMotion.matches ? 150 : 140); });
-    Promise.all([fetchDoc(k), left]).then(function (r) {
+    var page = fetch(k, { credentials: 'same-origin', headers: { Accept: 'text/html' } }).then(function (res) {
+      if (res.redirected || !res.ok) throw new Error('not a page');
+      return res.text();
+    }).then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); });
+    Promise.all([page, left]).then(function (r) {
       if (token !== swapToken) return;
       var doc = r[0], next = doc.getElementById('rp-swap'); if (!next) throw new Error('no draft');
-      delete pages[k];   /* drafts change as the ticket does: fetch again next time */
       swap.innerHTML = next.innerHTML; swap.setAttribute('data-kind', next.getAttribute('data-kind'));
+      if (L.adopt) L.adopt(doc);
       document.title = doc.title;
-      var nl = doc.getElementById('sheet-layer');
+      /* This report type's Record Submission sheet */
+      var layer = $('sheet-layer'), nl = doc.getElementById('sheet-layer'), open = L.openCard && L.openCard();
       if (layer && nl) {
         layer.setAttribute('data-base', nl.getAttribute('data-base'));
-        cards().forEach(function (c) { if (c !== sheet.card) c.remove(); });
-        [].forEach.call(nl.querySelectorAll('.sheet-card'), function (c) { var n = document.importNode(c, true); n.hidden = true; layer.appendChild(n); setup(n); });
+        [].forEach.call(layer.querySelectorAll(':scope > .sheet-card'), function (c) { if (c !== open) c.remove(); });
+        [].forEach.call(nl.querySelectorAll(':scope > .sheet-card'), function (c) { var n = document.importNode(c, true); n.hidden = true; layer.appendChild(n); if (L.cardReady) L.cardReady(n); });
       }
       swap.classList.remove('leaving'); swap.offsetWidth; swap.classList.add('entering');
       swap.addEventListener('animationend', function done() { swap.classList.remove('entering'); swap.removeEventListener('animationend', done); });
     }).catch(function () { if (token === swapToken) location.assign(k); });
   }
+  /* Whether this address is a report type this page shows (switching to it if needed) */
   function syncReport() {
-    var swap = $('rp-swap'); if (!swap || !tabs) return;
+    var swap = $('rp-swap'); if (!swap || !tabs || location.search) return false;
     var m = /\/reports\/([a-z_]+)$/.exec(location.pathname);
-    if (m && m[1] !== swap.getAttribute('data-kind')) switchReport(location.pathname, false);
+    if (!m) return false;
+    if (m[1] !== swap.getAttribute('data-kind')) switchReport(location.pathname, false);
+    return true;
   }
 })();

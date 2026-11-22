@@ -32,6 +32,23 @@ cover unknown UUID/malformed-ID 404 and audit PUT/DELETE 405. They check problem
 schemas and unchanged ticket/list/audit data, without requiring example title
 wording. These complement the complete lifecycle cases; service behavior is unchanged.
 
+## Phase 5 HTTP gap checks
+
+**Phase 5 HTTP gaps (5.10):** `http_gap_cases.py` adds 19 portable cases, shared
+with `tests/test_http_gaps_api.py`; `test_http_gaps.py` is their HTTP entry point.
+They cover AC-07 awareness/fix edits and audit/deadline recalculation, unchanged
+state after rejected edits, PATCH/triage 404 and 413 precedence, and successful
+`DELETE /test/clock`. The clock-release check compares returned UTC time and a
+new ticket's receipt time with the runner's independent wall clock, allowing
+120 seconds of skew on each side of the request window, and checks that the
+released clock advances. Keep both machines' real clocks synchronized. It
+restores the fixed test clock in `finally`; this is not a deployed-tester cleanup
+implementation. With these cases the portable suite collects 241 tests.
+
+These cases passed locally through Django and over an isolated loopback WSGI
+server on 2026-11-20. They have not been run on Launchpad or Team 21. The separate
+model-coverage inventory receives no new bindings from this increment.
+
 ## Warning: it resets the target
 
 
@@ -78,7 +95,8 @@ python -m pytest -c acceptance/pytest.ini acceptance --allow-reset -v \
 
 The version is a supplied label, not independently verified deployment identity.
 The JSON report retains its existing fields and adds `operations`; each result
-also includes `operation_checks` when its test body executes and `teardown_complete`
+also includes `operation_checks` when its test body executes or fixture setup
+fails, and `teardown_complete`
 to distinguish finished tests from interrupted teardown. New evidence stores
 only contract method/path templates, expected/actual status codes, and whether
 the status and defined response schema checked successfully. It stores no token,
@@ -95,16 +113,44 @@ actor, resource identifier, request body, or response body.
 - **`partial`:** some declared statuses passed; others remain untested.
   **`not_tested`:** no observations for the category. **`not_defined`:** the
   contract declares no statuses in that category, as with health-check errors.
-- **`failed`:** a reached status/schema check failed (including communication
-  failure). **`inconclusive`:** the response checked successfully but its enclosing
-  test failed or skipped, or teardown failed/interrupted without completion.
+- **`failed`:** the target answered and its status or schema check failed.
+  **`inconclusive`:** no response arrived (connection failure or timeout), or the
+  response checked successfully but its enclosing test failed or skipped, or
+  teardown failed/interrupted without completion.
   Those are not passing evidence; passing observations require completed teardown.
 
-Per-test fixture setup/reset calls are excluded, so setup alone cannot prove an
-operation. Direct transport calls outside `Service.expect` are also excluded;
+Successful fixture setup/reset calls are excluded. On a setup failure, checked
+operations are retained even when the `service` fixture fails before returning:
+failed status/schema checks remain failed, and conforming setup responses are
+inconclusive because their enclosing test failed. Setup alone supplies no passing
+conformance or implementation evidence. Direct transport calls outside
+`Service.expect` are also excluded;
 add explicit checked cases to improve the table rather than guessing results.
 Bodies not defined by the contract, such as the health response, are not validated.
-Interrupted runs say `incomplete`; all unobserved statuses remain untested.
+Reports say `finished` only when the full collected selection reached terminal
+outcomes and completed teardown without collection errors or deselection. Early
+stops, interruption, filtered selections and collection errors say `incomplete`,
+including an early exit that returns code 0. A fully attempted suite with failed
+tests still says `finished` and retains its nonzero pytest exit code.
+
+Selecting an individual file, node ID, subdirectory or multiple positional targets
+is a partial selection, even when pytest emits no deselection event. A full-scope
+run names the directory containing the selected pytest configuration, as the
+documented command above does with `acceptance/pytest.ini` and `acceptance`.
+Running with no path from a parent directory (for example `pytest -c
+acceptance/pytest.ini` from the repository root) collects beyond the suite; the
+report marks that `broader_selection` and says so in its reason.
+Explicit `--ignore` and `--ignore-glob` exclusions also mark a run incomplete;
+their paths are not copied into report metadata.
+
+JSON adds `run_complete`, `tests_selected`, `tests_completed`, `tests_deselected`,
+`tests_not_run`, `partial_selection`, `broader_selection`, `collection_exclusions`,
+`collection_errors` and `incomplete_reasons`; existing result and
+count fields are unchanged. Markdown and terminal summaries show the same counts
+and reasons. `tests_not_run` counts selected IDs with no phase report; a test
+interrupted after setup is started but not completed. Unobserved statuses remain
+untested. The public portable copy must include `observations.py` with the changed
+client and plugin.
 Clock read/release map to REQ-16 from `docs/spec.md` because their contract
 descriptions omit that requirement ID. Other IDs come from operation descriptions.
 
@@ -118,10 +164,28 @@ do not masquerade as GET audit 405 observations in this table. Its 405 status
 therefore remains explicitly untested here. Statuses and list filters are covered by
 `listing_cases.py` (PR #84).
 
+## Phase 5 model-evaluation evidence
+
+The approved [design mapping](../docs/model-coverage.md) and
+`model_requirements.json` define 44 requirements and 266 fixed scenarios. Explicit
+assertion checkpoints record evaluations, not pass-rate or implementation claims.
+No test-name inference or historical CI results fill untested scenarios.
+
+The deployed course tester includes `coverage.model` for explicitly configured
+own-system targets and omits it for other teams. A published mapping URL must be
+configured before claiming a usable measure; see the design mapping for settings
+and release gates. The standalone JSON carries safe per-result `model_evidence`
+plus version/availability metadata. Optional `--model-progress FILE` flushes that
+evidence as each oracle completes, so an abort can retain it before teardown.
+
+These counts differ from the operation table: a failed comparison evaluates a
+design scenario but does not establish passing conformance. CI-only checks,
+skipped work, missing bindings and manual demos do not become suite evidence.
+
 ## Results
 
-The suite collects 222 cases (59 Phase 3/audit, 32 drafts, 63 submissions, 34 closure, 22
-statuses and listing, 11 no-change updates, 1 confidentiality sweep). On
+The suite collects 241 cases (59 Phase 3/audit, 32 drafts, 63 submissions, 34 closure, 22
+statuses and listing, 11 no-change updates, 1 confidentiality sweep, 19 Phase 5 HTTP gaps). On
 localhost the plain-HTTP probe is skipped. These are collection/expected counts,
 not a new deployed result; earlier Phase 3 validation covered only the original 55.
 
@@ -142,6 +206,8 @@ curl -X DELETE "$CRA_BASE_URL/test/clock" -H "Authorization: Bearer $CRA_API_TOK
 | `cases.py` | The test cases, shared by the HTTP and in-process runs |
 | `client.py` | HTTP transport, response checks and safe observation metadata |
 | `reporting.py` | Pure operation evidence aggregation and Markdown rendering |
+| `model_coverage.py` | Explicit design evaluations, abort journal and own-model aggregation |
+| `model_requirements.json` | Versioned 44-requirement / 266-scenario design and exact bindings |
 | `conftest.py` | Safety options, completed-test observations and JSON/table exports |
 | `test_phase3.py` | HTTP entry point, including the plain-HTTP (AC-15) probe |
 | `draft_cases.py` | Live-draft cases shared by local Django and HTTP runs |
@@ -154,5 +220,7 @@ curl -X DELETE "$CRA_BASE_URL/test/clock" -H "Authorization: Bearer $CRA_API_TOK
 | `test_listing.py` | HTTP entry point for statuses and listing |
 | `update_cases.py` | Q6: a PATCH that changes nothing adds no audit entry |
 | `test_updates.py` | HTTP entry point for the Q6 cases |
+| `http_gap_cases.py` | Phase 5 AC-07, PATCH/triage 404/413 and successful clock release |
+| `test_http_gaps.py` | HTTP entry point for the Phase 5 gap cases |
 | `privacy_cases.py` | AC-16: the reporter appears only in `GET /tickets/{id}` |
 | `test_privacy.py` | HTTP entry point for the confidentiality sweep |
