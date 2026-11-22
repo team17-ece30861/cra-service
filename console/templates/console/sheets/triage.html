@@ -1,5 +1,5 @@
 {# Triage (docs/design/ledger-screens.html, data-sheet="triage"). The deadline preview reads its offsets from core/domain/deadlines.py; the API sets the real deadlines. #}
-<section class="sheet-card" data-sheet="triage" id="sheet-triage" data-url="{{ tr.action }}" data-base="{{ tr.base }}" role="dialog" aria-modal="true" aria-labelledby="tr-title"{% if open_sheet != "triage" %} hidden{% endif %}>
+<section class="sheet-card" data-sheet="triage" id="sheet-triage" data-sheet-url="{{ tr.action }}" data-base="{{ tr.base }}" role="dialog" aria-modal="true" aria-labelledby="tr-title"{% if open_sheet != "triage" %} hidden{% endif %}>
   <header class="sh-bar"><a class="btn plain" href="{{ tr.base }}" data-close>Cancel</a><h2 class="sh-title" id="tr-title">Triage</h2><button class="btn primary sm" type="submit" form="tr-form" data-go>Triage</button></header>
   <form class="sh-body tr-form" id="tr-form" method="post" action="{{ tr.action }}" novalidate data-offsets='{"early_warning": {{ tr.offsets.early_warning }}, "notification": {{ tr.offsets.notification }}}'>
     {% csrf_token %}
