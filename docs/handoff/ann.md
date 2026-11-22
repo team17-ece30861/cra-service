@@ -10,7 +10,7 @@ Restate the task to Ann before acting, and agree on behavior with Ann before wri
 
 ## Where things stand
 
-- **5.5:** Ann's operations guide is PR #117 (`docs/operations.md`). Quincy's agent added
+- **5.5:** done. Ann's operations guide merged as #117 (`docs/operations.md`). Quincy's agent added
   fixes on 2026-11-22 (c9e3be4): a full access-log line, `HOST` and `NEW_TOKEN` set before
   use, the 5xx alert, the tester's one-run rule, and clearing a console lockout.
 - **5.9:** done by Quincy's agent so Phase 5 could land: contract 0.3.0 with Q7, Q8 and Q9
@@ -21,7 +21,7 @@ Restate the task to Ann before acting, and agree on behavior with Ann before wri
 
 ## In progress
 
-- Nothing of Ann's beyond #117.
+- Nothing.
 
 ## Next up
 

@@ -19,9 +19,9 @@ pod items itself, and Quincy chose not to message them first (2026-11-22).
 
 ## In progress
 
-- **Open PRs:** #113 (AC-13 Schemathesis, corpus pinned per operating system), #117 (Ann's
-  operations guide, with follow-up fixes), #118 (AC-19 restart demo and 5xx alert
-  scripts), and this docs PR.
+- **Merged on 2026-11-22:** #113 (AC-13 Schemathesis, corpus pinned per operating system),
+  #117 (Ann's operations guide, with follow-up fixes), #118 (AC-19 restart demo and 5xx
+  alert scripts), and this docs PR. AC-18 passed on Launchpad after #116 (p95 828 ms).
 - **Orbit launch** (Quincy: `gh workflow run orbit.yml --ref main -f confirm=ORBIT`), then
   right after it: merge `pod-k-shared` #20 (contract 0.3.0) and #19 (tester OpenAPI
   descriptions, with the launched commit in `team17/SYSTEM.md`), and a new pod PR that
@@ -35,19 +35,19 @@ pod items itself, and Quincy chose not to message them first (2026-11-22).
 
 ## Next up
 
-1. Merge #113, #117, #118 and this PR; launch Orbit; merge the pod PRs.
+1. Launch Orbit; merge the pod PRs.
 2. Collect the evidence above and finish the Phase 5 report (5.1, 5.2, 5.6).
 3. After grading: tear down the billable resources (`docs/platform.md`, "End of the course").
 
 ## Waiting on
 
-- **Quincy:** merge go for the open PRs, the Orbit launch, and the AC-19 recording.
+- **Quincy:** the Orbit launch and the AC-19 recording.
 - **Richard:** record the final cross-team results (5.6) from tonight's runs.
 
 ## Notes for the next session
 
 - Infrastructure is in [`docs/platform.md`](../platform.md); the on-call version is
-  [`docs/operations.md`](../operations.md) once #117 merges.
+  [`docs/operations.md`](../operations.md).
 - The 5xx alert emails Quincy's Purdue address for both services; rerun
   `scripts/create_5xx_alert.sh EMAIL` to change it.
 - The AC-13 corpus differs between Linux (664 requests) and macOS (683); CI checks only
