@@ -12,6 +12,7 @@ from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
 from acceptance.model_coverage import model_scenario
+from acceptance.observations import observe_operation_check
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -138,6 +139,7 @@ class Service:
                 "conforms": False,
             }
             self.operation_checks.append(check)
+            observe_operation_check(check)
         response = self.transport.send(method, path, **kwargs)
         if check is not None:
             check["actual_status"] = response.status
