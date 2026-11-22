@@ -1,12 +1,15 @@
 """The AC-18 script's pure parts (acceptance/perf.py): percentiles, the fixed mix and
 load profile, and determinism of the generated plan."""
 
+import json
 from collections import Counter
 from datetime import UTC, datetime
+from urllib.error import URLError
 
 import pytest
 
 from acceptance import perf
+from acceptance.client import Response
 
 BASE = datetime(2026, 11, 21, 12, 0, 0, tzinfo=UTC)
 
@@ -162,3 +165,139 @@ def test_default_load_leaves_exactly_the_ticket_limit_after_the_measured_posts()
     with pytest.raises(ValueError):
         perf.load_size(10, mix)
     perf.build_plan(17, mix, perf.apportion(perf.LOAD_PROFILE, perf.load_size(1000, mix)))
+
+
+class FakeService:
+    """Just enough of the API for the load phase. lose[(method, suffix)] lists, per
+    matching call in order, None (answer normally), "before" (drop the request
+    before it reaches the service) or "after" (apply it, then drop the response)."""
+
+    def __init__(self, lose=None):
+        self.tickets = {}
+        self.lose = {key: list(value) for key, value in (lose or {}).items()}
+        self.calls = []
+
+    def send(self, method, path, *, body=None, actor=None):
+        self.calls.append((method, path))
+        suffix = path.split("/")[-1] if path.count("/") > 2 else path
+        plan = self.lose.get((method, suffix), [])
+        mode = plan.pop(0) if plan else None
+        if mode == "before":
+            raise URLError("connection reset")
+        response = self._handle(method, path, body)
+        if mode == "after":
+            raise URLError("connection reset")
+        return response
+
+    def _handle(self, method, path, body):
+        parts = path.strip("/").split("/")
+        if method == "POST" and path == "/tickets":
+            ticket_id = f"t{len(self.tickets)}"
+            self.tickets[ticket_id] = {
+                "id": ticket_id,
+                "title": body["title"],
+                "state": "received",
+                "resolution": None,
+                "obligations": {r: {"submitted_at": None} for r in perf.RECORDED["resolved"]},
+            }
+            return self._json(201, self.tickets[ticket_id])
+        if method == "GET" and path == "/tickets":
+            return self._json(200, list(self.tickets.values()))
+        ticket = self.tickets[parts[1]]
+        if method == "GET":
+            return self._json(200, ticket)
+        if parts[-1] == "triage":
+            if ticket["state"] != "received":
+                return self._json(409, {"title": "Conflict", "status": 409})
+            reportable = body["decision"] == "actively_exploited"
+            ticket["state"] = "reportable" if reportable else "closed"
+            ticket["resolution"] = None if reportable else body["decision"]
+        elif parts[-1] == "submission":
+            obligation = ticket["obligations"][parts[3]]
+            if obligation["submitted_at"] is not None:
+                return self._json(409, {"title": "Conflict", "status": 409})
+            obligation["submitted_at"] = "2026-11-21T00:00:00Z"
+        elif parts[-1] == "close":
+            if ticket["state"] != "reportable":
+                return self._json(409, {"title": "Conflict", "status": 409})
+            ticket["state"], ticket["resolution"] = "closed", "resolved"
+        return self._json(200, ticket)
+
+    @staticmethod
+    def _json(status, body):
+        return Response(status, "application/json", json.dumps(body).encode())
+
+
+def resolved_spec():
+    return next(s for s in perf.build_load_specs(17, 100, BASE) if s["category"] == "resolved")
+
+
+def load(service, spec):
+    loader = perf.Loader(service, sleep=lambda seconds: None)
+    ticket_id = perf.load_ticket(loader, spec)
+    return loader, ticket_id
+
+
+def test_lost_create_response_finds_the_stored_ticket_instead_of_a_duplicate():
+    service = FakeService(lose={("POST", "/tickets"): ["after"]})
+    loader, ticket_id = load(service, resolved_spec())
+    assert len(service.tickets) == 1
+    assert service.tickets[ticket_id]["state"] == "closed"
+    assert [r["outcome"] for r in loader.retries][-1] == "found the first attempt's result"
+
+
+def test_create_dropped_before_the_service_is_sent_again():
+    service = FakeService(lose={("POST", "/tickets"): ["before"]})
+    loader, _ = load(service, resolved_spec())
+    assert len(service.tickets) == 1
+    assert service.calls.count(("POST", "/tickets")) == 2
+    assert len(loader.retries) == 1
+
+
+@pytest.mark.parametrize("suffix", ["triage", "submission", "close"])
+def test_lost_change_response_then_409_counts_as_done_after_checking(suffix):
+    service = FakeService(lose={("POST", suffix): ["after"]})
+    loader, ticket_id = load(service, resolved_spec())
+    ticket = service.tickets[ticket_id]
+    assert (ticket["state"], ticket["resolution"]) == ("closed", "resolved")
+    assert all(o["submitted_at"] for o in ticket["obligations"].values())
+    assert loader.retries[-1]["outcome"] == "409 on retry; confirmed already done"
+
+
+def test_409_on_retry_without_the_change_having_happened_still_fails():
+    service = FakeService(lose={("POST", "triage"): ["before"]})
+    spec = resolved_spec()
+    loader = perf.Loader(service, sleep=lambda seconds: None)
+    ticket_id = loader.create(spec["body"])["id"]
+    service.tickets[ticket_id]["state"] = "closed"  # someone else closed it meanwhile
+    with pytest.raises(perf.SetupError, match="expected 200, got 409"):
+        loader.change(
+            ticket_id,
+            "/triage",
+            "/tickets/{id}/triage",
+            spec["triage"],
+            lambda ticket: ticket["state"] == "reportable",
+        )
+
+
+def test_load_gives_up_after_three_retries():
+    service = FakeService(lose={("POST", "/tickets"): ["before"] * 4})
+    with pytest.raises(perf.SetupError, match="no response after 4 attempts"):
+        load(service, resolved_spec())
+    assert service.calls.count(("POST", "/tickets")) == 4
+    assert service.tickets == {}
+
+
+def test_measured_requests_are_never_retried():
+    class Dropping:
+        calls = 0
+
+        def send(self, *args, **kwargs):
+            Dropping.calls += 1
+            raise URLError("connection reset")
+
+    plan = [{"op": "list", "number": 0}]
+    results = perf.run_measured(Dropping(), plan, {}, BASE, stored=0)
+    assert Dropping.calls == 1
+    assert results[0]["ok"] is False and results[0]["status"] is None
+    assert perf.report(results, warmup=[])["passed"] is False

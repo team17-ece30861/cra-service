@@ -17,11 +17,13 @@ Phases, in order:
 3. Load: valid tickets through the public API only (submit, triage, record
    submission, close), in the fixed ``LOAD_PROFILE`` mix. Not timed. By default it
    loads ``--tickets`` minus the measured POSTs (990), so the store holds exactly
-   ``--tickets`` (1,000, the spec's limit) after the last measured request.
+   ``--tickets`` (1,000, the spec's limit) after the last measured request. A setup
+   or load request that gets no response is retried up to 3 times, after checking the
+   service so nothing is applied twice; retries are reported.
 4. Measured: ``--requests`` requests sent one after another in the fixed
    ``MEASURED_MIX``, shuffled by ``--seed``. Each request has one expected status; any
    other status, a connection error or a response that breaks the contract schema is a
-   failure, however fast it was.
+   failure, however fast it was. Measured requests are never retried.
 
 Times are derived from the service's own clock (``GET /test/clock``), read once before
 loading, and always lie in the past, so the script never sets the clock. A fixed clock
@@ -47,6 +49,7 @@ import os
 import random
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -345,35 +348,132 @@ def _timed(transport, method, path, body=None, actor=ACTOR):
     return response, time.perf_counter() - started, None
 
 
-def _call(transport, method, path, expected, body=None, actor=ACTOR):
-    response, _, error = _timed(transport, method, path, body, actor)
-    status = response.status if response else error
-    if status != expected:
-        raise SetupError(f"{method} {path.split('?')[0]}: expected {expected}, got {status}")
-    return json.loads(response.body) if response.body else None
-
-
 def _ticket_path(ticket_id: str, suffix: str = "") -> str:
     return "/tickets/" + quote(ticket_id, safe="") + suffix
 
 
-def load_ticket(transport, spec) -> str:
-    ticket = _call(transport, "POST", "/tickets", 201, body=spec["body"])
-    ticket_id = ticket["id"]
+# Setup and load only (never the measured phase): a request that got no response at
+# all (dropped connection, timeout) is tried again, up to 3 more times. A request that
+# changes data is first checked against the service, so a retry never applies a change
+# twice or creates a duplicate ticket.
+LOAD_RETRY_BACKOFF_SECONDS = (1.0, 2.0, 4.0)
+
+
+class Loader:
+    """Setup and load requests with safe retries; records every retry."""
+
+    def __init__(self, transport, sleep=time.sleep):
+        self.transport = transport
+        self.sleep = sleep
+        self.retries = []
+        self._lock = threading.Lock()
+
+    def call(
+        self,
+        method,
+        path,
+        expected,
+        body=None,
+        actor=ACTOR,
+        *,
+        label=None,
+        find_existing=None,
+        confirm_done=None,
+    ):
+        """find_existing(): after a lost response, before resending, returns the result
+        if the first attempt did take effect (else None). confirm_done(): after a lost
+        response, if the resend gets 409, returns True if the change already happened."""
+        label = label or path.split("?")[0]
+        lost = False
+        for attempt in range(len(LOAD_RETRY_BACKOFF_SECONDS) + 1):
+            if lost and find_existing is not None:
+                found = find_existing()
+                if found is not None:
+                    self._record(method, label, "found the first attempt's result")
+                    return found
+            response, _, error = _timed(self.transport, method, path, body, actor)
+            if response is None:
+                if attempt == len(LOAD_RETRY_BACKOFF_SECONDS):
+                    raise SetupError(
+                        f"{method} {label}: no response after {attempt + 1} attempts ({error})"
+                    )
+                self._record(method, label, f"no response ({error}), retrying")
+                self.sleep(LOAD_RETRY_BACKOFF_SECONDS[attempt])
+                lost = True
+                continue
+            if response.status == expected:
+                return json.loads(response.body) if response.body else None
+            if lost and response.status == 409 and confirm_done is not None and confirm_done():
+                self._record(method, label, "409 on retry; confirmed already done")
+                return None
+            raise SetupError(f"{method} {label}: expected {expected}, got {response.status}")
+
+    def _record(self, method, label, outcome):
+        with self._lock:
+            self.retries.append({"method": method, "path": label, "outcome": outcome})
+
+    def get(self, path):
+        return self.call("GET", path, 200, actor=None)
+
+    def create(self, body) -> dict:
+        def find_existing():
+            # The deployment was empty before the load and load titles are unique.
+            matches = [t for t in self.get("/tickets") if t["title"] == body["title"]]
+            if len(matches) > 1:
+                raise SetupError(f"duplicate tickets titled {body['title']!r}")
+            return matches[0] if matches else None
+
+        return self.call(
+            "POST", "/tickets", 201, body=body, label="/tickets", find_existing=find_existing
+        )
+
+    def change(self, ticket_id, suffix, label, body, done):
+        """A triage, submission or close; done(ticket) says whether it already happened."""
+        self.call(
+            "POST",
+            _ticket_path(ticket_id, suffix),
+            200,
+            body=body,
+            label=label,
+            confirm_done=lambda: done(self.get(_ticket_path(ticket_id))),
+        )
+
+
+def load_ticket(loader: Loader, spec) -> str:
+    ticket_id = loader.create(spec["body"])["id"]
     if spec["triage"]:
-        _call(transport, "POST", _ticket_path(ticket_id, "/triage"), 200, body=spec["triage"])
+        expected = "reportable" if spec["triage"]["decision"] == "actively_exploited" else "closed"
+        loader.change(
+            ticket_id,
+            "/triage",
+            "/tickets/{id}/triage",
+            spec["triage"],
+            lambda ticket, expected=expected: ticket["state"] == expected,
+        )
     for submission in spec["submissions"]:
-        path = _ticket_path(ticket_id, f"/reports/{submission['type']}/submission")
-        _call(transport, "POST", path, 200, body=submission["body"])
+        report = submission["type"]
+        loader.change(
+            ticket_id,
+            f"/reports/{report}/submission",
+            "/tickets/{id}/reports/{type}/submission",
+            submission["body"],
+            lambda ticket, report=report: ticket["obligations"][report]["submitted_at"] is not None,
+        )
     if spec["close"]:
-        _call(transport, "POST", _ticket_path(ticket_id, "/close"), 200)
+        loader.change(
+            ticket_id,
+            "/close",
+            "/tickets/{id}/close",
+            None,
+            lambda ticket: ticket["state"] == "closed" and ticket["resolution"] == "resolved",
+        )
     return ticket_id
 
 
-def load_all(transport, specs, workers: int) -> list[str]:
+def load_all(loader: Loader, specs, workers: int) -> list[str]:
     """Loads every spec, a few at a time; stops at the first failure."""
     pool = ThreadPoolExecutor(workers)
-    futures = [pool.submit(load_ticket, transport, spec) for spec in specs]
+    futures = [pool.submit(load_ticket, loader, spec) for spec in specs]
     try:
         return [future.result() for future in futures]
     finally:
@@ -604,34 +704,38 @@ def run(args) -> int:
         "connection": "new TCP (and TLS for https) connection per request",
         "reset": args.reset,
     }
+    loader = None
     try:
         plan = build_plan(args.seed, mix, apportion(LOAD_PROFILE, load_count))
         print(f"Target: {transport.base_url}")
         print(f"Warm-up: {args.warmup} untimed requests")
         warmup = run_warmup(transport, args.warmup)
+        loader = Loader(transport)
         if args.reset:
             print("Resetting the WHOLE deployment (POST /test/reset): every client's data")
-            _call(transport, "POST", "/test/reset", 204, actor=None)
-        existing = _call(transport, "GET", "/tickets", 200, actor=None)
+            loader.call("POST", "/test/reset", 204, actor=None)  # idempotent
+        existing = loader.get("/tickets")
         if existing:
             raise SetupError(
                 f"the deployment already holds {len(existing)} tickets; use an empty "
                 "deployment or pass --reset (deletes everything)"
             )
-        clock = _call(transport, "GET", "/test/clock", 200, actor=None)["now"]
+        clock = loader.get("/test/clock")["now"]
         base = datetime.fromisoformat(clock.replace("Z", "+00:00"))
         result["service_clock_at_start"] = clock
         specs = build_load_specs(args.seed, load_count, base)
         print(f"Loading {load_count} tickets ({args.load_workers} at a time, not timed)...")
         load_started = time.perf_counter()
-        loaded = load_all(transport, specs, args.load_workers)
+        loaded = load_all(loader, specs, args.load_workers)
         result["load_seconds"] = round(time.perf_counter() - load_started, 1)
         ids, seen = {}, {}
         for spec, ticket_id in zip(specs, loaded, strict=True):
             index = seen.get(spec["category"], 0)
             ids[(spec["category"], index)] = ticket_id
             seen[spec["category"]] = index + 1
-        stored = len(_call(transport, "GET", "/tickets", 200, actor=None))
+        stored = len(loader.get("/tickets"))
+        if stored != len(specs):
+            raise SetupError(f"loaded {len(specs)} tickets but {stored} are stored")
         result["ticket_count_at_start"] = stored
         result["ticket_count_at_end"] = stored + mix.get("create", 0)
         print(f"Loaded in {result['load_seconds']} s; {stored} tickets stored.")
@@ -640,10 +744,12 @@ def run(args) -> int:
         measured = run_measured(transport, plan, ids, base, stored, contract)
     except SetupError as error:
         result["error"] = str(error)
+        _note_retries(result, loader)
         print(f"Not measured: {error}", file=sys.stderr)
         _write(args.out, result)
         return 2
     result["finished_at"] = _now_utc()
+    _note_retries(result, loader)
     result["summary"] = report(measured, warmup)
     result["results"] = measured
     _write(args.out, result)
@@ -653,6 +759,16 @@ def run(args) -> int:
         "operator's call. The script did not set the test clock."
     )
     return 0 if result["summary"]["passed"] else 1
+
+
+def _note_retries(result, loader):
+    """Setup and load retries (the measured phase never retries)."""
+    retries = loader.retries if loader else []
+    result["load_retries"] = {"count": len(retries), "retries": retries}
+    if retries:
+        print(f"Setup/load retries after lost responses: {len(retries)}", file=sys.stderr)
+        for retry in retries[:20]:
+            print(f"  {retry['method']} {retry['path']}: {retry['outcome']}", file=sys.stderr)
 
 
 def _write(destination, result):
