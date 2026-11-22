@@ -1,5 +1,7 @@
 # Operations Guide
 
+The short version of [platform.md](platform.md), for whoever is on call. Plan task 5.5.
+
 ## Deploy
 
 Launchpad deploys automatically when a commit reaches `main` and CI passes. CI runs
@@ -56,7 +58,8 @@ gcloud run services update-traffic "$SERVICE" \
   --to-revisions REVISION_NAME=100
 ```
 
-Check the service, then pin or unpin traffic deliberately:
+Check the service, then pin or unpin traffic deliberately (`HOST` is the `PROD_HOST`
+or `DEV_HOST` repository variable):
 
 ```bash
 curl -fsS "https://$HOST/health"
@@ -116,9 +119,10 @@ Send the new token to the client privately:
 gcloud secrets versions access latest --secret="$SECRET"
 ```
 
-Confirm the new token works:
+Confirm the new token works, without printing it:
 
 ```bash
+NEW_TOKEN=$(gcloud secrets versions access latest --secret="$SECRET")
 curl -fsS \
   -H "Authorization: Bearer $NEW_TOKEN" \
   "https://$HOST/test/clock"
@@ -135,15 +139,15 @@ Never commit or share tokens.
 ## Read logs
 
 Cloud Run request and application logs are available in Google Cloud Logging. The
-combined Gunicorn access log identifies the authenticated client in the log's user
-field:
+Gunicorn access log uses the combined format, with the client whose token matched in the
+user field (`-` when no token matched):
 
 ```text
-- team21 -
-- - -
+169.254.1.1 - team21 [05/Oct/2026:19:27:49 +0000] "GET /test/clock HTTP/1.1" 200 31 "-" "python-requests/2.32.3"
 ```
 
-The access log also includes the request method, path, status, and response size.
+The access log also includes the request method, path, status, and response size (the
+compressed size when the client asked for gzip).
 
 Do not search for or print tokens or request bodies. They must not appear in logs.
 
@@ -153,6 +157,12 @@ Useful checks:
 - `401` responses indicate a missing or invalid bearer token.
 - Migration failures appear in `team17-ENV-migrate` execution logs.
 - Deploy and smoke-test failures appear in the corresponding GitHub Actions run.
+
+Any 5xx on `team17-prod` or `team17-dev` emails the platform owner (Cloud Monitoring
+policies "Team 17: server errors on SERVICE", created by `scripts/create_5xx_alert.sh`).
+The email links the incident; read the stack trace in Cloud Logging with
+`severity>=ERROR` for that service. The incident closes by itself after 30 minutes
+without server errors.
 
 A `200` from `GET /health` means Django loaded. It does not check the Neon database or
 migration state.
@@ -187,5 +197,20 @@ booked. Never point the acceptance suite at Orbit or Team 21 without approval.
 `POST /test/reset` deletes all tickets, reports, and audit entries. It does not release
 a fixed clock. Call `DELETE /test/clock` for real time.
 
-Run test suites serially against a deployment. One deployed-tester run can hold a
-Gunicorn worker for much of the request timeout.
+Run test suites one at a time against a deployment. The deployed tester refuses a second
+run while one is going (409), and a run holds one Gunicorn worker for up to 30 minutes.
+
+## Console sign-in lockout
+
+Five failed console sign-ins for one username within 15 minutes lock that username for
+15 minutes from the fifth failure. The lock ends by itself, and `POST /test/reset` does
+not clear it. To clear it early, run this with that environment's `DATABASE_URL`:
+
+```bash
+python manage.py shell -c "from console.lockout import username_key; \
+from console.models import SignInFailure; \
+SignInFailure.objects.filter(username=username_key('USERNAME')).delete()"
+```
+
+Console accounts are created with `python manage.py createsuperuser` against the same
+database (see `docs/platform.md`, "Console accounts").
