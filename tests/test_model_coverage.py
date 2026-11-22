@@ -327,8 +327,13 @@ def test_intake_evaluates_all_required_values_before_crediting_a_group(missing_s
 
     journal = coverage.ModelJournal()
     with coverage.record_model_test(INTAKE_TEST, journal):
-        with pytest.raises(KeyError if missing_state else AssertionError):
+        with pytest.raises(KeyError if missing_state else AssertionError) as raised:
             Phase3Checks().test_ac01_intake_has_unique_ids_and_fixed_receipt_time(Intake())
+    if not missing_state:
+        assert str(raised.value).startswith("ticket ids are unique: not satisfied; ")
+        assert "ticket 2 received_at: expected '2026-10-05T09:00:00Z', got 'fixed'" in str(
+            raised.value
+        )
     assert all((number, "state") in seen for number in (0, 1))
     if missing_state:
         assert journal.events == []
@@ -425,10 +430,31 @@ def test_precomputed_predicates_have_no_hidden_boolean_short_circuit():
                 and isinstance(node.func, ast.Attribute)
                 and isinstance(node.func.value, ast.Name)
                 and node.func.value.id == "model_checks"
-                and node.func.attr == "append"
+                and node.func.attr in {"append", "equal", "true"}
             ):
                 continue
             assert not any(isinstance(child, ast.BoolOp) for child in ast.walk(node))
             assert not any(
                 isinstance(child, ast.Compare) and len(child.ops) > 1 for child in ast.walk(node)
             )
+
+
+def test_failed_oracle_groups_name_each_failed_comparison_without_echoing_bodies():
+    checks = coverage.OracleChecks()
+    checks.equal("state", "triaged", "received")
+    checks.equal("due_at", "2026-10-06T09:00:00Z", "2026-10-06T09:00:00Z")
+    checks.equal(
+        "ticket",
+        {"title": "New", "reporter": {"contact": "private@example.invalid"}},
+        {"title": "Old", "reporter": {"contact": "other@example.invalid"}},
+    )
+    checks.equal("audit", [1, 2], [1, 2, 3])
+    checks.true("reporter details absent", False)
+    assert checks.results == [False, True, False, False, False]
+    assert checks.summary() == (
+        "state: expected 'received', got 'triaged'; "
+        "ticket: reporter differs; title expected 'Old', got 'New'; "
+        "audit: expected 3 items, got 2; "
+        "reporter details absent: not satisfied"
+    )
+    assert "example.invalid" not in checks.summary()

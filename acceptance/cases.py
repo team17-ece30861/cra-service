@@ -7,7 +7,7 @@ from urllib.parse import quote
 import pytest
 
 from acceptance.client import ROOT, Contract
-from acceptance.model_coverage import model_scenario
+from acceptance.model_coverage import OracleChecks, model_scenario
 
 FIXED = "2026-10-05T09:00:00Z"
 MODEL_D = json.loads((ROOT / "tests/fixtures/phase3_model_d.json").read_text(encoding="utf-8"))[
@@ -29,28 +29,23 @@ class Phase3Checks:
 
     def test_ac01_intake_has_unique_ids_and_fixed_receipt_time(self, service):
         tickets = [service.create(), service.create()]
-        model_checks = []
-        model_checks.append(bool(tickets[0]["id"] != tickets[1]["id"]))
-        for ticket in tickets:
-            model_checks.append(bool(ticket["state"] == "received"))
-            model_checks.append(bool(ticket["received_at"] == FIXED))
-            model_checks.append(bool(ticket["aware_at"] is None))
-        with model_scenario("A-01.intake", comparisons=model_checks):
-            assert all(model_checks)
-        model_checks = []
-        for ticket in tickets:
-            model_checks.append(
-                bool(
-                    all(
-                        [
-                            value["status"] == "not_applicable"
-                            for value in ticket["obligations"].values()
-                        ]
-                    )
-                )
+        model_checks = OracleChecks()
+        model_checks.true("ticket ids are unique", tickets[0]["id"] != tickets[1]["id"])
+        for number, ticket in enumerate(tickets, start=1):
+            model_checks.equal(f"ticket {number} state", ticket["state"], "received")
+            model_checks.equal(f"ticket {number} received_at", ticket["received_at"], FIXED)
+            model_checks.equal(f"ticket {number} aware_at", ticket["aware_at"], None)
+        with model_scenario("A-01.intake", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
+        model_checks = OracleChecks()
+        for number, ticket in enumerate(tickets, start=1):
+            model_checks.equal(
+                f"ticket {number} obligation statuses",
+                {report: value["status"] for report, value in ticket["obligations"].items()},
+                {report: "not_applicable" for report in ticket["obligations"]},
             )
-        with model_scenario("B-01.received", comparisons=model_checks):
-            assert all(model_checks)
+        with model_scenario("B-01.received", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
         for ticket in tickets:
             assert service.get(ticket["id"])["reporter"]["contact"] == "reporter@example.invalid"
 
@@ -108,18 +103,20 @@ class Phase3Checks:
                 "reason": "Simulated confirmed exploitation.",
             },
         )
-        model_checks = []
-        model_checks.append(bool(result["state"] == "reportable"))
-        model_checks.append(bool(result["aware_at"] == case["aware_at"]))
-        with model_scenario("A-02.reportable_" + case["id"].lower(), comparisons=model_checks):
-            assert all(model_checks)
-        model_checks = []
+        model_checks = OracleChecks()
+        model_checks.equal("state", result["state"], "reportable")
+        model_checks.equal("aware_at", result["aware_at"], case["aware_at"])
+        scenario = "A-02.reportable_" + case["id"].lower()
+        with model_scenario(scenario, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
+        model_checks = OracleChecks()
         for report, due_at in case["expected_deadlines"].items():
-            model_checks.append(bool(result["obligations"][report]["due_at"] == due_at))
+            model_checks.equal(f"{report} due_at", result["obligations"][report]["due_at"], due_at)
         for report, status in case.get("expected_statuses", {}).items():
-            model_checks.append(bool(result["obligations"][report]["status"] == status))
-        with model_scenario("D-" + case["id"][1:].zfill(2) + ".example", comparisons=model_checks):
-            assert all(model_checks)
+            model_checks.equal(f"{report} status", result["obligations"][report]["status"], status)
+        scenario = "D-" + case["id"][1:].zfill(2) + ".example"
+        with model_scenario(scenario, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     @pytest.mark.parametrize(
         "body,status,field",
@@ -146,20 +143,23 @@ class Phase3Checks:
         scenario = "future_awareness" if status == 422 else "missing_" + field.removesuffix("_at")
         if field == "aware_at" and status == 400:
             scenario = "missing_awareness"
-        model_checks = []
-        model_checks.append(bool(field in {error["field"] for error in problem["errors"]}))
-        model_checks.append(bool(after == before))
-        with model_scenario("A-02." + scenario, comparisons=model_checks):
-            assert all(model_checks)
+        fields = sorted({error["field"] for error in problem["errors"]})
+        model_checks = OracleChecks()
+        model_checks.true(f"errors name {field} (got {fields})", field in fields)
+        model_checks.equal("ticket after the rejected triage", after, before)
+        with model_scenario("A-02." + scenario, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
         if status == 422:
-            model_checks = []
-            model_checks.append(bool(after == before))
-            model_checks.append(bool(after["state"] == "received"))
-            model_checks.append(
-                bool(all([value["due_at"] is None for value in after["obligations"].values()]))
+            model_checks = OracleChecks()
+            model_checks.equal("ticket after the rejected triage", after, before)
+            model_checks.equal("state", after["state"], "received")
+            model_checks.equal(
+                "obligation due_at values",
+                {report: value["due_at"] for report, value in after["obligations"].items()},
+                {report: None for report in after["obligations"]},
             )
-            with model_scenario("D-08.future_awareness", comparisons=model_checks):
-                assert all(model_checks)
+            with model_scenario("D-08.future_awareness", comparisons=model_checks.results):
+                assert all(model_checks.results), model_checks.summary()
 
     def test_ac04_retriage_is_conflict_and_changes_nothing(self, service):
         ticket = service.create()
@@ -177,12 +177,12 @@ class Phase3Checks:
         result = service.triage(ticket["id"], {"decision": decision, "reason": "Reviewed"})
         assert result["state"] == "closed"
         assert result["resolution"] == decision
-        model_checks = []
-        for value in result["obligations"].values():
-            model_checks.append(value["status"] == "not_applicable")
-            model_checks.append(value["due_at"] is None)
-        with model_scenario("B-01." + decision, comparisons=model_checks):
-            assert all(model_checks)
+        model_checks = OracleChecks()
+        for report, value in result["obligations"].items():
+            model_checks.equal(f"{report} status", value["status"], "not_applicable")
+            model_checks.equal(f"{report} due_at", value["due_at"], None)
+        with model_scenario("B-01." + decision, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
         before = service.get(ticket["id"])
         service.expect(
             "PATCH",
@@ -192,12 +192,12 @@ class Phase3Checks:
             body={"title": "Must not change"},
         )
         after = service.get(ticket["id"])
-        model_checks = []
-        model_checks.append(bool(result["state"] == "closed"))
-        model_checks.append(bool(result["resolution"] == decision))
-        model_checks.append(bool(after == before))
-        with model_scenario("A-03." + decision, comparisons=model_checks):
-            assert all(model_checks)
+        model_checks = OracleChecks()
+        model_checks.equal("state", result["state"], "closed")
+        model_checks.equal("resolution", result["resolution"], decision)
+        model_checks.equal("ticket after the rejected edit", after, before)
+        with model_scenario("A-03." + decision, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     @pytest.mark.parametrize(
         "aware_at",
@@ -211,13 +211,15 @@ class Phase3Checks:
             {"decision": "actively_exploited", "aware_at": aware_at, "reason": "Confirmed"},
         )
         scenario = "fraction_truncation" if ".789" in aware_at else "E7_offset"
-        model_checks = []
-        model_checks.append(bool(result["aware_at"] == FIXED))
-        model_checks.append(
-            bool(result["obligations"]["early_warning"]["due_at"] == "2026-10-06T09:00:00Z")
+        model_checks = OracleChecks()
+        model_checks.equal("aware_at", result["aware_at"], FIXED)
+        model_checks.equal(
+            "early_warning due_at",
+            result["obligations"]["early_warning"]["due_at"],
+            "2026-10-06T09:00:00Z",
         )
-        with model_scenario("D-07." + scenario, comparisons=model_checks):
-            assert all(model_checks)
+        with model_scenario("D-07." + scenario, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     @pytest.mark.parametrize(
         "aware_at",

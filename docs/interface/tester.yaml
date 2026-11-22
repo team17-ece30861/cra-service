@@ -110,11 +110,45 @@ paths:
               $ref: "#/components/schemas/RunRequest"
       responses:
         "200":
-          description: The suite finished. Failed tests and target errors are in `results`.
+          description: |
+            The suite finished. Failed tests and target errors are in `results`.
+
+            The example is a run against our own evaluation deployment, with `results` cut
+            to two entries (a real report lists every planned test). Because the target is
+            a configured Team 17 system, `coverage.model` is present; its counts stay null
+            until the design mapping is published and configured. Reports on other teams'
+            systems have no `model`.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Report"
+              example:
+                session_id: run-3f2b8c1e-7d4a-4f0e-9a51-2c6d8e0b7f13
+                target_url: https://team17-prod-7zneiwx4ba-uc.a.run.app
+                results:
+                  - test_id: test_phase3.py::TestRemotePhase3::test_ac01_intake_has_unique_ids_and_fixed_receipt_time
+                    outcome: pass
+                    message: Passed.
+                  - test_id: test_phase3.py::TestRemotePhase3::test_ac15_health_is_public
+                    outcome: pass
+                    message: Passed.
+                coverage:
+                  code:
+                    covered: null
+                    total: null
+                    basis: Source lines; the deployed service is not instrumented for code coverage
+                  component:
+                    covered: null
+                    total: null
+                    basis: The pod specification does not define a component list yet
+                  system:
+                    covered: 15
+                    total: 19
+                    basis: Pod acceptance criteria AC-01 to AC-19 with at least one executed test, identified by test name
+                  model:
+                    covered: null
+                    total: null
+                    basis: Design team17-phase5-design-v1; mapping not yet published/configured; see docs/model-coverage.md
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":

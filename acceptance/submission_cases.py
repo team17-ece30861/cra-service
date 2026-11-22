@@ -6,7 +6,7 @@ from copy import deepcopy
 import pytest
 
 from acceptance.draft_cases import FIELDS, FIXED, REPORTER, create_reportable, read_draft
-from acceptance.model_coverage import model_scenario
+from acceptance.model_coverage import OracleChecks, model_scenario
 
 REPORT_TYPES = ("early_warning", "notification", "final_report")
 
@@ -62,33 +62,28 @@ class SubmissionChecks:
         )
         stored_draft = read_draft(service, ticket_id, report_type)
         entries = audit_log(service, ticket_id)
-        model_checks = []
-        model_checks.append(
-            bool(
-                recorded
-                == {
-                    **draft,
-                    "status": "submitted",
-                    "submitted_at": FIXED,
-                    "reference": "receipt-17",
-                }
-            )
+        model_checks = OracleChecks()
+        model_checks.equal(
+            "recorded report",
+            recorded,
+            {**draft, "status": "submitted", "submitted_at": FIXED, "reference": "receipt-17"},
         )
-        model_checks.append(bool(stored_draft == recorded))
-        model_checks.append(bool(len(entries) == len(before) + 1))
-        model_checks.append(bool(entries[:-1] == before))
+        model_checks.equal("stored draft vs recorded report", stored_draft, recorded)
+        model_checks.equal("audit entry count", len(entries), len(before) + 1)
+        model_checks.equal("earlier audit entries", entries[:-1], before)
         latest = entries[-1]
-        model_checks.append(bool(latest["seq"] == len(entries)))
-        model_checks.append(bool(latest["at"] == FIXED))
-        model_checks.append(bool(latest["actor"] == "recording-actor"))
-        model_checks.append(bool(latest["action"] == "report_submitted"))
-        model_checks.append(bool(latest["reason"] is None))
-        model_checks.append(bool(latest["changes"]))
-        model_checks.append(
-            bool(REPORTER not in json.dumps({"recorded": recorded, "audit": entries}))
+        model_checks.equal("audit seq", latest["seq"], len(entries))
+        model_checks.equal("audit at", latest["at"], FIXED)
+        model_checks.equal("audit actor", latest["actor"], "recording-actor")
+        model_checks.equal("audit action", latest["action"], "report_submitted")
+        model_checks.equal("audit reason", latest["reason"], None)
+        model_checks.true("audit changes are listed", latest["changes"])
+        model_checks.true(
+            "report and audit leave out reporter details",
+            REPORTER not in json.dumps({"recorded": recorded, "audit": entries}),
         )
-        with model_scenario("A-05.record_" + report_type, comparisons=model_checks):
-            assert all(model_checks)
+        with model_scenario("A-05.record_" + report_type, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
         service.expect(
             "PATCH",
             f"/tickets/{ticket_id}",
@@ -144,16 +139,22 @@ class SubmissionChecks:
         submit_report(service, ticket_id, "final_report")
         entries = audit_log(service, ticket_id)
         stored_early = read_draft(service, ticket_id, "early_warning")
-        model_checks = []
-        model_checks.append(
-            bool([entry["seq"] for entry in entries] == list(range(1, len(entries) + 1)))
+        model_checks = OracleChecks()
+        model_checks.equal(
+            "audit seq values",
+            [entry["seq"] for entry in entries],
+            list(range(1, len(entries) + 1)),
         )
-        model_checks.append(
-            bool([entry["action"] for entry in entries].count("report_submitted") == 3)
+        model_checks.equal(
+            "report_submitted audit entries",
+            [entry["action"] for entry in entries].count("report_submitted"),
+            3,
         )
-        model_checks.append(bool(stored_early["content"] == early["content"]))
-        with model_scenario("A-05.missing_fields_sequence", comparisons=model_checks):
-            assert all(model_checks)
+        model_checks.equal(
+            "stored early_warning content", stored_early["content"], early["content"]
+        )
+        with model_scenario("A-05.missing_fields_sequence", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     @pytest.mark.parametrize("report_type", REPORT_TYPES)
     def test_ac09_duplicate_precedes_missing_fields_and_future_time(self, service, report_type):
@@ -173,11 +174,11 @@ class SubmissionChecks:
         )
         after = observable_state(service, ticket_id)
         stored = read_draft(service, ticket_id, report_type)
-        model_checks = []
-        model_checks.append(bool(after == before))
-        model_checks.append(bool(stored == recorded))
-        with model_scenario("A-05.duplicate_" + report_type, comparisons=model_checks):
-            assert all(model_checks)
+        model_checks = OracleChecks()
+        model_checks.equal("ticket, reports and audit after the duplicate", after, before)
+        model_checks.equal("stored report after the duplicate", stored, recorded)
+        with model_scenario("A-05.duplicate_" + report_type, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     @pytest.mark.parametrize("report_type", ["notification", "final_report"])
     def test_ac09_predecessor_conflict_precedes_missing_fields_and_future_time(
@@ -288,16 +289,16 @@ class SubmissionChecks:
             "2026-10-08T09:00:01Z": "after_now",
         }[submitted_at]
         after = observable_state(service, ticket_id) if status == 422 else None
-        model_checks = []
+        model_checks = OracleChecks()
         if status == 422:
-            model_checks.append(
-                bool("submitted_at" in {error["field"] for error in result["errors"]})
-            )
-            model_checks.append(bool(after == before))
+            fields = sorted({error["field"] for error in result["errors"]})
+            model_checks.true(f"errors name submitted_at (got {fields})", "submitted_at" in fields)
+            model_checks.equal("ticket, reports and audit after the rejection", after, before)
         else:
-            model_checks.append(bool(result["submitted_at"] == submitted_at))
-        with model_scenario(f"A-05.{report_type}_{boundary}", comparisons=model_checks):
-            assert all(model_checks)
+            model_checks.equal("submitted_at", result["submitted_at"], submitted_at)
+        scenario = f"A-05.{report_type}_{boundary}"
+        with model_scenario(scenario, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     def test_ac09_reports_missing_fields_and_time_together(self, service):
         fields = deepcopy(FIELDS)
@@ -397,11 +398,13 @@ class SubmissionChecks:
         )
         early_warning = read_draft(service, ticket_id, "early_warning")
         notification = read_draft(service, ticket_id, "notification")
-        model_checks = []
-        model_checks.append(bool(early_warning == recorded))
-        model_checks.append(bool(notification["content"]["product"]["name"] == "Changed"))
-        with model_scenario("C-03.product_edit", comparisons=model_checks):
-            assert all(model_checks)
+        model_checks = OracleChecks()
+        model_checks.equal("recorded early_warning after the edit", early_warning, recorded)
+        model_checks.equal(
+            "notification product name", notification["content"]["product"]["name"], "Changed"
+        )
+        with model_scenario("C-03.product_edit", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     def test_ac17_reset_deletes_actual_recorded_submissions(self, service):
         ticket_id = create_reportable(service, **deepcopy(FIELDS))

@@ -80,8 +80,12 @@ Timeouts, setup failures, other exceptions and unexecuted work do not invent
 evaluations. Checkpoint blocks do not make HTTP calls. Earlier failures do not
 supply evidence for later checkpoints.
 
-Multi-comparison groups eagerly compute every boolean predicate before their
-aggregate assertion; an early failed comparison cannot credit values never read.
+Multi-comparison groups (`OracleChecks`) eagerly compute every boolean predicate
+before their aggregate assertion; an early failed comparison cannot credit values
+never read. When a group fails, its assertion message names every failed comparison
+(for example `state: expected 'received', got 'triaged'`), and that message is what
+the report's `message` carries. Whole ticket, draft or audit comparisons name the
+fields that differ without echoing nested bodies, because reports go to other teams.
 Empty or unevaluated predicate groups invalidate the measure. Status-only
 checkpoints surround the actual status comparison in `Service.expect`, so a
 wrong-but-evaluable 200/400 can record failure, but transport failures and an
@@ -89,6 +93,21 @@ unexpected 5xx do not pretend the design oracle ran. Snapshot-locking checkpoint
 for all three report types execute after a real product edit, not just immediately
 after recording. Optimized Python invalidates the collector rather than counting
 assertions removed by `-O`.
+
+An unexpected 5xx leaves a scenario **not evaluated**, not failed. In
+`acceptance/client.py`, `Service.expect()` opens a status checkpoint only for calls
+that name a `model_status` scenario, and only when the response is below 500 or is
+the expected status. So for those scenarios:
+
+- a wrong status below 500 (say 200 where 401 was expected) records the scenario as
+  evaluated and unsatisfied;
+- an unexpected 5xx, a timeout or a dropped connection records nothing: the test
+  still fails, but the scenario stays unevaluated and its requirement cannot count;
+- body-level scenarios later in the same test are never reached when an earlier
+  request fails, so they stay unevaluated too.
+
+A target that answers 5xx therefore lowers `coverage.model` instead of adding failed
+evaluations to it.
 
 The pytest call-phase hook binds the recorder to the actual test node ID.
 Fixture setup/teardown cannot add model evidence. Emitting from an unrelated test,

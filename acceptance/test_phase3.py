@@ -6,7 +6,7 @@ import pytest
 
 from acceptance.cases import Phase3Checks
 from acceptance.client import NoRedirect
-from acceptance.model_coverage import model_scenario
+from acceptance.model_coverage import OracleChecks, model_scenario
 
 
 class TestRemotePhase3(Phase3Checks):
@@ -32,8 +32,15 @@ def test_ac15_plain_http_is_refused_or_redirected_to_https(pytestconfig):
             with model_scenario("X-02.https"):
                 assert response.code in (400, 403, 404, 405, 426)
             return
-        model_checks = []
-        model_checks.append(bool(response.code in (301, 302, 307, 308)))
-        model_checks.append(bool(urlsplit(response.headers.get("Location", "")).scheme == "https"))
-        with model_scenario("X-02.https", comparisons=model_checks):
-            assert all(model_checks)
+        model_checks = OracleChecks()
+        model_checks.true(
+            f"plain HTTP answered {response.code}, not a redirect",
+            response.code in (301, 302, 307, 308),
+        )
+        model_checks.equal(
+            "redirect Location scheme",
+            urlsplit(response.headers.get("Location", "")).scheme,
+            "https",
+        )
+        with model_scenario("X-02.https", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()

@@ -6,7 +6,7 @@ from copy import deepcopy
 import pytest
 
 from acceptance.draft_cases import FIELDS, FIXED, REPORTER, create_reportable, read_draft
-from acceptance.model_coverage import model_scenario
+from acceptance.model_coverage import OracleChecks, model_scenario
 from acceptance.submission_cases import REPORT_TYPES, audit_log, submit_report
 
 UNKNOWN = "00000000-0000-0000-0000-000000000000"
@@ -63,13 +63,13 @@ class ClosureChecks:
         assert closed["resolution"] == "resolved"
         assert "reporter" not in closed
         after = closure_state(service, ticket_id)
-        model_checks = []
-        model_checks.append(bool(closed["state"] == "closed"))
-        model_checks.append(bool(closed["resolution"] == "resolved"))
-        model_checks.append(bool(after["ticket"]["state"] == "closed"))
-        model_checks.append(bool(after["ticket"]["resolution"] == "resolved"))
-        with model_scenario("A-06.resolved", comparisons=model_checks):
-            assert all(model_checks)
+        model_checks = OracleChecks()
+        model_checks.equal("close response state", closed["state"], "closed")
+        model_checks.equal("close response resolution", closed["resolution"], "resolved")
+        model_checks.equal("stored state", after["ticket"]["state"], "closed")
+        model_checks.equal("stored resolution", after["ticket"]["resolution"], "resolved")
+        with model_scenario("A-06.resolved", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
         with model_scenario("A-07.readable_reports"):
             assert after["reports"] == before["reports"]
         with model_scenario("C-04.resolved_reads"):

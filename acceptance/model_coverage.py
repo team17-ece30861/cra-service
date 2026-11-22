@@ -134,6 +134,69 @@ def record_model_test(test_id, journal):
         ACTIVE_RECORDER.reset(token)
 
 
+SCALARS = (str, int, float, bool, type(None))
+VALUE_LIMIT = 60
+
+
+def _short(value):
+    text = repr(value)
+    return text if len(text) <= VALUE_LIMIT else text[: VALUE_LIMIT - 3] + "..."
+
+
+def _difference(actual, expected):
+    """Says how two values differ without echoing nested bodies, which can hold reporter
+    details and are handed to other teams in reports."""
+    if isinstance(actual, SCALARS) and isinstance(expected, SCALARS):
+        return f"expected {_short(expected)}, got {_short(actual)}"
+    if isinstance(actual, dict) and isinstance(expected, dict):
+        parts = []
+        for key in sorted(set(actual) | set(expected), key=str):
+            if key not in actual:
+                parts.append(f"{key} missing")
+            elif key not in expected:
+                parts.append(f"{key} unexpected")
+            elif actual[key] != expected[key]:
+                old, new = expected[key], actual[key]
+                if isinstance(old, SCALARS) and isinstance(new, SCALARS):
+                    parts.append(f"{key} expected {_short(old)}, got {_short(new)}")
+                else:
+                    parts.append(f"{key} differs")
+        return "; ".join(parts) or "differs"
+    if isinstance(actual, list) and isinstance(expected, list):
+        if len(actual) != len(expected):
+            return f"expected {len(expected)} items, got {len(actual)}"
+        for index, (new, old) in enumerate(zip(actual, expected, strict=True)):
+            if new != old:
+                return f"item {index} differs"
+        return "differs"
+    return f"expected {type(expected).__name__}, got {type(actual).__name__}"
+
+
+class OracleChecks:
+    """One model oracle group: every comparison is evaluated (no short circuit), and a
+    failure names each comparison that failed, e.g. "state: expected 'received', got
+    'triaged'". Use: `assert all(checks.results), checks.summary()` inside model_scenario."""
+
+    def __init__(self):
+        self.results = []
+        self.failures = []
+
+    def equal(self, label, actual, expected):
+        satisfied = bool(actual == expected)
+        self.results.append(satisfied)
+        if not satisfied:
+            self.failures.append(f"{label}: {_difference(actual, expected)}")
+
+    def true(self, label, condition):
+        satisfied = bool(condition)
+        self.results.append(satisfied)
+        if not satisfied:
+            self.failures.append(f"{label}: not satisfied")
+
+    def summary(self):
+        return "; ".join(self.failures)
+
+
 @contextmanager
 def model_scenario(scenario_id, *, comparisons=None):
     if scenario_id not in scenario_bindings():

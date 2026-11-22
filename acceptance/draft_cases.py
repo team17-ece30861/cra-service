@@ -5,7 +5,7 @@ from copy import deepcopy
 
 import pytest
 
-from acceptance.model_coverage import model_scenario
+from acceptance.model_coverage import OracleChecks, model_scenario
 
 FIXED = "2026-10-05T09:00:00Z"
 REPORTER = "private-draft-reporter@example.invalid"
@@ -128,41 +128,34 @@ class DraftChecks:
     def test_ac08_complete_live_draft_matches_model_c(self, service, report_type):
         ticket_id = create_reportable(service, **deepcopy(FIELDS))
         draft = read_draft(service, ticket_id, report_type)
-        model_checks = []
-        model_checks.append(
-            bool(
-                draft
-                == {
-                    "ticket_id": ticket_id,
-                    "type": report_type,
-                    "status": None if report_type == "user_advisory" else "pending",
-                    "due_at": DUE[report_type],
-                    "submitted_at": None,
-                    "reference": None,
-                    "content": {"ticket_id": ticket_id, "aware_at": FIXED, **CONTENT[report_type]},
-                    "missing_fields": [],
-                }
-            )
+        model_checks = OracleChecks()
+        model_checks.equal(
+            "draft",
+            draft,
+            {
+                "ticket_id": ticket_id,
+                "type": report_type,
+                "status": None if report_type == "user_advisory" else "pending",
+                "due_at": DUE[report_type],
+                "submitted_at": None,
+                "reference": None,
+                "content": {"ticket_id": ticket_id, "aware_at": FIXED, **CONTENT[report_type]},
+                "missing_fields": [],
+            },
         )
-        model_checks.append(bool(REPORTER not in json.dumps(draft)))
-        with model_scenario("C-01." + report_type, comparisons=model_checks):
-            assert all(model_checks)
+        model_checks.true("draft leaves out reporter details", REPORTER not in json.dumps(draft))
+        with model_scenario("C-01." + report_type, comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
         if report_type == "user_advisory":
-            model_checks = []
-            model_checks.append(
-                bool(
-                    all(
-                        [
-                            draft["status"] is draft["due_at"],
-                            draft["due_at"] is draft["submitted_at"],
-                            draft["submitted_at"] is None,
-                        ]
-                    )
-                )
+            model_checks = OracleChecks()
+            model_checks.equal(
+                "advisory status, due_at and submitted_at",
+                [draft["status"], draft["due_at"], draft["submitted_at"]],
+                [None, None, None],
             )
-            model_checks.append(bool(draft["reference"] is None))
-            with model_scenario("C-04.advisory_metadata", comparisons=model_checks):
-                assert all(model_checks)
+            model_checks.equal("advisory reference", draft["reference"], None)
+            with model_scenario("C-04.advisory_metadata", comparisons=model_checks.results):
+                assert all(model_checks.results), model_checks.summary()
 
     def test_ac08_missing_fields_follow_each_ticket_update(self, service):
         ticket_id = create_reportable(
@@ -210,11 +203,11 @@ class DraftChecks:
                 assert first == second
         after = service.get(ticket_id)
         after_audit = service.expect("GET", audit_path, 200, template="/tickets/{id}/audit")
-        model_checks = []
-        model_checks.append(bool(after == before))
-        model_checks.append(bool(after_audit == audit))
-        with model_scenario("C-03.no_read_mutation", comparisons=model_checks):
-            assert all(model_checks)
+        model_checks = OracleChecks()
+        model_checks.equal("ticket after draft reads", after, before)
+        model_checks.equal("audit after draft reads", after_audit, audit)
+        with model_scenario("C-03.no_read_mutation", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     @pytest.mark.parametrize("report_type", REQUIRED)
     @pytest.mark.parametrize("state", ["received", "invalid", "not_actively_exploited"])

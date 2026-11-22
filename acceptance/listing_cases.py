@@ -11,7 +11,7 @@ from copy import deepcopy
 import pytest
 
 from acceptance.draft_cases import FIELDS, FIXED, create_reportable, read_draft
-from acceptance.model_coverage import model_scenario
+from acceptance.model_coverage import OracleChecks, model_scenario
 from acceptance.submission_cases import REPORT_TYPES, submit_report
 
 AWARE = FIXED  # 2026-10-05T09:00:00Z, as in Model D E2
@@ -79,34 +79,36 @@ class StatusChecks:
         submit_report(service, ticket_id, "early_warning", body={"reference": "ew-17"})
         submit_report(service, ticket_id, "notification")
         ticket = service.get(ticket_id)
-        model_checks = []
-        model_checks.append(
-            bool(
-                statuses(ticket)
-                == {
-                    "early_warning": "submitted_late",
-                    "notification": "submitted",
-                    "final_report": "awaiting_fix",
-                }
-            )
+        model_checks = OracleChecks()
+        model_checks.equal(
+            "statuses",
+            statuses(ticket),
+            {
+                "early_warning": "submitted_late",
+                "notification": "submitted",
+                "final_report": "awaiting_fix",
+            },
         )
-        model_checks.append(
-            bool(
-                ticket["obligations"]["early_warning"]
-                == {
-                    "status": "submitted_late",
-                    "due_at": EW_DUE,
-                    "submitted_at": ONE_SECOND_LATE,
-                    "reference": "ew-17",
-                }
-            )
+        model_checks.equal(
+            "early_warning obligation",
+            ticket["obligations"]["early_warning"],
+            {
+                "status": "submitted_late",
+                "due_at": EW_DUE,
+                "submitted_at": ONE_SECOND_LATE,
+                "reference": "ew-17",
+            },
         )
-        model_checks.append(
-            bool(ticket["obligations"]["notification"]["submitted_at"] == ONE_SECOND_LATE)
+        model_checks.equal(
+            "notification submitted_at",
+            ticket["obligations"]["notification"]["submitted_at"],
+            ONE_SECOND_LATE,
         )
-        model_checks.append(bool(ticket["obligations"]["notification"]["reference"] is None))
-        with model_scenario("B-04.on_time_and_late", comparisons=model_checks):
-            assert all(model_checks)
+        model_checks.equal(
+            "notification reference", ticket["obligations"]["notification"]["reference"], None
+        )
+        with model_scenario("B-04.on_time_and_late", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
         # Recorded reports have no unmet deadline, and the final report has none yet.
         assert ticket["next_due_at"] is None
 
@@ -123,23 +125,29 @@ class StatusChecks:
             drafts[report] = {
                 key: draft[key] for key in ("status", "due_at", "submitted_at", "reference")
             }
-        model_checks = []
-        model_checks.append(bool(listed == [ticket]))
+        model_checks = OracleChecks()
+        model_checks.equal("ticket list", listed, [ticket])
         for report in REPORT_TYPES:
-            model_checks.append(bool(drafts[report] == ticket["obligations"][report]))
-        with model_scenario("B-04.view_agreement", comparisons=model_checks):
-            assert all(model_checks)
+            model_checks.equal(
+                f"{report} draft vs ticket obligation",
+                drafts[report],
+                ticket["obligations"][report],
+            )
+        with model_scenario("B-04.view_agreement", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     def test_ac06_a_report_recorded_exactly_at_its_due_time_is_on_time(self, service):
         ticket_id = create_reportable(service, **deepcopy(NO_FIX))
         service.fix_clock("2026-10-06T09:00:05Z")
         recorded = submit_report(service, ticket_id, "early_warning", body={"submitted_at": EW_DUE})
         ticket = service.get(ticket_id)
-        model_checks = []
-        model_checks.append(bool(recorded["status"] == "submitted"))
-        model_checks.append(bool(statuses(ticket)["early_warning"] == "submitted"))
-        with model_scenario("B-04.equality", comparisons=model_checks):
-            assert all(model_checks)
+        model_checks = OracleChecks()
+        model_checks.equal("recorded status", recorded["status"], "submitted")
+        model_checks.equal(
+            "ticket early_warning status", statuses(ticket)["early_warning"], "submitted"
+        )
+        with model_scenario("B-04.equality", comparisons=model_checks.results):
+            assert all(model_checks.results), model_checks.summary()
 
     def test_ac06_moving_the_clock_back_does_not_change_a_recorded_status(self, service):
         ticket_id = create_reportable(service, **deepcopy(NO_FIX))
