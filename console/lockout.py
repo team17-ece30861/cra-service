@@ -7,8 +7,9 @@ failure). Usernames with no account are counted the same way, so the answer neve
 whether an account exists. A successful sign-in clears the count. Only the console's
 sign-in uses this; the API's bearer tokens are unaffected.
 
-Time comes from core.clock, so a fixed test clock (PUT /test/clock) also holds locks in
-place until it moves or is released.
+Timing uses real time (core.clock.real_now), never the pod's test clock: a clock left
+fixed after a test run would otherwise make failures days apart add up to a lock that
+never ends, and moving the test clock back would skip a lock.
 """
 
 import logging
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 MAX_FAILURES = 5
 WINDOW = timedelta(minutes=15)
 LOCK = timedelta(minutes=15)
+LOGGED_USERNAME_LENGTH = 64
 
 # Postgres advisory lock namespace for sign-in attempts (any constant unique in this app).
 _ADVISORY_NAMESPACE = 5812
@@ -49,10 +51,9 @@ def hold(key: str) -> None:
 
 
 def minutes_locked(key: str, now: datetime) -> int | None:
-    """Whole minutes (rounded up) until the lock on `key` ends, or None if it isn't locked.
-    Rows stamped after `now` (the test clock moved back) are ignored."""
+    """Whole minutes (rounded up) until the lock on `key` ends, or None if it isn't locked."""
     started = (
-        SignInFailure.objects.filter(username=key, locks=True, at__gt=now - LOCK, at__lte=now)
+        SignInFailure.objects.filter(username=key, locks=True, at__gt=now - LOCK)
         .order_by("-at")
         .values_list("at", flat=True)
         .first()
@@ -66,17 +67,18 @@ def record_failure(key: str, now: datetime, client_ip: str) -> int | None:
     """Count a failed attempt. Returns the lock's minutes if this failure starts a lock."""
     SignInFailure.objects.filter(at__lte=now - max(WINDOW, LOCK)).delete()
     failure = SignInFailure.objects.create(username=key, at=now)
-    recent = SignInFailure.objects.filter(username=key, at__gt=now - WINDOW, at__lte=now)
+    recent = SignInFailure.objects.filter(username=key, at__gt=now - WINDOW)
     if recent.count() < MAX_FAILURES:
         return None
     failure.locks = True
     failure.save(update_fields=["locks"])
-    # Attacker-controlled values, so %r keeps them on one line. Never the password or body.
+    # Attacker-controlled values, so %r keeps them on one line. Never the password or body;
+    # the username is cut short in case a password was typed into it.
     logger.warning(
         "Console sign-in locked for %d minutes after %d failures: username=%r client_ip=%r",
         LOCK // timedelta(minutes=1),
         MAX_FAILURES,
-        key,
+        key[:LOGGED_USERNAME_LENGTH],
         client_ip,
     )
     return _minutes(LOCK)

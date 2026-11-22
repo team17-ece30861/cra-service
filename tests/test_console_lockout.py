@@ -26,13 +26,19 @@ def person():
     return User.objects.create_user("m.okafor", password=PASSWORD)
 
 
+# The lockout runs on real time (clock.real_now), never the test clock, so tests move
+# real time by patching it.
+_now = [T0]
+
+
 @pytest.fixture(autouse=True)
-def fixed_time():
-    clock.fix(T0)
+def real_time(monkeypatch):
+    _now[0] = T0
+    monkeypatch.setattr(clock, "real_now", lambda: _now[0])
 
 
 def at(**delta):
-    clock.fix(T0 + timedelta(**delta))
+    _now[0] = T0 + timedelta(**delta)
 
 
 def _sign_in(client, username="m.okafor", password=PASSWORD, **extra):
@@ -202,11 +208,36 @@ def test_reset_leaves_locks_in_place(person):
     assert "Too many attempts" in _sign_in(Client()).content.decode()
 
 
-def test_a_test_clock_moved_back_ignores_later_rows(person):
+@pytest.mark.parametrize("fixed", [T0 - timedelta(days=400), T0 + timedelta(days=400)])
+def test_the_test_clock_has_no_effect(person, fixed):
+    clock.fix(fixed)
     client = Client()
     _fail(client, 5)
-    clock.fix(T0 - timedelta(hours=1))
+    clock.fix(fixed - timedelta(days=30))  # moving the test clock back doesn't skip the lock
+    at(minutes=14, seconds=59)
+    assert "Too many attempts" in _sign_in(client).content.decode()
+    clock.fix(fixed + timedelta(days=30))  # nor does moving it forward end it early
+    assert "Too many attempts" in _sign_in(client).content.decode()
+    at(minutes=15)
     assert _sign_in(client).status_code == 302
+
+
+def test_failures_far_apart_never_lock_while_the_test_clock_is_fixed(person):
+    clock.fix(T0)
+    client = Client()
+    for day in range(6):
+        at(days=day)
+        page = _fail(client, 1)[0]
+    assert BAD in page
+    assert _sign_in(client).status_code == 302
+
+
+def test_the_log_cuts_the_username_short(person, caplog):
+    caplog.set_level(logging.INFO, logger="console.lockout")
+    pasted = "m.okafor" + "x" * 100 + "PASSWORDTAIL"
+    _fail(Client(), 5, pasted)
+    assert "PASSWORDTAIL".casefold() not in caplog.text
+    assert f"username={('m.okafor' + 'x' * 56)!r}" in caplog.text
 
 
 def test_old_rows_are_pruned_on_write(person):

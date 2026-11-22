@@ -101,7 +101,7 @@ def _try_sign_in(request) -> str:
         # Read the time only once this username is ours, so a request that waited here
         # can't read a time earlier than the failure that locked it.
         lockout.hold(key)
-    now = clock.now()
+    now = clock.real_now()  # real time: the test clock must not hold or skip a lock
     if key:
         if minutes := lockout.minutes_locked(key, now):
             return lockout.message(minutes)
