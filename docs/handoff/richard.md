@@ -1,71 +1,77 @@
 # Handoff: Richard (Domain Logic and Testing)
 
-## Handed over 2026-11-01 by Quincy's agent (Claude Code)
-
-**Current state:** PRs #77 to #83 are merged (each with an independent agent review posted
-on the PR) and released to Orbit with the rest of Phase 4 on 2026-11-01. The tester (222
-tests) passed 222/222 against Orbit and against Team 21's new deployment; Team 21's suite
-passed 17/17 against Orbit. The notes below are from Richard's last session and predate
-the merges.
-
-**Next up (Phase 5, split agreed 2026-11-01; owners in [`docs/plan.md`](../plan.md)):**
-
-1. **5.4:** the full suite in CI on every change, and against Team 21 before the deadline.
-2. **5.10:**
-   - Phase 4 cases in the shared test file with Team 21 (4.T2).
-   - The pod decision on whether a 422 must list every problem (AC-09, see Q6.2 in the
-     Phase 4 report). Until then a 422 naming at least one problem counts as passing in
-     cross-team runs; loosen or keep our test once the pod decides.
-   - HTTP tester cases for AC-07 and for PATCH/triage 404 and 413 and `DELETE /test/clock`
-     (LIM-11).
-   - The two should-fixes on the generated operation table from PR #83's review (partial
-     runs labeled "finished"; setup-phase failures dropped from the table).
-3. **5.1:** the load script for Quincy's AC-18 run on Orbit.
-4. **5.6 (results part):** the final cross-team results.
-
----
-
-**Last updated:** 2026-11-01 by Codex (Richard's session).
+**Last updated:** 2026-11-21 by Codex with Richard.
 
 ## Where things stand
 
-Feature drafts #77–81 remain unchanged and have passing PostgreSQL CI. Two additional
-one-task drafts are published: #82 (4.T6 audit failures), above #81, and #83 (4.T5
-operation reporting), above #82. Richard explicitly approved these stacked drafts
-and CI, not merges, deployment or shared reset tests.
+Main remains `ecb59a7`. Richard authorized publishing the HTTP-test draft and
+checking PostgreSQL CI, then fixing operation reporting separately. On November
+21 he also authorized the reporting branch's commit, push, draft PR and CI.
+No merge,
+deployment, shared reset, performance run or restart was performed.
 
 ## In progress
 
-- #82 c4925ce: PostgreSQL 18 CI passed **1,147 tests, no skips**.
-- #83 application commit 7396445: PostgreSQL 18 CI passed **1,180 tests, no skips**.
-  These are the verified code-run results; current checks/evidence are linked in
-  each PR description. This handoff is a documentation-only follow-up.
-- All 14 operations are reported from safe Service.expect metadata and completed
-  outcomes. Auth-only/untested is not implementation/passing; failed, skipped and
-  unfinished/interrupted teardown is inconclusive. Setup/raw calls are excluded.
-- Local reporting/validator/interface: 65 passed (33 reporting tests). Actual Phase 4
-  hooks: 237 passed, four PostgreSQL-only skips, with real JSON/Markdown output.
-  The 188-case portable collection is not a deployed run.
-- Fresh independent local review found no actionable issues; reviewer reran 40
-  focused tests. That is not posted independent approval. No service, model,
-  helper, migration, workflow, contract or Ann/Quincy handoff changed.
+- Model coverage: draft [#106](https://github.com/team17-ece30861/cra-service/pull/106),
+  `codex/phase5-model-coverage`, head `81a05eb`; PostgreSQL 18 CI passed 1,494.
+  Mapping/manifest publication, configured mapping URL and own-target confirmation
+  still need Quincy. The fixed 44-requirement baseline is unchanged.
+- HTTP tests: draft [#107](https://github.com/team17-ece30861/cra-service/pull/107),
+  `codex/phase5-http-gaps`, head `5c616b7`; PostgreSQL 18 CI passed 1,424.
+  Its 19 new cases previously passed isolated local HTTP; standalone collection
+  is 241. No deployed HTTP run is claimed. Original checkout/branches are preserved.
+- Operation reporting: `codex/phase5-operation-reporting`, based on main, in the
+  reused `work/cra-publish-a4` checkout. Draft publication and PostgreSQL CI are
+  authorized; inspect its exact-head PR checks before merging. Failed setup checks
+  survive even if the Service fixture raises before returning. Conforming setup
+  responses are inconclusive; successful fixture setup supplies no passing credit.
+- Completion uses collection, scope, outcomes and teardown. Early stops, code-0
+  exits before completion, -k/positional filters, --ignore/--ignore-glob exclusions,
+  collection failures and interruptions show incomplete with counts/reasons.
+  A fully attempted suite may finish with failures. Existing result fields and
+  course API are preserved; extra completion fields are standalone-report metadata.
+- Selected local regression: 191 passed, one existing PostgreSQL-only triage skip.
+  Lint/format, Django, migration and whitespace checks pass. No new skip was added.
+- Independent local review caught positional and collection-exclusion omissions.
+  Both are fixed with real pytest child cases; final re-review found no remaining
+  actionable issue. The reviewer is closed; no posted PR approval is claimed.
+- Final combined validation with #106/#107 passed 208 focused tests, including
+  both model and operation hook families and the exclusion-filter correction.
+  Its nested portable suite passed 240/241, with the expected HTTPS-only skip;
+  this is local in-process evidence, not deployed HTTP or PostgreSQL evidence.
 
 ## Next up
 
-Obtain required posted independent PR reviews and a separate merge go. Retarget
-through main as prerequisites land; do not merge the drafts into feature bases.
-Ann's 4.A5, wider privacy/contract work and actual deployed/cross-team validation
-remain separate. Refresh pod tester only through the agreed release process.
+1. Verify #106/#107 current-head CI and obtain posted independent reviews before
+   separately authorized merges. Quincy reviews model/interface configuration.
+2. Check the reporting draft's current-head Linux/PostgreSQL CI and obtain posted
+   independent review before any separately authorized merge. Draft publication
+   does not authorize merging or a release.
+3. Reconcile overlapping client/plugin and handoff changes when integrating the
+   independent main-based branches; keep model journaling/call-phase evidence and
+   operation setup evidence/completion hooks. A temporary tested merge is not a
+   branch merge or deployment.
+4. Finish 5.10 shared fixtures and the multiple-problem 422 decision; 5.1 needs
+   an agreed load protocol and script, then Quincy's performance run. 5.4/5.6
+   still need fresh deployed and both-direction cross-team evidence.
 
 ## Waiting on
 
-Posted approval, current CI checks, teammate/pod integration and Richard's separate
-merge/shared-reset permission. Only Quincy launches Orbit.
+Quincy: mapping/manifest publication and configuration, service-base confirmation,
+release coordination and authorized Launchpad verification. Ann/Team 21: remaining
+contract decisions/shared fixtures. Only Quincy launches Orbit.
 
 ## Notes for the next session
 
-The local table honestly leaves DELETE-clock success unobserved and audit 405
-untested because raw PUT/DELETE tests are not GET evidence. Supplied revision
-labels do not verify deployment, and observed status coverage is not full delivery.
-The prior Windows localhost transport failure remains visible; no swallowing or
-retry-until-green. PostgreSQL CI is not Linux/gunicorn/Cloud Run HTTP acceptance.
+Reporting evidence is in the parent workspace:
+`work/phase5-reporting-regression-20261120-final2.xml` and
+`work/phase5-reporting-combined-20261120-final2.xml`.
+The temporary combined source is `work/phase5-reporting-combined-20261120-c`.
+HTTP CI is [run 44778121863](https://github.com/team17-ece30861/cra-service/actions/runs/44778121863).
+Its saved log is `work/phase5-http-job-136433295330.log`.
+
+The portable public copy needs the new `observations.py` alongside client/plugin
+updates, coordinated with Quincy's release. No production API code, auth, root
+contract, workflow, migration, other teammate's handoff or shared repo was changed.
+Known Windows full-suite blockers were not disabled or repaired. Local SQLite,
+Linux/PostgreSQL CI and deployed HTTP remain different evidence categories.

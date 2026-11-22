@@ -78,7 +78,8 @@ python -m pytest -c acceptance/pytest.ini acceptance --allow-reset -v \
 
 The version is a supplied label, not independently verified deployment identity.
 The JSON report retains its existing fields and adds `operations`; each result
-also includes `operation_checks` when its test body executes and `teardown_complete`
+also includes `operation_checks` when its test body executes or fixture setup
+fails, and `teardown_complete`
 to distinguish finished tests from interrupted teardown. New evidence stores
 only contract method/path templates, expected/actual status codes, and whether
 the status and defined response schema checked successfully. It stores no token,
@@ -100,11 +101,35 @@ actor, resource identifier, request body, or response body.
   test failed or skipped, or teardown failed/interrupted without completion.
   Those are not passing evidence; passing observations require completed teardown.
 
-Per-test fixture setup/reset calls are excluded, so setup alone cannot prove an
-operation. Direct transport calls outside `Service.expect` are also excluded;
+Successful fixture setup/reset calls are excluded. On a setup failure, checked
+operations are retained even when the `service` fixture fails before returning:
+failed status/schema checks remain failed, and conforming setup responses are
+inconclusive because their enclosing test failed. Setup alone supplies no passing
+conformance or implementation evidence. Direct transport calls outside
+`Service.expect` are also excluded;
 add explicit checked cases to improve the table rather than guessing results.
 Bodies not defined by the contract, such as the health response, are not validated.
-Interrupted runs say `incomplete`; all unobserved statuses remain untested.
+Reports say `finished` only when the full collected selection reached terminal
+outcomes and completed teardown without collection errors or deselection. Early
+stops, interruption, filtered selections and collection errors say `incomplete`,
+including an early exit that returns code 0. A fully attempted suite with failed
+tests still says `finished` and retains its nonzero pytest exit code.
+
+Selecting an individual file, node ID, subdirectory or multiple positional targets
+is a partial selection, even when pytest emits no deselection event. A full-scope
+run names the directory containing the selected pytest configuration, as the
+documented command above does with `acceptance/pytest.ini` and `acceptance`.
+Explicit `--ignore` and `--ignore-glob` exclusions also mark a run incomplete;
+their paths are not copied into report metadata.
+
+JSON adds `run_complete`, `tests_selected`, `tests_completed`, `tests_deselected`,
+`tests_not_run`, `partial_selection`, `collection_exclusions`, `collection_errors`
+and `incomplete_reasons`; existing result and
+count fields are unchanged. Markdown and terminal summaries show the same counts
+and reasons. `tests_not_run` counts selected IDs with no phase report; a test
+interrupted after setup is started but not completed. Unobserved statuses remain
+untested. The public portable copy must include `observations.py` with the changed
+client and plugin.
 Clock read/release map to REQ-16 from `docs/spec.md` because their contract
 descriptions omit that requirement ID. Other IDs come from operation descriptions.
 

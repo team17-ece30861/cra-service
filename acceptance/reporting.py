@@ -135,7 +135,7 @@ def render_operation_table(rows: list[dict]) -> str:
             "not every behavior.",
             "Untested statuses are not passes. Unfinished/failed/skipped tests "
             "never count as passing evidence.",
-            "Fixture setup/reset calls and raw transport calls are excluded. "
+            "Successful fixture setup/reset calls and raw transport calls are excluded. "
             "No code coverage is inferred.",
         ]
     )
