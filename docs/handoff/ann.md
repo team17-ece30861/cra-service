@@ -13,6 +13,12 @@ Restate the task to Ann before acting, and agree on behavior with Ann before wri
 - **5.5:** done. Ann's operations guide merged as #117 (`docs/operations.md`). Quincy's agent added
   fixes on 2026-11-22 (c9e3be4): a full access-log line, `HOST` and `NEW_TOKEN` set before
   use, the 5xx alert, the tester's one-run rule, and clearing a console lockout.
+- **5.6:** done:
+contract 0.3.0 is the final published shared version;
+Team 21 agreed to Q7 and Q9 by email;
+Team 17 decided Q8 after no Team 21 response, and all 5.6 items reopen if Team 21 objects;
+openapi.yaml and docs/spec.md contain the 0.3.0 updates;
+shared contract pod-k-shared #20 merged on 2026-11-22.
 - **5.9:** done by Quincy's agent so Phase 5 could land: contract 0.3.0 with Q7, Q8 and Q9
   and the 422-lists-every-problem rule (#111, `pod-k-shared` #20), the 0.2.0 freeze
   (`pod-k-shared` #14, merged), and AC-13 (#113).
